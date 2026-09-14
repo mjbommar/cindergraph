@@ -836,8 +836,7 @@ mod tests {
             assert_eq!(
                 parsed.diagnostics().error_count(),
                 0,
-                "{} levels deep must parse clean",
-                REAL
+                "{REAL} levels deep must parse clean"
             );
         }
         assert_eq!(parse(&chain).diagnostics().error_count(), 0);

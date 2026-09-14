@@ -1201,7 +1201,7 @@ mod tests {
         assert_eq!(ruined.total, 8);
         for (row, &col) in ruined.columns.iter().enumerate() {
             assert!(
-                !matrix.is_infeasible(row, col) && !(row >= 2 && col >= 2),
+                !(matrix.is_infeasible(row, col) || row >= 2 && col >= 2),
                 "({row}, {col}) should have been unavailable"
             );
         }

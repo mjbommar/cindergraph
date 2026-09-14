@@ -651,7 +651,7 @@ mod ddg_tests {
                     .map(|(_, v)| v.as_str())
             })
             .collect();
-        assert_eq!(dead, vec!["dead"], "{:?}", dead);
+        assert_eq!(dead, vec!["dead"], "{dead:?}");
     }
 
     #[test]
