@@ -590,6 +590,12 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
         let bindings = PyList::empty(py);
         for (index, name) in flow.names.iter().enumerate() {
             let item = PyDict::new(py);
+            item.set_item(
+                "is_unresolved",
+                flow.unresolved_bindings
+                    .iter()
+                    .any(|b| b.0 as usize == index),
+            )?;
             item.set_item("name", name.clone())?;
             let ty = flow.types.get(index);
             item.set_item("type", ty.filter(|t| !t.is_empty()).map(|t| t.render()))?;

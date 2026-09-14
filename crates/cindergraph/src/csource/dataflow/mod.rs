@@ -54,9 +54,9 @@
 //! as one produces edges that do not exist. Every declaration therefore binds
 //! into a scope stack that opens at `{` and closes at `}`, and a use resolves
 //! to the innermost binding visible at its offset. A name with no visible
-//! binding --- a global, an `extern`, a function --- resolves to
-//! [`Binding::FREE`], which is shared across the function and lets a write to
-//! a global still reach a later read of it.
+//! binding receives a dense unresolved-name ID after lexical resolution.
+//! Repeated uses of one spelling share an ID; different globals and local
+//! shadows remain distinct. Unresolved names do not imply a recovered type.
 //!
 //! Because the syntax tree is walked in source order and C requires a
 //! declaration before use, resolving a use against "the innermost binding
@@ -154,6 +154,7 @@ pub fn analyze_function(
 ) -> DataFlow {
     let events = events::collect_events(tree, text, token_spans, function);
     let mut flow = DataFlow {
+        unresolved_bindings: events.unresolved,
         return_spans: tree
             .arena()
             .preorder(function.node)

@@ -17,7 +17,7 @@ import cindergraph as cg
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--shape", choices=("functions", "statements"), default="functions"
+        "--shape", choices=("functions", "statements", "globals"), default="functions"
     )
     shape = parser.parse_args().shape
     rows = []
@@ -30,6 +30,12 @@ def main():
         )
         if shape == "statements":
             code = "int f(int x){int y=x;" + "y=y+1;" * count + "return y;}"
+        elif shape == "globals":
+            code = (
+                "int f(void){"
+                + "".join(f"g{i}={i};" for i in range(count))
+                + "return g0;}"
+            )
         for name in ("analyze", "data_flow", "call_summaries"):
             operation = getattr(cg, name)
             operation(code)

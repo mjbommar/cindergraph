@@ -26,6 +26,7 @@ use super::types::declared_types;
 
 /// The definitions and uses of one function, before the fixpoint.
 pub(super) struct Events {
+    pub(super) unresolved: Vec<Binding>,
     pub(super) definitions: Vec<Definition>,
     pub(super) uses: Vec<Use>,
     /// One entry per binding, in binding order.
@@ -240,7 +241,7 @@ pub(super) fn collect_events(
 
     // Calls, collected after the scope walk so each argument can be resolved
     // to the binding it names.
-    let calls = collect_calls(tree, text, token_spans, root, &uses);
+    let mut calls = collect_calls(tree, text, token_spans, root, &uses);
 
     // A declaration's initializer runs before the name is visible, so raise
     // each declaration's effect point to the end of the `Decl` that holds it.
@@ -269,7 +270,46 @@ pub(super) fn collect_events(
         use_.node = node_for_span(&function.cfg, use_.span);
     }
 
+    // Give each unresolved spelling a stable identity after lexical binding
+    // and indirect-callee classification. Locals retain their original IDs.
+    let unresolved_names: std::collections::BTreeSet<String> = definitions
+        .iter()
+        .filter(|d| d.binding.is_free())
+        .map(|d| d.name.clone())
+        .chain(
+            uses.iter()
+                .filter(|u| u.binding.is_free())
+                .map(|u| u.name.clone()),
+        )
+        .collect();
+    let mut unresolved = Vec::new();
+    let mut unresolved_ids = std::collections::BTreeMap::new();
+    for name in unresolved_names {
+        let binding = Binding(binding_names.len() as u32);
+        binding_names.push(name.clone());
+        types.push(CType::default());
+        unresolved.push(binding);
+        unresolved_ids.insert(name, binding);
+    }
+    for definition in &mut definitions {
+        if definition.binding.is_free() {
+            definition.binding = unresolved_ids[&definition.name];
+        }
+    }
+    for use_ in &mut uses {
+        if use_.binding.is_free() {
+            use_.binding = unresolved_ids[&use_.name];
+        }
+    }
+    for call in &mut calls {
+        for (argument, span) in call.arguments.iter_mut().zip(&call.argument_spans) {
+            if let Some(use_) = uses.iter().find(|use_| use_.span == *span) {
+                *argument = use_.binding;
+            }
+        }
+    }
     Events {
+        unresolved,
         definitions,
         uses,
         types,

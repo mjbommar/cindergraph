@@ -587,6 +587,8 @@ def data_flow(code: str) -> list[dict[str, Any]]:
 
         Each definition and use carries ``binding``, an index into
         ``bindings``, so the three can be joined.
+        A binding with ``is_unresolved=True`` has no recovered declaration;
+        its type is ``None``. Different unresolved spellings have distinct IDs.
     """
     return [dict(entry) for entry in _native.source.data_flow(code)]
 

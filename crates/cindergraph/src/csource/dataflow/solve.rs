@@ -157,7 +157,7 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
         // escapes: the read that observes it is in another function, and this
         // analysis is intraprocedural. Calling it dead would flag every
         // constructor's witness variable.
-        if definition.binding.is_free() {
+        if definition.binding.is_free() || flow.unresolved_bindings.contains(&definition.binding) {
             continue;
         }
         // Taking an address is not a store, so it cannot be a dead one.

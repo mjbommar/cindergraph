@@ -454,7 +454,7 @@ fn an_unused_local_is_reported_and_a_parameter_is_not() {
 }
 
 #[test]
-fn the_corpus_recovers_a_type_for_almost_every_binding() {
+fn the_corpus_recovers_a_type_for_almost_every_declared_binding() {
     // The gate the plan states: every binding resolves to a specifier or is
     // explicitly empty, and the empty count is reported rather than assumed.
     let root =
@@ -464,6 +464,7 @@ fn the_corpus_recovers_a_type_for_almost_every_binding() {
     };
     let mut bindings = 0usize;
     let mut typed = 0usize;
+    let mut unresolved_bindings = 0usize;
     let mut conflicts = 0usize;
     let mut unused = 0usize;
     let mut untyped_examples: Vec<String> = Vec::new();
@@ -480,6 +481,18 @@ fn the_corpus_recovers_a_type_for_almost_every_binding() {
             // The three tables are one row per binding and must agree.
             assert_eq!(flow.names.len(), flow.types.len(), "{}", flow.name);
             bindings += flow.names.len();
+            unresolved_bindings += flow.unresolved_bindings.len();
+            for binding in &flow.unresolved_bindings {
+                assert!(flow.types[binding.0 as usize].is_empty());
+            }
+            for binding in flow
+                .definitions
+                .iter()
+                .map(|d| d.binding)
+                .chain(flow.uses.iter().map(|u| u.binding))
+            {
+                assert!((binding.0 as usize) < flow.names.len());
+            }
             for (index, ty) in flow.types.iter().enumerate() {
                 if ty.is_empty() {
                     if untyped_examples.len() < 8 {
@@ -499,9 +512,10 @@ fn the_corpus_recovers_a_type_for_almost_every_binding() {
     }
 
     assert!(bindings > 1000, "only {bindings} bindings");
-    let rate = typed as f64 / bindings as f64;
+    let declared = bindings - unresolved_bindings;
+    let rate = typed as f64 / declared as f64;
     eprintln!(
-        "corpus types: {typed}/{bindings} = {:.1}%  conflicts={conflicts}  unused={unused}",
+        "corpus types: {typed}/{bindings} total; {unresolved_bindings} unresolved; {typed}/{declared} declared = {:.1}%  conflicts={conflicts}  unused={unused}",
         rate * 100.0
     );
     if !untyped_examples.is_empty() {

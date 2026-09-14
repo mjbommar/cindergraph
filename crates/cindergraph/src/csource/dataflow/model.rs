@@ -12,17 +12,12 @@ use crate::syntax::ids::Span;
 pub struct Binding(pub u32);
 
 impl Binding {
-    /// The binding every unresolved name shares: a global, an `extern`, a
-    /// function, or a name whose declaration the parser did not recover.
-    ///
-    /// Sharing one binding across all of them is deliberate. Two reads of the
-    /// same global must see each other's writes, and giving each unresolved
-    /// name its own binding would silently drop those edges. The cost is that
-    /// two *different* globals are conflated, which over-approximates in the
-    /// same safe direction as everything else here.
+    /// Temporary unresolved marker during event collection, or a call argument
+    /// that is not a bare name. Final definition/use records have dense IDs;
+    /// unresolved spellings are interned separately after lexical resolution.
     pub const FREE: Binding = Binding(u32::MAX);
 
-    /// Whether this is the shared unresolved binding.
+    /// Whether this is the temporary unresolved/absent marker.
     pub fn is_free(self) -> bool {
         self == Binding::FREE
     }
@@ -242,6 +237,9 @@ pub struct FlowEdge {
 /// One function's reaching-definition analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataFlow {
+    /// Dense binding IDs whose declarations were not recovered in this function.
+    /// Equal unresolved spellings share an ID; different spellings do not.
+    pub unresolved_bindings: Vec<Binding>,
     /// CFG nodes whose actual kind is return.
     pub return_nodes: Vec<u32>,
     /// Source expressions belonging to return statements, before CFG splitting.
@@ -280,9 +278,7 @@ pub struct DataFlow {
     /// The declared type of each binding, in binding order.
     ///
     /// Indexed by [`Binding`]'s inner value, so `types[b.0 as usize]` is the
-    /// type of binding `b`. [`Binding::FREE`] has no entry: it is the shared
-    /// binding for every unresolved name, and a global's type is not knowable
-    /// from one translation unit.
+    /// type of binding `b`. Unresolved bindings have an empty type entry.
     pub types: Vec<CType>,
     /// Definitions no use reads: a dead store.
     ///
@@ -322,7 +318,7 @@ impl DataFlow {
             .collect()
     }
 
-    /// The binding named `name`, when this function declares one.
+    /// The first binding named `name`, including unresolved names.
     ///
     /// The innermost is not distinguishable here: two shadowed declarations of
     /// one name are two bindings and this returns the first. A caller that
@@ -344,7 +340,8 @@ impl DataFlow {
         (0..self.names.len() as u32)
             .map(Binding)
             .filter(|binding| {
-                !self.uses.iter().any(|use_| use_.binding == *binding)
+                !self.unresolved_bindings.contains(binding)
+                    && !self.uses.iter().any(|use_| use_.binding == *binding)
                     && !self
                         .definitions
                         .iter()
