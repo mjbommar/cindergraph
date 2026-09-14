@@ -589,6 +589,12 @@ def data_flow(code: str) -> list[dict[str, Any]]:
         ``bindings``, so the three can be joined.
         A binding with ``is_unresolved=True`` has no recovered declaration;
         its type is ``None``. Different unresolved spellings have distinct IDs.
+
+        ``memory_complete`` is false when memory access exceeds the current
+        local-pointer model, including unknown pointees, fields and array
+        elements. Known local pointees receive ``memory_write`` definitions
+        and projected reads. Their spans describe the pointer expression;
+        their binding and name identify the possible pointed-to object.
     """
     return [dict(entry) for entry in _native.source.data_flow(code)]
 
@@ -643,6 +649,10 @@ def backward_slice(code: str, function: str, node: int) -> list[int]:
     question a program-dependence graph exists to answer, and it needs both
     relations over one node set: following only one would silently omit the
     other's reasons.
+
+    Check :func:`data_flow`'s ``memory_complete`` before interpreting omitted
+    nodes: fields, arrays and unknown pointees can leave memory dependence
+    incomplete. Known local-pointer writes are included conservatively.
 
     Args:
         code: The source text.

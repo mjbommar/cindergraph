@@ -271,7 +271,7 @@ fn parameter_count(flow: &DataFlow) -> u32 {
 /// wrong in general.
 fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32, Sink)>, bool) {
     let mut found: Vec<(u32, Sink)> = Vec::new();
-    let mut complete = true;
+    let mut complete = flow.memory_complete;
 
     let call_sites = flow.call_sites();
     for site in &call_sites {

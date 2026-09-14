@@ -701,7 +701,7 @@ fn takes_address(tree: &Tree, text: &str, node: NodeId) -> bool {
 /// unsound in the direction that loses edges rather than adds them.
 ///
 /// A parenthesised name is still a name: `(x) = v` writes `x`.
-fn is_direct_name(tree: &Tree, target: NodeId) -> bool {
+pub(super) fn is_direct_name(tree: &Tree, target: NodeId) -> bool {
     let arena = tree.arena();
     let mut node = target;
     loop {
@@ -961,7 +961,7 @@ fn parameter_names(
 /// Falling back to the entry rather than dropping the event is deliberate: a
 /// parameter is declared in the header, which no statement node covers, and
 /// dropping it would leave every read of that parameter unresolved.
-fn node_for_span(cfg: &Cfg, span: Span) -> u32 {
+pub(super) fn node_for_span(cfg: &Cfg, span: Span) -> u32 {
     for (index, node) in cfg.nodes().iter().enumerate() {
         for covered in node.spans() {
             if covered.lo <= span.lo && span.hi <= covered.hi {

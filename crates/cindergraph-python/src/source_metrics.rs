@@ -562,6 +562,7 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
             definitions.append(item)?;
         }
         entry.set_item("definitions", definitions)?;
+        entry.set_item("memory_complete", flow.memory_complete)?;
 
         let uses = PyList::empty(py);
         for use_ in &flow.uses {

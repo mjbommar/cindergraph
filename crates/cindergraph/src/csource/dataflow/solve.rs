@@ -36,6 +36,9 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
             slot.push(index as u32);
         }
     }
+    for definitions in &mut gen {
+        definitions.sort_by_key(|index| flow.definitions[*index as usize].effect_at);
+    }
     // Definitions grouped by binding, so KILL is a lookup rather than a scan.
     let mut by_binding: BTreeMap<Binding, Vec<u32>> = BTreeMap::new();
     for (index, definition) in flow.definitions.iter().enumerate() {
@@ -74,7 +77,12 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
                 let binding = flow.definitions[*definition as usize].binding;
                 // A write to the shared unresolved binding kills nothing: two
                 // different globals share it, so killing would drop real edges.
-                if !binding.is_free() {
+                if !binding.is_free()
+                    && !matches!(
+                        flow.definitions[*definition as usize].kind,
+                        DefKind::AddressTaken | DefKind::MemoryWrite
+                    )
+                {
                     if let Some(siblings) = by_binding.get(&binding) {
                         for sibling in siblings {
                             next[*sibling as usize] = false;
@@ -116,13 +124,17 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
             .enumerate()
             .filter(|(_, definition)| {
                 definition.binding == use_.binding
+                    && !matches!(
+                        definition.kind,
+                        DefKind::AddressTaken | DefKind::MemoryWrite
+                    )
                     && definition.node == use_.node
                     && definition.effect_at <= use_.span.lo
             })
             .max_by_key(|(_, definition)| definition.effect_at)
             .map(|(index, _)| index);
 
-        let reaching: Vec<usize> = match local_latest {
+        let mut reaching: Vec<usize> = match local_latest {
             Some(index) => vec![index],
             None => flow
                 .definitions
@@ -134,6 +146,23 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
                 .map(|(index, _)| index)
                 .collect(),
         };
+        // Weak updates on this node add alternatives after the latest strong
+        // update. They never replace the earlier value on their own.
+        let after = local_latest.map_or(0, |i| flow.definitions[i].effect_at);
+        for (index, definition) in flow.definitions.iter().enumerate() {
+            if definition.binding == use_.binding
+                && definition.node == use_.node
+                && matches!(
+                    definition.kind,
+                    DefKind::AddressTaken | DefKind::MemoryWrite
+                )
+                && definition.effect_at >= after
+                && definition.effect_at <= use_.span.lo
+                && !reaching.contains(&index)
+            {
+                reaching.push(index);
+            }
+        }
 
         for index in &reaching {
             flow.edges.push(FlowEdge {
@@ -161,7 +190,10 @@ pub(super) fn solve(flow: &mut DataFlow, cfg: &Cfg) {
             continue;
         }
         // Taking an address is not a store, so it cannot be a dead one.
-        if definition.kind == DefKind::AddressTaken {
+        if matches!(
+            definition.kind,
+            DefKind::AddressTaken | DefKind::MemoryWrite
+        ) {
             continue;
         }
         if !flow.edges.iter().any(|edge| edge.def == index as u32) {

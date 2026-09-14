@@ -207,6 +207,9 @@ pub enum DefKind {
     /// call is unknown. Recorded as a definition for that reason, not because
     /// `&x` stores anything itself.
     AddressTaken,
+    /// A write through a pointer to a possible local target. A weak update:
+    /// it adds a reaching definition without killing alternative writes.
+    MemoryWrite,
 }
 
 impl DefKind {
@@ -219,6 +222,7 @@ impl DefKind {
             DefKind::CompoundAssignment => "compound_assignment",
             DefKind::IncDec => "inc_dec",
             DefKind::AddressTaken => "address_taken",
+            DefKind::MemoryWrite => "memory_write",
         }
     }
 }
@@ -237,6 +241,8 @@ pub struct FlowEdge {
 /// One function's reaching-definition analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataFlow {
+    /// Whether accesses stayed within the supported local-pointer model.
+    pub memory_complete: bool,
     /// Dense binding IDs whose declarations were not recovered in this function.
     /// Equal unresolved spellings share an ID; different spellings do not.
     pub unresolved_bindings: Vec<Binding>,

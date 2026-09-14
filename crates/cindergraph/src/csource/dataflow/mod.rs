@@ -65,14 +65,13 @@
 //!
 //! # What it does not do, stated rather than implied
 //!
-//! * **No aliasing.** `*p = 1` defines what `p` points at, and nothing here
-//!   knows what that is. The store is recorded as a *use* of `p` and kills
-//!   nothing. Every definition it should have killed therefore still reaches,
-//!   so the graph over-approximates: an edge may be spurious, but no real
-//!   dependence is missing. That is the safe direction for a reader, and it is
-//!   also what the external tool does.
-//! * **No field sensitivity.** `s.a = 1` is a *use* of `s`, not a definition,
-//!   for the same reason as the pointer store above.
+//! * **Local points-to sets.** Address-taking and pointer copies identify
+//!   possible local targets. Indirect assignments add weak definitions of
+//!   these targets; they do not kill other possible definitions. This is
+//!   flow-insensitive and can include spurious dependences.
+//! * **Incomplete memory coverage.** Unknown pointees, fields and array
+//!   elements are not fully modeled. `DataFlow::memory_complete` exposes these
+//!   gaps; missing edges must not be interpreted as proven independence.
 //! * **No interprocedural flow.** A call is a use of its arguments. `&x` is
 //!   recorded as a definition of `x` --- the callee may write through it ---
 //!   but what it writes is unknown.
@@ -110,6 +109,7 @@
 
 pub mod events;
 pub mod interproc;
+mod memory;
 pub mod model;
 mod provenance;
 pub mod solve;
@@ -154,6 +154,7 @@ pub fn analyze_function(
 ) -> DataFlow {
     let events = events::collect_events(tree, text, token_spans, function);
     let mut flow = DataFlow {
+        memory_complete: true,
         unresolved_bindings: events.unresolved,
         return_spans: tree
             .arena()
@@ -187,6 +188,7 @@ pub fn analyze_function(
         unresolved_uses: Vec::new(),
         dead_stores: Vec::new(),
     };
+    memory::project_writes(tree, text, token_spans, function, &mut flow);
     solve::solve(&mut flow, &function.cfg);
     flow
 }
