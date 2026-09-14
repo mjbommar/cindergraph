@@ -118,6 +118,7 @@ impl Summary {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Summaries {
     by_name: BTreeMap<String, Summary>,
+    calls: BTreeMap<String, Vec<(u32, String, u32)>>,
 }
 
 impl Summaries {
@@ -219,7 +220,33 @@ pub fn summarize(flows: &[DataFlow]) -> Summaries {
         summary.flows.sort_unstable();
         summary.flows.dedup();
     }
-    Summaries { by_name }
+    let mut calls = BTreeMap::new();
+    for flow in flows {
+        if ambiguous.contains(&flow.name) {
+            continue;
+        }
+        let mut transfers = Vec::new();
+        for (position, parameter) in flow
+            .definitions
+            .iter()
+            .filter(|d| d.kind == super::DefKind::Parameter)
+            .enumerate()
+        {
+            let uses = super::provenance::uses(flow, parameter.binding, &by_name);
+            for call in &flow.calls {
+                let Some(callee) = &call.callee else { continue };
+                for (argument, span) in call.argument_spans.iter().enumerate() {
+                    if super::provenance::expression(flow, &uses, *span, &by_name) {
+                        transfers.push((position as u32, callee.clone(), argument as u32));
+                    }
+                }
+            }
+        }
+        transfers.sort();
+        transfers.dedup();
+        calls.insert(flow.name.clone(), transfers);
+    }
+    Summaries { by_name, calls }
 }
 
 /// How many parameters `flow`'s function declares.
@@ -301,54 +328,10 @@ fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32,
 fn returns_binding(
     flow: &DataFlow,
     binding: Binding,
-    call_sites: &[CallSite],
+    _call_sites: &[CallSite],
     known: &BTreeMap<String, Summary>,
 ) -> bool {
-    // Every binding the value can reach without leaving this function.
-    let mut reached = reachable_bindings(flow, binding);
-
-    // Then, once per round, extend through calls whose summaries propagate.
-    for site in call_sites {
-        let Some(name) = &site.callee else { continue };
-        let Some(summary) = known.get(name) else {
-            continue;
-        };
-        for (position, argument) in site.arguments.iter().enumerate() {
-            if !reached.contains(argument) {
-                continue;
-            }
-            if summary.flows_to(position as u32, Sink::Return) {
-                // The call's result carries the value. Anything the result is
-                // assigned to now carries it too.
-                for target in &site.results {
-                    if !reached.contains(target) {
-                        reached.push(*target);
-                    }
-                }
-                if site.result_is_returned {
-                    return true;
-                }
-            }
-        }
-    }
-
-    // A read that is *only* a call argument does not itself reach the return:
-    // whether the value gets there is the callee's summary to decide, and the
-    // loop above already asked. Without this exclusion `return a(y);` looks
-    // like a return of `y` on a node with no write, and every call would
-    // propagate regardless of what the callee does with the argument.
-    flow.uses.iter().any(|use_| {
-        reached.contains(&use_.binding)
-            && is_return_node(flow, use_.node)
-            && !is_call_argument(call_sites, use_.binding)
-    })
-}
-
-/// Whether `binding` appears only as an argument to some call.
-fn is_call_argument(call_sites: &[CallSite], binding: Binding) -> bool {
-    call_sites
-        .iter()
-        .any(|site| site.arguments.contains(&binding))
+    super::provenance::returns(flow, binding, known)
 }
 
 /// One call in a function body, reduced to what a summary needs.
@@ -368,49 +351,6 @@ pub struct CallSite {
     pub result_is_returned: bool,
 }
 
-/// Every binding a value in `seed` can reach without leaving this function.
-///
-/// Follows data dependence: a read of a tainted binding taints whatever the
-/// enclosing statement writes. Node-level granularity, so it
-/// over-approximates --- the safe direction, and the same choice the
-/// intraprocedural analysis makes about aliasing.
-fn reachable_bindings(flow: &DataFlow, seed: Binding) -> Vec<Binding> {
-    let mut seen = vec![seed];
-    let mut frontier = vec![seed];
-    let mut guard = 0usize;
-    let bound = flow.edges.len() + flow.definitions.len() + 2;
-    while let Some(binding) = frontier.pop() {
-        guard += 1;
-        if guard > bound {
-            break;
-        }
-        for use_ in &flow.uses {
-            if use_.binding != binding {
-                continue;
-            }
-            for candidate in &flow.definitions {
-                if candidate.node == use_.node
-                    && candidate.effect_at >= use_.span.lo
-                    && !seen.contains(&candidate.binding)
-                {
-                    seen.push(candidate.binding);
-                    frontier.push(candidate.binding);
-                }
-            }
-        }
-    }
-    seen
-}
-
-/// Whether CFG node `node` holds no write.
-///
-/// The dataflow model does not carry node kinds, so a return node is
-/// approximated as one nothing writes on. That is why [`Summary::complete`]
-/// exists: this is a heuristic and the type says so.
-fn is_return_node(flow: &DataFlow, node: u32) -> bool {
-    !flow.definitions.iter().any(|d| d.node == node)
-}
-
 /// Whether a value in `source`'s parameter `index` can reach `sink`.
 ///
 /// The query a code property graph is used for, answered across calls. Three
@@ -424,46 +364,29 @@ pub fn reaches(summaries: &Summaries, source: &str, index: u32, sink: &str) -> F
     if index >= start.parameters {
         return Flow::No;
     }
-    if source == sink {
-        return Flow::Yes;
-    }
-
-    // Walk the call graph forward from `source`, carrying the fact that this
-    // parameter's value is live. Bounded by the number of summaries, so a
-    // cycle costs a repeat visit and not a hang.
-    let mut seen: Vec<&str> = vec![source];
-    let mut frontier: Vec<(&str, u32)> = vec![(source, index)];
-    let mut sound = start.complete;
-
-    while let Some((name, position)) = frontier.pop() {
-        let Some(summary) = summaries.get(name) else {
-            sound = false;
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![(source.to_string(), index)];
+    let mut sound = true;
+    while let Some((name, position)) = pending.pop() {
+        if !seen.insert((name.clone(), position)) {
             continue;
-        };
-        if !summary.complete {
-            sound = false;
         }
         if name == sink {
             return Flow::Yes;
         }
-        for other in summaries.iter() {
-            if seen.contains(&other.name.as_str()) {
-                continue;
+        let Some(summary) = summaries.get(&name) else {
+            sound = false;
+            continue;
+        };
+        sound &= summary.complete;
+        if let Some(transfers) = summaries.calls.get(&name) {
+            for (parameter, callee, argument) in transfers {
+                if *parameter == position {
+                    pending.push((callee.clone(), *argument));
+                }
             }
-            // `other` receives this value when it is called with it. Without a
-            // call-site record per callee pair this is the conservative
-            // reading: any function whose summary propagates position
-            // `position` is a candidate.
-            if summary.flows_to(position, Sink::Return) && other.parameters > position {
-                seen.push(other.name.as_str());
-                frontier.push((other.name.as_str(), position));
-            }
-        }
-        if seen.len() > summaries.len() + 1 {
-            return Flow::Unknown;
         }
     }
-
     if sound {
         Flow::No
     } else {

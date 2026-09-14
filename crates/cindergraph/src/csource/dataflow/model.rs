@@ -140,6 +140,8 @@ pub struct CallRecord {
     /// expression rather than a bare name is [`Binding::FREE`], which no real
     /// binding equals, so it neither propagates a value nor blocks one.
     pub arguments: Vec<Binding>,
+    /// Source extent of each argument expression, including nested calls.
+    pub argument_spans: Vec<Span>,
     /// Bindings the call's result is assigned to, when it is assigned at all.
     pub results: Vec<Binding>,
     /// Whether the call's result is returned directly: `return g(x);`.
@@ -240,6 +242,8 @@ pub struct FlowEdge {
 /// One function's reaching-definition analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataFlow {
+    /// CFG nodes whose actual kind is return.
+    pub return_nodes: Vec<u32>,
     /// The function's declared name.
     pub name: String,
     /// Every write, in source order.

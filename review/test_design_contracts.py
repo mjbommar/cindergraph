@@ -150,3 +150,11 @@ def test_seeded_recovery_mutations_preserve_graph_integrity():
         hi = rng.randrange(lo, len(original) + 1)
         code = original[:lo] + rng.choice(("", "?", "/*", "é", "}")) + original[hi:]
         test_graph_endpoints_spans_and_function_order_across_apis(code)
+
+
+@pytest.mark.parametrize("body", ["return x ? 1 : 0;", "if(x)return 1;return 0;"])
+def test_controlled_return_is_not_silently_complete_without_parameter_flow(body):
+    result = summary("int f(int x){" + body + "}")
+    assert not result["complete"] or any(
+        flow["parameter"] == 0 and flow["sink"] == "return" for flow in result["flows"]
+    )

@@ -339,6 +339,10 @@ fn collect_calls(
         out.push(CallRecord {
             callee,
             arguments,
+            argument_spans: arena
+                .children_iter(*args)
+                .map(|child| arena.span(child, token_spans).unwrap_or_default())
+                .collect(),
             results: Vec::new(),
             result_is_returned: returned_directly(tree, token_spans, root, span),
             span,

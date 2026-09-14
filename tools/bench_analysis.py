@@ -5,6 +5,7 @@
 Includes parsing and Python conversion. No claims about peak native memory.
 """
 
+import argparse
 import json
 import platform
 import statistics
@@ -14,14 +15,21 @@ import cindergraph as cg
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--shape", choices=("functions", "statements"), default="functions"
+    )
+    shape = parser.parse_args().shape
     rows = []
-    for count in (8, 32, 128):
+    for count in (8, 32, 128) if shape == "functions" else (32, 128, 512):
         code = "".join(
             f"int f{i}(int x){{int y=x+1;"
             + (f"f{i + 1}(y);" if i + 1 < count else "external(y);")
             + "return y;}"
             for i in range(count)
         )
+        if shape == "statements":
+            code = "int f(int x){int y=x;" + "y=y+1;" * count + "return y;}"
         for name in ("analyze", "data_flow", "call_summaries"):
             operation = getattr(cg, name)
             operation(code)
@@ -34,7 +42,8 @@ def main():
             rows.append(
                 dict(
                     operation=name,
-                    functions=count,
+                    shape=shape,
+                    size=count,
                     source_bytes=len(code.encode()),
                     median_ms=statistics.median(samples),
                     min_ms=min(samples),

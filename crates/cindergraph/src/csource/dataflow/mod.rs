@@ -111,6 +111,7 @@
 pub mod events;
 pub mod interproc;
 pub mod model;
+mod provenance;
 pub mod solve;
 pub mod types;
 
@@ -153,6 +154,14 @@ pub fn analyze_function(
 ) -> DataFlow {
     let events = events::collect_events(tree, text, token_spans, function);
     let mut flow = DataFlow {
+        return_nodes: function
+            .cfg
+            .nodes()
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.kind() == crate::syntax::cfg::NodeKind::Return)
+            .map(|(index, _)| index as u32)
+            .collect(),
         name: function.name.clone(),
         definitions: events.definitions,
         uses: events.uses,
