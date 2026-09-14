@@ -667,6 +667,11 @@ def call_summaries(code: str) -> list[dict[str, Any]]:
     what makes recursion terminate -- summaries only grow, over a finite
     lattice.
 
+    Return provenance includes control dependence: a parameter can select a
+    return statement or a write whose value is returned. These are conservative
+    may-dependences; equal-valued branches and algebraic cancellation are not
+    simplified, and a reported flow is not a proof of a feasible execution.
+
     Args:
         code: The source text.
 

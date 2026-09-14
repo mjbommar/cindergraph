@@ -154,6 +154,20 @@ pub fn analyze_function(
 ) -> DataFlow {
     let events = events::collect_events(tree, text, token_spans, function);
     let mut flow = DataFlow {
+        return_spans: tree
+            .arena()
+            .preorder(function.node)
+            .filter(|node| {
+                tree.arena().tag(*node)
+                    == Some(crate::csource::parse::tag::NodeTag::ReturnStmt.as_u16())
+            })
+            .filter_map(|node| tree.arena().span(node, token_spans))
+            .collect(),
+        control_edges: crate::syntax::dominance::ControlDependence::of(&function.cfg)
+            .edges()
+            .iter()
+            .map(|edge| (edge.on, edge.node))
+            .collect(),
         return_nodes: function
             .cfg
             .nodes()

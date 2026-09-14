@@ -21,6 +21,13 @@ import cindergraph as cg
         ("return drop(keep(x));", False),
         ("return keep(drop(x));", False),
         ("return keep(x+1);", True),
+        ("return x ? 1 : 0;", True),
+        ("if(x)return 1;return 0;", True),
+        ("int y=0;if(x)y=1;return y;", True),
+        ("int y=x?1:0;return y;", True),
+        ("int y=0;if(x)y=1;y=0;return y;", False),
+        ("if(drop(x))return 1;return 0;", False),
+        ("if(keep(x))return 1;return 0;", True),
     ],
 )
 def test_return_provenance(body, expected):
@@ -58,6 +65,14 @@ def test_call_argument_positions_change_across_functions():
     )
     assert cg.reaches(code, "f", 0, "sink") == "yes"
     assert cg.reaches(code, "f", 1, "sink") == "no"
+
+
+def test_function_pointer_shadow_does_not_resolve_to_same_named_function():
+    code = "int keep(int x){return x;}int f(int (*keep)(int),int y){return keep(y);}"
+    summary = next(s for s in cg.call_summaries(code) if s["name"] == "f")
+    assert not summary["complete"]
+    assert summary["flows"] == []
+    assert cg.reaches(code, "f", 1, "keep") == "unknown"
 
 
 @pytest.mark.parametrize("seed", range(40))

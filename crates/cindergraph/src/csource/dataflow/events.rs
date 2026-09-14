@@ -318,6 +318,9 @@ fn collect_calls(
             .first()
             .filter(|first| arena.tag(**first) == Some(NodeTag::NameRef.as_u16()))
             .and_then(|first| name_of(tree, text, token_spans, *first))
+            // A visible local/parameter with this spelling is an indirect
+            // call, even when a file-level function has the same name.
+            .filter(|(_, span)| binding_at(*span).is_free())
             .map(|(name, _)| name);
 
         // One argument per child of the `CallArgs` node. A child that is a

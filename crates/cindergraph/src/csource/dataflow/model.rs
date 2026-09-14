@@ -244,6 +244,10 @@ pub struct FlowEdge {
 pub struct DataFlow {
     /// CFG nodes whose actual kind is return.
     pub return_nodes: Vec<u32>,
+    /// Source expressions belonging to return statements, before CFG splitting.
+    pub return_spans: Vec<Span>,
+    /// Controller-to-controlled CFG node pairs.
+    pub control_edges: Vec<(u32, u32)>,
     /// The function's declared name.
     pub name: String,
     /// Every write, in source order.
