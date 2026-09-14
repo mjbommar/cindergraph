@@ -717,6 +717,12 @@ pub fn backward_slice_py(
         cfgs.iter()
             .find(|candidate| candidate.name == function)
             .map(|candidate| {
+                if node as usize >= candidate.cfg.node_count() {
+                    return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                        "node {node} is outside function {function:?} ({} nodes)",
+                        candidate.cfg.node_count()
+                    )));
+                }
                 let cdg = ControlDependence::of(&candidate.cfg);
                 let flow = analyze_function(&tree, text, &spans, candidate);
                 let data: Vec<(u32, u32)> = flow
@@ -729,13 +735,13 @@ pub fn backward_slice_py(
                         ))
                     })
                     .collect();
-                backward_slice(&cdg, &data, node)
+                Ok(backward_slice(&cdg, &data, node))
             })
     });
 
     sliced.ok_or_else(|| {
         pyo3::exceptions::PyKeyError::new_err(format!("no function named {function:?}"))
-    })
+    })?
 }
 
 /// What each function does with the values passed to it, across calls.

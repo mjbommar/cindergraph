@@ -37,7 +37,7 @@
 //! A caller that treats `Unknown` as `No` gets an unsound answer; the type
 //! exists so that mistake has to be written down.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::Binding;
 use super::DataFlow;
@@ -157,7 +157,11 @@ const MAX_ROUNDS: usize = 16;
 /// this adds nothing to it and only reads.
 pub fn summarize(flows: &[DataFlow]) -> Summaries {
     let mut by_name: BTreeMap<String, Summary> = BTreeMap::new();
+    let mut ambiguous = BTreeSet::new();
     for flow in flows {
+        if by_name.contains_key(&flow.name) {
+            ambiguous.insert(flow.name.clone());
+        }
         by_name.insert(
             flow.name.clone(),
             Summary {
@@ -168,12 +172,20 @@ pub fn summarize(flows: &[DataFlow]) -> Summaries {
             },
         );
     }
+    // Name-based queries cannot choose between recovered duplicate definitions.
+    // Do not combine facts from different bodies into one positive answer.
+    for name in &ambiguous {
+        by_name.get_mut(name).expect("inserted above").complete = false;
+    }
 
     let mut rounds = 0usize;
     loop {
         rounds += 1;
         let mut changed = false;
         for flow in flows {
+            if ambiguous.contains(&flow.name) {
+                continue;
+            }
             let (found, complete) = local_flows(flow, &by_name);
             let Some(summary) = by_name.get_mut(&flow.name) else {
                 continue;
@@ -240,9 +252,10 @@ fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32,
             // An indirect call: no name, so no summary can be applied.
             complete = false;
         } else if let Some(name) = &site.callee {
-            if !known.contains_key(name) {
-                // A callee defined elsewhere. What it does with its arguments
-                // is not knowable from one translation unit.
+            if !known.get(name).is_some_and(|summary| summary.complete) {
+                // Missing and incomplete callees both leave unknown effects.
+                // Completeness must propagate through recursion and call chains,
+                // not just one step beyond the missing definition.
                 complete = false;
             }
         }

@@ -57,24 +57,12 @@ pub(super) fn collect_events(
     let mut types: Vec<CType> = Vec::new();
     let mut binding_names: Vec<String> = Vec::new();
 
-    // Find the function definition node whose span matches this graph's.
-    let Some(definition_node) = tree
-        .functions(text)
-        .into_iter()
-        .find(|f| f.span == function.span)
-    else {
-        return Events {
-            definitions,
-            uses,
-            types,
-            names: binding_names,
-            calls: Vec::new(),
-        };
-    };
-    let root = definition_node.node;
+    // The CFG retains its definition's identity from the same syntax tree.
+    // Re-enumerating every definition here cost a full-file scan per function.
+    let root = function.node;
     // The declarator names the function itself. That is not a variable, and
     // binding it would make a recursive call look like a read of a local.
-    let own_name_span = definition_node.name_span;
+    let own_name_span = function.name_span;
 
     // Names that are not data reads, collected before the walk because both
     // tests need the *enclosing* node and the walk sees a node before it knows

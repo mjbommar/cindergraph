@@ -653,6 +653,7 @@ def backward_slice(code: str, function: str, node: int) -> list[int]:
 
     Raises:
         KeyError: If no function of that name was recovered.
+        IndexError: If the node ID is outside the selected function's graph.
     """
     return list(_native.source.backward_slice(code, function, node))
 
@@ -754,7 +755,7 @@ def export_path(
         OSError: If the file cannot be read.
         ValueError: If `repr`, `format` or `dialect` is not a known name.
     """
-    code = Path(path).read_text(encoding="utf-8", errors="replace")
+    code = Path(path).read_bytes().decode("utf-8", errors="replace")
     if dialect is not None:
         code = normalize(code, dialect)
     return export_graphs(code, repr=repr, format=format)

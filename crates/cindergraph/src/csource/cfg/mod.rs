@@ -125,6 +125,11 @@ pub struct FunctionCfg {
     pub name: String,
     /// The span of the whole definition, specifiers through closing brace.
     pub span: Span,
+    /// The definition node in the tree used to build this graph. Retaining it
+    /// lets later passes visit this function without rescanning the whole unit.
+    pub node: NodeId,
+    /// The name token's byte span in that same source text.
+    pub name_span: Span,
     /// The graph.
     pub cfg: Cfg,
     /// How many `&&`, `||` and `?:` operators were expanded into forks.
@@ -466,6 +471,8 @@ impl<'a> Emitter<'a> {
             FunctionCfg {
                 name: func.name.clone(),
                 span: func.span,
+                node: func.node,
+                name_span: func.name_span,
                 cfg,
                 short_circuits: self.short_circuits,
             },
