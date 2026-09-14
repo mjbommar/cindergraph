@@ -24,9 +24,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import cindergraph
 import pytest
-
-import glaurung
 
 pytestmark = pytest.mark.decbench
 
@@ -82,10 +81,10 @@ def _our_pairs(text: str) -> dict[str, set[tuple[int, int]]]:
     import json
 
     # Byte offsets, so lines are counted in bytes. See the warning on
-    # `glaurung.source.control_dependence`.
+    # `cindergraph.source.control_dependence`.
     raw = text.encode()
     found: dict[str, set[tuple[int, int]]] = {}
-    for name, body in glaurung.source.export_graphs(text, repr="cdg", format="json"):
+    for name, body in cindergraph.source.export_graphs(text, repr="cdg", format="json"):
         graph = json.loads(body)
         span_of = {node["id"]: node["span"] for node in graph["nodes"]}
         pairs = set()

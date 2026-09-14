@@ -1,0 +1,16 @@
+[package]
+name = "cindergraph"
+description = "Tolerant, deterministic C source analysis in pure Rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["c", "parser", "control-flow", "static-analysis", "decompiler"]
+categories = ["parsing", "development-tools"]
+
+[dependencies]
+regex.workspace = true
+serde_json.workspace = true

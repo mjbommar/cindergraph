@@ -374,7 +374,7 @@ fn blank_len(bytes: &[u8], at: usize) -> usize {
 ///
 /// DecBench's own answer is a regex in the text pipeline that deletes binja's
 /// `@ rax` form before Joern ever sees it. That answer is unavailable here for
-/// two independent reasons. First, [`crate::csource::joern::parity_cfgs`] does
+/// two independent reasons. First, [`crate::csource::parity::parity_cfgs`] does
 /// not run [`crate::csource::normalize`] at all, so a rewrite there would not
 /// reach the path that actually scores. Second, and more fundamental, deleting
 /// bytes moves every offset after the deletion, and `REQ-GEN-2` requires spans

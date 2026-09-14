@@ -26,7 +26,7 @@
 //! plus the assembly.
 //!
 //! **These metrics are computed on [`crate::csource::cfg`], never on
-//! [`crate::csource::joern`].** The parity layer reproduces another tool's
+//! [`crate::csource::parity`].** The parity layer reproduces another tool's
 //! artifacts on purpose: coalesced expression chains, a function-end node
 //! deleted when it stayed a singleton, entry and exit as derived flags. A
 //! cyclomatic number taken from that graph would faithfully reproduce a JVM

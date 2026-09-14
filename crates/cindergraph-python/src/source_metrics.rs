@@ -1,6 +1,6 @@
 //! Python bindings for the C source metrics.
 //!
-//! [`crate::csource::metrics`] measures a single piece of C: how big it is, how
+//! [`cindergraph::csource::metrics`] measures a single piece of C: how big it is, how
 //! branchy, how deeply nested, what it calls, and Halstead's token figures.
 //! This exposes that to Python, and the boundary is the one
 //! [`crate::python_bindings::source_cfg`] and
@@ -16,7 +16,7 @@
 //! serialize or a row they can stack; only interactive exploration wants
 //! attributes, and that one is cheap to build in Python on top of a dict.
 //!
-//! Two invariants carry over from [`crate::csource::metrics`] and are
+//! Two invariants carry over from [`cindergraph::csource::metrics`] and are
 //! load-bearing here.
 //!
 //! * **Nothing raises on account of the input.** Parsing is total
@@ -31,11 +31,10 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-use crate::csource::metrics::{self, FunctionMetrics, SourceReport};
-use crate::csource::parse::parse;
-use crate::syntax::cfg::Cfg;
-use crate::syntax::diag::Diagnostics;
-use crate::syntax::ids::NodeId;
+use cindergraph::csource::metrics::{self, FunctionMetrics, SourceReport};
+use cindergraph::csource::parse::parse;
+use cindergraph::syntax::cfg::Cfg;
+use cindergraph::syntax::diag::Diagnostics;
 
 /// Build the `{"lines", "tokens", "bytes", "functions", "diagnostics"}` dict.
 fn report_dict<'py>(
@@ -64,7 +63,10 @@ fn report_dict<'py>(
     let reported = PyList::empty(py);
     for diagnostic in diagnostics.iter() {
         let entry = PyDict::new(py);
-        entry.set_item("severity", format!("{:?}", diagnostic.severity).to_lowercase())?;
+        entry.set_item(
+            "severity",
+            format!("{:?}", diagnostic.severity).to_lowercase(),
+        )?;
         entry.set_item("message", diagnostic.message.clone())?;
         entry.set_item("start", diagnostic.span.lo)?;
         entry.set_item("end", diagnostic.span.hi)?;
@@ -249,7 +251,9 @@ fn cfg_dict<'py>(py: Python<'py>, cfg: &Cfg) -> PyResult<Bound<'py, PyDict>> {
 pub fn control_flow_graphs_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
     let graphs = py.detach(|| {
         let tree = parse(text).into_parts().0;
-        crate::csource::cfg::function_cfgs(&tree, text).into_parts().0
+        cindergraph::csource::cfg::function_cfgs(&tree, text)
+            .into_parts()
+            .0
     });
     let out = PyList::empty(py);
     for graph in &graphs {
@@ -443,7 +447,7 @@ pub fn features_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyLi
 #[pyfunction]
 #[pyo3(name = "normalize")]
 pub fn normalize_py(py: Python<'_>, text: &str, dialect: &str) -> PyResult<String> {
-    use crate::csource::normalize::Dialect;
+    use cindergraph::csource::normalize::Dialect;
     let dialect = match dialect {
         "preprocessed" => Dialect::Preprocessed(text),
         "decompiled" => Dialect::Decompiled(text),
@@ -477,8 +481,8 @@ pub fn export_graphs_py<'py>(
     repr: &str,
     format: &str,
 ) -> PyResult<Bound<'py, PyList>> {
-    use crate::csource::export::{export, Repr};
-    use crate::syntax::graph_export::{write, Format};
+    use cindergraph::csource::export::{export, Repr};
+    use cindergraph::syntax::graph_export::{write, Format};
 
     let repr_value = Repr::parse(repr).ok_or_else(|| {
         pyo3::exceptions::PyValueError::new_err(format!(
@@ -516,8 +520,8 @@ pub fn export_graphs_py<'py>(
 #[pyfunction]
 #[pyo3(name = "export_choices")]
 pub fn export_choices_py(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    use crate::csource::export::Repr;
-    use crate::syntax::graph_export::Format;
+    use cindergraph::csource::export::Repr;
+    use cindergraph::syntax::graph_export::Format;
 
     let out = PyDict::new(py);
     out.set_item("repr", Repr::ALL.map(|r| r.name()).to_vec())?;
@@ -534,7 +538,7 @@ pub fn export_choices_py(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 #[pyfunction]
 #[pyo3(name = "data_flow")]
 pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use crate::csource::dataflow::analyze;
+    use cindergraph::csource::dataflow::analyze;
 
     let flows = py.detach(|| analyze(text).into_parts().0);
     let out = PyList::empty(py);
@@ -602,11 +606,17 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
         entry.set_item("bindings", bindings)?;
         entry.set_item(
             "type_conflicts",
-            flow.type_conflicts().iter().map(|b| b.0).collect::<Vec<u32>>(),
+            flow.type_conflicts()
+                .iter()
+                .map(|b| b.0)
+                .collect::<Vec<u32>>(),
         )?;
         entry.set_item(
             "unused_bindings",
-            flow.unused_bindings().iter().map(|b| b.0).collect::<Vec<u32>>(),
+            flow.unused_bindings()
+                .iter()
+                .map(|b| b.0)
+                .collect::<Vec<u32>>(),
         )?;
         out.append(entry)?;
     }
@@ -622,8 +632,8 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
 #[pyfunction]
 #[pyo3(name = "control_dependence")]
 pub fn control_dependence_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use crate::csource::cfg::function_cfgs;
-    use crate::syntax::dominance::ControlDependence;
+    use cindergraph::csource::cfg::function_cfgs;
+    use cindergraph::syntax::dominance::ControlDependence;
 
     let built = py.detach(|| {
         let tree = parse(text).into_parts().0;
@@ -636,15 +646,10 @@ pub fn control_dependence_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound
                     .map(|id| {
                         let kind = function
                             .cfg
-                            .node(crate::syntax::ids::NodeId::new(id))
+                            .node(cindergraph::syntax::ids::NodeId::new(id))
                             .map(|node| node.kind().name().to_string())
                             .unwrap_or_default();
-                        (
-                            id,
-                            kind,
-                            cdg.depth(id),
-                            cdg.post_dominators().immediate(id),
-                        )
+                        (id, kind, cdg.depth(id), cdg.post_dominators().immediate(id))
                     })
                     .collect();
                 let edges: Vec<(u32, u32, &'static str)> = cdg
@@ -701,9 +706,9 @@ pub fn backward_slice_py(
     function: &str,
     node: u32,
 ) -> PyResult<Vec<u32>> {
-    use crate::csource::cfg::function_cfgs;
-    use crate::csource::dataflow::analyze_function;
-    use crate::syntax::dominance::{backward_slice, ControlDependence};
+    use cindergraph::csource::cfg::function_cfgs;
+    use cindergraph::csource::dataflow::analyze_function;
+    use cindergraph::syntax::dominance::{backward_slice, ControlDependence};
 
     let sliced = py.detach(|| {
         let tree = parse(text).into_parts().0;
@@ -743,7 +748,7 @@ pub fn backward_slice_py(
 #[pyfunction]
 #[pyo3(name = "call_summaries")]
 pub fn call_summaries_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use crate::csource::dataflow::{analyze, summarize, Sink};
+    use cindergraph::csource::dataflow::{analyze, summarize, Sink};
 
     let summaries = py.detach(|| summarize(&analyze(text).into_parts().0));
     let out = PyList::empty(py);
@@ -790,297 +795,13 @@ pub fn reaches_py(
     parameter: u32,
     sink: &str,
 ) -> PyResult<String> {
-    use crate::csource::dataflow::{analyze, interproc::reaches, summarize};
+    use cindergraph::csource::dataflow::{analyze, interproc::reaches, summarize};
 
     let verdict = py.detach(|| {
         let summaries = summarize(&analyze(text).into_parts().0);
         reaches(&summaries, source, parameter, sink)
     });
     Ok(verdict.name().to_string())
-}
-
-
-/// The bounds every solver-backed query runs under.
-///
-/// Exposed as keyword arguments rather than a class because there are four
-/// knobs anyone actually turns and nine in the struct. The rest keep their
-/// defaults, which are sized so a corpus sweep is minutes rather than hours.
-///
-/// `max_block_visits` is the one to raise first: it is the loop unroll depth,
-/// and it is why 510 of 1,131 corpus paths are cut rather than decided.
-#[cfg(feature = "symbolic")]
-fn bounds_from(
-    max_paths: Option<u64>,
-    max_block_visits: Option<u32>,
-    max_steps: Option<u64>,
-    solver_timeout_ms: Option<u64>,
-) -> crate::csource::equiv::Bounds {
-    let mut bounds = crate::csource::equiv::Bounds::default();
-    if let Some(v) = max_paths {
-        bounds.max_paths = v;
-    }
-    if let Some(v) = max_block_visits {
-        bounds.max_block_visits = v;
-    }
-    if let Some(v) = max_steps {
-        bounds.max_steps = v;
-    }
-    if let Some(v) = solver_timeout_ms {
-        bounds.solver_timeout_ms = v;
-    }
-    bounds
-}
-
-/// One path verdict as a dict.
-#[cfg(feature = "symbolic")]
-fn path_entry<'py>(
-    py: Python<'py>,
-    path: &crate::csource::feasibility::PathVerdict,
-) -> PyResult<Bound<'py, PyDict>> {
-    use crate::csource::feasibility::Verdict;
-
-    let entry = PyDict::new(py);
-    entry.set_item("decisions", path.decisions)?;
-    match &path.verdict {
-        Verdict::Feasible(w) => {
-            entry.set_item("verdict", "feasible")?;
-            entry.set_item("args", w.args.clone())?;
-            entry.set_item("why", py.None())?;
-        }
-        Verdict::Infeasible => {
-            entry.set_item("verdict", "infeasible")?;
-            entry.set_item("args", py.None())?;
-            entry.set_item("why", py.None())?;
-        }
-        Verdict::Unknown(why) => {
-            entry.set_item("verdict", "unknown")?;
-            entry.set_item("args", py.None())?;
-            entry.set_item("why", describe(why))?;
-        }
-    }
-    Ok(entry)
-}
-
-/// Everything one `Findings` says, as a dict.
-#[cfg(feature = "symbolic")]
-fn findings_entry<'py>(
-    py: Python<'py>,
-    found: &crate::csource::feasibility::Findings,
-) -> PyResult<Bound<'py, PyDict>> {
-    let report = &found.report;
-    let out = PyDict::new(py);
-    out.set_item("function", report.name.clone())?;
-
-    let paths = PyList::empty(py);
-    for path in &report.paths {
-        paths.append(path_entry(py, path)?)?;
-    }
-    out.set_item("paths", paths)?;
-    out.set_item("feasible", report.feasible())?;
-    out.set_item("infeasible", report.infeasible())?;
-    out.set_item("unknown", report.unknown())?;
-    out.set_item("unreachable_blocks", report.unreachable_blocks.clone())?;
-
-    // A cut path carries no verdict, and `total` is what says whether the
-    // enumeration covered the function. An `unreachable_blocks` claim is only
-    // made when it did; a consumer drawing any other conclusion from a partial
-    // enumeration needs to know it was partial.
-    let cuts = PyList::empty(py);
-    for cut in &report.cuts {
-        cuts.append(format!("{cut:?}"))?;
-    }
-    out.set_item("cuts", cuts)?;
-    out.set_item("total", report.cuts.is_empty())?;
-    out.set_item(
-        "abstained",
-        match &report.abstained {
-            Some(why) => describe(why).into_pyobject(py)?.into_any(),
-            None => py.None().into_bound(py),
-        },
-    )?;
-
-    let redundant = PyList::empty(py);
-    for r in &found.redundant {
-        let item = PyDict::new(py);
-        item.set_item("path", r.path)?;
-        item.set_item("decision", r.decision)?;
-        item.set_item("implied_by", r.implied_by)?;
-        redundant.append(item)?;
-    }
-    out.set_item("redundant_guards", redundant)?;
-
-    let violations = PyList::empty(py);
-    for v in &found.violations {
-        use crate::csource::feasibility::Property;
-        let item = PyDict::new(py);
-        item.set_item("path", v.path)?;
-        match v.property {
-            Property::DivisionByZero => {
-                item.set_item("property", "division_by_zero")?;
-                item.set_item("width", py.None())?;
-            }
-            Property::ShiftPastWidth { width } => {
-                item.set_item("property", "shift_past_width")?;
-                item.set_item("width", width)?;
-            }
-        }
-        item.set_item("args", v.witness.args.clone())?;
-        violations.append(item)?;
-    }
-    out.set_item("undefined_behavior", violations)?;
-    Ok(out)
-}
-
-/// Everything the solver can say about one function.
-///
-/// Needs an extension built with the `symbolic` feature, which is deliberately
-/// opt-in: `python-ext` bundles the concrete emulator but not the symbolic
-/// engine or a solver, and pulling an SMT backend into the default wheel is a
-/// packaging decision this binding does not make on its own.
-///
-/// The **symbol always exists** and the unsupported build raises instead. That
-/// is not politeness: `python/glaurung/_native/*.pyi` is generated from the
-/// built module and `test_every_stub_matches_the_built_module` requires a
-/// byte-for-byte match, so a symbol that appears under one feature set and not
-/// another would make the stub describe exactly one build and be stale against
-/// the other. One signature, two bodies.
-///
-/// The function is walked **once** for all four questions; asking them
-/// separately would enumerate its paths three more times.
-#[cfg(feature = "symbolic")]
-#[pyfunction]
-#[pyo3(name = "path_feasibility")]
-#[pyo3(signature = (text, name, *, max_paths=None, max_block_visits=None, max_steps=None, solver_timeout_ms=None))]
-pub fn path_feasibility_py<'py>(
-    py: Python<'py>,
-    text: &str,
-    name: &str,
-    max_paths: Option<u64>,
-    max_block_visits: Option<u32>,
-    max_steps: Option<u64>,
-    solver_timeout_ms: Option<u64>,
-) -> PyResult<Bound<'py, PyDict>> {
-    use crate::csource::feasibility::findings_of;
-
-    let bounds = bounds_from(max_paths, max_block_visits, max_steps, solver_timeout_ms);
-    let found = py.detach(|| findings_of(text, name, &bounds));
-    findings_entry(py, &found)
-}
-
-/// The same entry point on a build without the symbolic engine.
-///
-/// Raises rather than returning an empty result: "nothing to report" and "this
-/// build cannot answer" are different facts, and a caller that cannot tell them
-/// apart would record "nothing infeasible" for a function it never examined.
-#[cfg(not(feature = "symbolic"))]
-#[pyfunction]
-#[pyo3(name = "path_feasibility")]
-#[pyo3(signature = (text, name, *, max_paths=None, max_block_visits=None, max_steps=None, solver_timeout_ms=None))]
-pub fn path_feasibility_py<'py>(
-    py: Python<'py>,
-    text: &str,
-    name: &str,
-    max_paths: Option<u64>,
-    max_block_visits: Option<u32>,
-    max_steps: Option<u64>,
-    solver_timeout_ms: Option<u64>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let _ = (text, name, max_paths, max_block_visits, max_steps, solver_timeout_ms);
-    let _ = py;
-    Err(unavailable())
-}
-
-/// Solver findings for every function in a translation unit that has any.
-///
-/// The high-level half: `path_feasibility` answers about one function and
-/// reports everything including the ordinary case, which is what a caller
-/// building its own analysis wants. This answers about a whole file and returns
-/// **only functions with something to say** --- an infeasible path, a block no
-/// input reaches, a guard an earlier one forces, or an input that makes it
-/// execute undefined behaviour. A function whose every path is feasible and
-/// whose guards are all load bearing is the ordinary case, and listing it would
-/// bury the ones that are not.
-///
-/// Functions the lowering refuses are skipped rather than listed: "I could not
-/// read this" is not a finding about the program. Ask `path_feasibility` by
-/// name to see the refusal and the construct it names.
-#[cfg(feature = "symbolic")]
-#[pyfunction]
-#[pyo3(name = "source_findings")]
-#[pyo3(signature = (text, *, max_paths=None, max_block_visits=None, max_steps=None, solver_timeout_ms=None))]
-pub fn source_findings_py<'py>(
-    py: Python<'py>,
-    text: &str,
-    max_paths: Option<u64>,
-    max_block_visits: Option<u32>,
-    max_steps: Option<u64>,
-    solver_timeout_ms: Option<u64>,
-) -> PyResult<Bound<'py, PyList>> {
-    use crate::csource::feasibility::findings_of;
-    use crate::csource::parse::parse;
-
-    let bounds = bounds_from(max_paths, max_block_visits, max_steps, solver_timeout_ms);
-    let found = py.detach(|| {
-        let tree = parse(text).into_parts().0;
-        let mut out = Vec::new();
-        for def in tree.functions(text) {
-            if def.name.is_empty() {
-                continue;
-            }
-            let one = findings_of(text, &def.name, &bounds);
-            if one.report.abstained.is_some() || one.is_empty() {
-                continue;
-            }
-            out.push(one);
-        }
-        out
-    });
-
-    let list = PyList::empty(py);
-    for one in &found {
-        list.append(findings_entry(py, one)?)?;
-    }
-    Ok(list)
-}
-
-/// The same entry point on a build without the symbolic engine.
-#[cfg(not(feature = "symbolic"))]
-#[pyfunction]
-#[pyo3(name = "source_findings")]
-#[pyo3(signature = (text, *, max_paths=None, max_block_visits=None, max_steps=None, solver_timeout_ms=None))]
-pub fn source_findings_py<'py>(
-    py: Python<'py>,
-    text: &str,
-    max_paths: Option<u64>,
-    max_block_visits: Option<u32>,
-    max_steps: Option<u64>,
-    solver_timeout_ms: Option<u64>,
-) -> PyResult<Bound<'py, PyList>> {
-    let _ = (text, max_paths, max_block_visits, max_steps, solver_timeout_ms);
-    let _ = py;
-    Err(unavailable())
-}
-
-/// The one error both unsupported-build arms raise.
-#[cfg(not(feature = "symbolic"))]
-fn unavailable() -> PyErr {
-    pyo3::exceptions::PyRuntimeError::new_err(
-        "glaurung was built without the `symbolic` feature, so solver-backed \
-         source analysis is unavailable; rebuild with `maturin develop -F \
-         pyo3/extension-module,python-ext,symbolic`",
-    )
-}
-
-/// One abstention rendered for a Python consumer.
-#[cfg(feature = "symbolic")]
-fn describe(why: &crate::csource::feasibility::Unknown) -> String {
-    use crate::csource::feasibility::Unknown;
-    match why {
-        Unknown::NotLowered(what) => format!("not lowered: {what}"),
-        Unknown::NoInputSpec => "a parameter is not an integer type".to_string(),
-        Unknown::Solver(m) => format!("solver: {m}"),
-        Unknown::WitnessDidNotReproduce => "the witness did not reproduce".to_string(),
-    }
 }
 
 /// Register the `source` submodule on the extension root.
@@ -1099,8 +820,6 @@ pub fn register_source_metrics_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>
     sub.add_function(wrap_pyfunction!(backward_slice_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(call_summaries_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(reaches_py, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(path_feasibility_py, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(source_findings_py, &sub)?)?;
     m.add_submodule(&sub)?;
     Ok(())
 }
@@ -1115,11 +834,10 @@ mod tests {
     /// consumer stacking rows would train on scrambled features.
     #[test]
     fn the_feature_names_and_the_feature_row_are_the_same_length() {
-        let report = metrics::analyze(
-            "int f(int a) { if (a && a) { while (a) { a--; } } return a; }",
-        )
-        .into_parts()
-        .0;
+        let report =
+            metrics::analyze("int f(int a) { if (a && a) { while (a) { a--; } } return a; }")
+                .into_parts()
+                .0;
         let function = report.functions.first().expect("one function");
         assert_eq!(
             FEATURE_NAMES.len(),
@@ -1132,7 +850,7 @@ mod tests {
     /// forever.
     #[test]
     fn every_kind_column_names_a_real_node_kind() {
-        use crate::syntax::cfg::NodeKind;
+        use cindergraph::syntax::cfg::NodeKind;
         let known: Vec<&str> = [
             NodeKind::Entry,
             NodeKind::Exit,
@@ -1152,7 +870,10 @@ mod tests {
         .map(|k| k.name())
         .collect();
         for column in KIND_COLUMNS {
-            assert!(known.contains(column), "unknown node kind column {column:?}");
+            assert!(
+                known.contains(column),
+                "unknown node kind column {column:?}"
+            );
         }
         assert_eq!(
             KIND_COLUMNS.len(),

@@ -26,7 +26,7 @@
 //! each --- among the specifiers, inside the declarator, and trailing it ---
 //! and in all three they are bumped and no node is opened. That is stronger
 //! than "ignored": an opened-and-abandoned node would still carry a span, and
-//! [`crate::csource::joern`] counts nodes. The invariant the tests state is the
+//! [`crate::csource::parity`] counts nodes. The invariant the tests state is the
 //! one that matters, and it is an equality rather than a bound --- the tree for
 //! `int __fastcall f(int a) { ... }` is the tree for `int f(int a) { ... }`,
 //! tag for tag.
@@ -1071,7 +1071,7 @@ mod tests {
         // convention keyword reach `found_name`, fails here.
         let plain = format!("int f{BODY}");
         let plain_tags = tags(&plain);
-        let plain_cfg = crate::csource::joern::parity_cfgs(&plain);
+        let plain_cfg = crate::csource::parity::parity_cfgs(&plain);
         assert_eq!(plain_cfg["f"].nodes.len(), 3, "the fixture itself changed");
         for (prefix, suffix) in DECORATIONS {
             let decorated = format!("int {prefix}f{suffix}{BODY}");
@@ -1092,7 +1092,7 @@ mod tests {
             };
             assert_eq!(tags(&decorated), expected, "{decorated}");
             assert_eq!(
-                crate::csource::joern::parity_cfgs(&decorated),
+                crate::csource::parity::parity_cfgs(&decorated),
                 plain_cfg,
                 "{decorated} recovered a different CFG"
             );
@@ -1111,7 +1111,7 @@ mod tests {
             "void __stdcall f(unsigned __int8 a) { if (a) return; return; }",
             "__declspec(noreturn) void __cdecl f(int a) { if (a) return; return; }",
         ] {
-            let cfgs = crate::csource::joern::parity_cfgs(text);
+            let cfgs = crate::csource::parity::parity_cfgs(text);
             let names: Vec<&String> = cfgs.keys().collect();
             assert_eq!(names.len(), 1, "{text}: recovered {names:?}");
             assert!(
@@ -1159,7 +1159,7 @@ mod tests {
         // reported a function named `noreturn`. A dropped function is visible
         // in a count; a renamed one corrupts the score it is matched by.
         let text = "__declspec(noreturn) int f(int a) { if (a) return 1; return 0; }";
-        let cfgs = crate::csource::joern::parity_cfgs(text);
+        let cfgs = crate::csource::parity::parity_cfgs(text);
         assert_eq!(cfgs.keys().collect::<Vec<_>>(), vec!["f"], "{cfgs:?}");
     }
 
@@ -1176,7 +1176,7 @@ mod tests {
             "int @<eax> f(int a) { if (a) return 1; return 0; }",
             "int f(int a) @<eax> { if (a) return 1; return 0; }",
         ] {
-            let cfgs = crate::csource::joern::parity_cfgs(text);
+            let cfgs = crate::csource::parity::parity_cfgs(text);
             assert_eq!(
                 cfgs.keys().collect::<Vec<_>>(),
                 vec!["f"],
@@ -1263,7 +1263,7 @@ mod tests {
     #[test]
     fn every_corpus_function_header_recovers_its_name_and_its_body() {
         for (label, text, name) in CORPUS_HEADERS {
-            let cfgs = crate::csource::joern::parity_cfgs(text);
+            let cfgs = crate::csource::parity::parity_cfgs(text);
             assert_eq!(
                 cfgs.keys().map(String::as_str).collect::<Vec<_>>(),
                 vec![*name],
@@ -1282,7 +1282,7 @@ mod tests {
         // the test uses a word no list would ever hold.
         for middle in ["__rustcall", "processEntry", "totally_made_up_word", "Z"] {
             let text = format!("undefined8 {middle} f(int a) {{ if (a) return 1; return 0; }}");
-            let cfgs = crate::csource::joern::parity_cfgs(&text);
+            let cfgs = crate::csource::parity::parity_cfgs(&text);
             assert_eq!(
                 cfgs.keys().map(String::as_str).collect::<Vec<_>>(),
                 vec!["f"],

@@ -16,7 +16,7 @@
 //!
 //! What comes out is the **general** CFG --- "the graph a person would draw:
 //! real successors, real join points, real loop back edges". It is *not* the
-//! Joern-parity graph. `architecture.md` section 1 calls that split the
+//! parity graph. `architecture.md` section 1 calls that split the
 //! load-bearing decision of the whole design, because the parity layer is built
 //! on top of this one and three things break at once if its quirks leak
 //! downward: the lowering to LLIR inherits a graph shaped by a JVM program's
@@ -167,7 +167,7 @@ pub fn function_cfgs(tree: &Tree, text: &str) -> Parsed<Vec<FunctionCfg>> {
 ///
 /// [`Coverage::Reachable`] is [`function_cfgs`] and is what every consumer of
 /// the general graph wants; the only caller of [`Coverage::Syntactic`] is
-/// [`crate::csource::joern`], which is reproducing a tool whose CFG
+/// [`crate::csource::parity`], which is reproducing a tool whose CFG
 /// construction is syntax-directed. The option is threaded rather than made a
 /// second emitter for the reason `architecture.md` section 1 gives: the parity
 /// layer must not have its own copy of the statement grammar, because an

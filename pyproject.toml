@@ -1,0 +1,53 @@
+[build-system]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "cindergraph"
+description = "Tolerant, deterministic C source analysis backed by Rust"
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Michael Bommarito", email = "michael.bommarito@gmail.com" }]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+graphs = ["networkx>=3.0"]
+tests = ["networkx>=3.0", "pytest>=8.4"]
+
+[tool.maturin]
+manifest-path = "crates/cindergraph-python/Cargo.toml"
+python-source = "python"
+module-name = "cindergraph._native"
+features = ["extension-module"]
+include = ["python/cindergraph/py.typed", "python/cindergraph/_native/*.pyi"]
+
+[dependency-groups]
+dev = ["maturin>=1.9,<2.0", "networkx>=3.0", "pytest>=8.4", "ruff>=0.13", "ty>=0.0.1a20"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E402", "F403"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+markers = [
+  "core: requires only the installed extension",
+  "slow: corpus-wide validation",
+  "decbench: optional Joern differential; never run by default",
+]
+addopts = "-m 'not decbench'"

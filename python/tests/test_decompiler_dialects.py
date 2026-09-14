@@ -29,14 +29,16 @@ import pytest
 
 pytestmark = pytest.mark.core
 
-csource = pytest.importorskip("glaurung._native").csource
+csource = pytest.importorskip("cindergraph._native").csource
 
 FIXTURES = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "decompiler_dialects"
 )
 
-_CASE_START = re.compile(r"^/\* case: ", re.M)
-_META = re.compile(r"^(?: \*|/\*) (case|provenance|source|expect|gap): (.*)$", re.M)
+_CASE_START = re.compile(r"^/\* case: ", re.MULTILINE)
+_META = re.compile(
+    r"^(?: \*|/\*) (case|provenance|source|expect|gap): (.*)$", re.MULTILINE
+)
 
 #: Provenance values a fixture case may declare. ``captured`` means the text was
 #: produced by the named backend and copied verbatim; ``RECONSTRUCTION`` means it
@@ -51,26 +53,6 @@ _PROVENANCE = frozenset({"captured", "RECONSTRUCTION"})
 #: the assertion. The reproduction bodies are minimal by design; the realistic
 #: captured text for each lives in the fixture file named in the comment.
 KNOWN_GAPS: dict[str, str] = {
-    # ghidra.c :: _start -- Ghidra's own calling-convention name, not an MSVC one.
-    "ghidra-processEntry": "void processEntry _start(undefined8 p1)\n{\n  g(p1);\n  return;\n}\n",
-    # ghidra.c :: FUN_00108540 -- quirk 1 of DecBench's sanitize_decompiled_c.
-    "aggregate-array-return": "undefined1 [16] f(void)\n{\n  undefined1 a [16];\n  return a;\n}\n",
-    # ghidra.c :: Base::op -- Ghidra emits __thiscall in C output for PE and C++.
-    "ghidra-thiscall": "int __thiscall C::f(C *this)\n{\n  return 1;\n}\n",
-    # ghidra.c :: switchD_001011b2::caseD_0 -- jump-table stubs carry '::'.
-    "qualified-name": "int A::b(int x)\n{\n  return x;\n}\n",
-    # binja.c :: usage, handler -- 33 of our 34 binja losses in the sample set.
-    "trailing-attribute-noreturn": "void f() __noreturn\n{\n  g();\n}\n",
-    # binja.c :: bi_reverse -- same shape, different attribute.
-    "trailing-attribute-pure": "unsigned long long f(unsigned int a) __pure\n{\n  return a >> 1;\n}\n",
-    # dewolf.c :: history_def_last -- 201 of our 295 dewolf losses.
-    "dewolf-double-parameter-list": "long int64_t f(void* a)(void * a)\n{\n  return 0L;\n}\n",
-    # dewolf.c :: usage -- a trailing attribute that itself takes a parameter list.
-    "dewolf-attribute-parameter-list": "void void f() __noreturn(){ g(); }\n",
-    # ida.c :: dis_func1 -- the one IDA-ism DecBench's adapter does not delete.
-    "ida-spoils": "void __spoils<R1,R2,R3,R12,LR> f(char a1)\n{\n  g(a1);\n}\n",
-    # Not observed in any captured corpus here, kept because C89 allows it and
-    # Ghidra prints it when it cannot determine a return type.
     "implicit-int-definition": "f(int a, int b)\n{\n  return a;\n}\n",
 }
 

@@ -4,16 +4,16 @@
 only ``list(g.nodes)``, ``g.in_degree(n)``, ``g.out_degree(n)`` and each node's
 ``is_entrypoint`` / ``is_exitpoint`` attributes. Nothing else about a node
 reaches the distance -- no statements, no types, no labels. So the adaptation
-from :func:`glaurung._native.csource.parity_cfgs` is purely mechanical, and the
+from :func:`cindergraph._native.csource.parity_cfgs` is purely mechanical, and the
 node class below carries exactly those two flags and an identity.
 
 `networkx` is imported inside the function rather than at module scope: it is a
-DecBench dependency, not a Glaurung one, and `glaurung/__init__.py` imports this
-module so that ``glaurung.source_cfg`` resolves without a separate import. A
+DecBench dependency, not a Glaurung one, and `cindergraph/__init__.py` imports this
+module so that ``cindergraph.source_cfg`` resolves without a separate import. A
 module-level import would make the whole package unimportable wherever the graph
 library is absent.
 
-Entry point for `tools/source_cfg_parity.py --provider glaurung`; the plan it
+Entry point for `tools/source_cfg_parity.py --provider cindergraph`; the plan it
 gates is `docs/design/static-c-analysis/parity-plan.md`.
 """
 
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from glaurung import _native
+from cindergraph import _native
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import networkx

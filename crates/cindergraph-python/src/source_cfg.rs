@@ -1,9 +1,9 @@
-//! Python bindings for the C source front end's Joern-parity CFGs.
+//! Python bindings for the C source front end's parity CFGs.
 //!
 //! The consumer is `tools/source_cfg_parity.py`, which scores our CFG of a
 //! stored decompiled `.c` against DecBench's published Joern CFG. That harness
 //! wants `networkx` graphs, but nothing here knows about `networkx`: the Rust
-//! side hands back plain lists and bools, and `python/glaurung/source_cfg.py`
+//! side hands back plain lists and bools, and `python/cindergraph/source_cfg.py`
 //! does the adaptation. Keeping the boundary here means the extension imports
 //! cleanly in an environment that has never installed a graph library.
 
@@ -13,11 +13,11 @@ use pyo3::types::PyDict;
 /// Every scoreable function CFG in one translation unit of C text.
 ///
 /// Returns `{function name: {"nodes", "edges", "entry", "exit", "degenerate"}}`
-/// -- the same five fields [`crate::csource::joern::ParityCfg::to_json`] writes,
+/// -- the same five fields [`cindergraph::csource::parity::ParityCfg::to_json`] writes,
 /// in the shape DecBench's serialized source CFGs use, so a caller can pair the
 /// two without a translation table.
 ///
-/// Total on every input, matching [`crate::csource::joern::parity_cfgs`]: a
+/// Total on every input, matching [`cindergraph::csource::parity::parity_cfgs`]: a
 /// partly-recovered file yields the functions it did recover rather than
 /// raising, because a front end that lost one function must not look like one
 /// that lost the file.
@@ -27,7 +27,7 @@ pub fn parity_cfgs_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, P
     // Parsing a preprocessed translation unit is milliseconds-to-seconds of
     // pure Rust with no Python object access, so it has no business holding
     // the GIL while the harness runs providers over a whole tree.
-    let cfgs = py.detach(|| crate::csource::joern::parity_cfgs(text));
+    let cfgs = py.detach(|| cindergraph::csource::parity::parity_cfgs(text));
 
     let out = PyDict::new(py);
     for (name, cfg) in cfgs {
@@ -49,7 +49,7 @@ pub fn parity_cfgs_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, P
 #[pyfunction]
 #[pyo3(name = "is_scoreable_name")]
 pub fn is_scoreable_name_py(name: &str) -> bool {
-    crate::csource::joern::is_scoreable_name(name)
+    cindergraph::csource::parity::is_scoreable_name(name)
 }
 
 /// Register the `csource` submodule on the extension root.

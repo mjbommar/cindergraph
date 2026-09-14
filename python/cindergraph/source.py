@@ -17,8 +17,8 @@ one that lost the file.
 
 Quick start:
 
-    >>> import glaurung
-    >>> report = glaurung.source.analyze("int f(int a) { return a ? 1 : 0; }")
+    >>> import cindergraph
+    >>> report = cindergraph.source.analyze("int f(int a) { return a ? 1 : 0; }")
     >>> report.functions[0].name, report.functions[0].cyclomatic
     ('f', 2)
 
@@ -35,10 +35,11 @@ Halstead's operator split -- are written out there rather than left implied.
 from __future__ import annotations
 
 import statistics
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
-from glaurung import _native
+from cindergraph import _native
 
 __all__ = [
     "COMPARED_METRICS",
@@ -49,19 +50,19 @@ __all__ = [
     "SourceReport",
     "analyze",
     "analyze_path",
-    "compare",
-    "control_flow_graphs",
     "backward_slice",
     "call_summaries",
+    "compare",
     "control_dependence",
+    "control_flow_graphs",
     "data_flow",
-    "reaches",
     "export_graphs",
     "export_path",
     "feature_names",
     "features",
     "functions",
     "normalize",
+    "reaches",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - declarations for the lazy attributes
@@ -79,10 +80,10 @@ def __getattr__(name: str) -> tuple[str, ...]:
     """Serve :data:`EXPORT_REPRS` and :data:`EXPORT_FORMATS` on first use.
 
     Both read their values from Rust so the two sides cannot drift. Reading
-    them at *import* time would be the wrong trade: ``glaurung/__init__.py``
+    them at *import* time would be the wrong trade: ``cindergraph/__init__.py``
     imports this module eagerly, so a native extension built before
     ``export_choices`` existed would make the **whole package** unimportable
-    rather than making one function fail. `glaurung.source_cfg` defers its
+    rather than making one function fail. `cindergraph.source_cfg` defers its
     `networkx` import for the same reason.
 
     Args:
@@ -147,7 +148,7 @@ class Diagnostic:
         text: The rendered excerpt, with a caret under the span.
     """
 
-    __slots__ = ("severity", "message", "start", "end", "text")
+    __slots__ = ("end", "message", "severity", "start", "text")
 
     def __init__(self, raw: Mapping[str, Any]) -> None:
         """Wrap one diagnostic dict from the extension.
@@ -361,7 +362,7 @@ class FunctionMetrics:
 class SourceReport:
     """Everything measured about one translation unit."""
 
-    __slots__ = ("raw", "_functions", "source", "name")
+    __slots__ = ("_functions", "name", "raw", "source")
 
     def __init__(
         self, raw: Mapping[str, Any], source: str, name: str | None = None
@@ -681,131 +682,12 @@ def call_summaries(code: str) -> list[dict[str, Any]]:
     return [dict(entry) for entry in _native.source.call_summaries(code)]
 
 
-def path_feasibility(
-    code: str,
-    function: str,
-    *,
-    max_paths: int | None = None,
-    max_block_visits: int | None = None,
-    max_steps: int | None = None,
-    solver_timeout_ms: int | None = None,
-) -> dict[str, Any]:
-    """Everything the solver can say about one function.
-
-    A reachability answer that has never been checked for satisfiability
-    reports paths no input can take. On decompiler output that is not a rare
-    case: the structurer invents dispatch and duplicates guards.
-
-    **Requires an extension built with the ``symbolic`` feature.** The default
-    wheel bundles the concrete emulator but not the symbolic engine or a
-    solver, because pulling an SMT backend into it is a packaging decision.
-    The function always exists -- so the generated native stub describes one
-    surface rather than two -- and raises on a build that cannot answer.
-    Callers that want to degrade gracefully catch :class:`RuntimeError`.
-
-    Args:
-        code: The source text.
-        function: The function to decide, by name.
-        max_paths: Paths to enumerate before enumeration is cut.
-        max_block_visits: Loop unroll depth, as the number of times one block
-            may be entered on one path. **The knob to raise first**: it is why
-            a path through a long loop is cut rather than decided.
-        max_steps: Instructions one path may retire before it is cut.
-        solver_timeout_ms: The solver's per-check wall.
-
-    Returns:
-        A dict with ``function``; ``paths`` (one entry per enumerated path,
-        each with ``decisions``, ``verdict``, ``args`` and ``why``); the counts
-        ``feasible``, ``infeasible`` and ``unknown``; ``unreachable_blocks``
-        (addresses no input reaches); ``cuts`` and ``total`` (whether the
-        enumeration covered the function); ``abstained`` (set when nothing
-        could be decided, naming the reason); ``redundant_guards``; and
-        ``undefined_behavior``.
-
-        ``unreachable_blocks`` is only ever non-empty when ``total`` is true:
-        with a path cut by a bound, "every path I looked at is infeasible" is
-        not "no input gets here".
-
-    Raises:
-        RuntimeError: If the extension was built without ``symbolic``.
-    """
-    return dict(
-        _native.source.path_feasibility(
-            code,
-            function,
-            max_paths=max_paths,
-            max_block_visits=max_block_visits,
-            max_steps=max_steps,
-            solver_timeout_ms=solver_timeout_ms,
-        )
-    )
-
-
-def source_findings(
-    code: str,
-    *,
-    max_paths: int | None = None,
-    max_block_visits: int | None = None,
-    max_steps: int | None = None,
-    solver_timeout_ms: int | None = None,
-) -> list[dict[str, Any]]:
-    """Solver findings for every function in a translation unit that has any.
-
-    The high-level half of the pair. :func:`path_feasibility` answers about one
-    function and reports everything including the ordinary case, which is what
-    a caller building its own analysis wants. This answers about a whole file
-    and returns **only functions with something to say** -- an infeasible path,
-    a block no input reaches, a guard an earlier one forces, or an input that
-    makes it execute undefined behaviour.
-
-    Functions the lowering refuses are skipped rather than listed: "I could not
-    read this" is not a finding about the program. Ask :func:`path_feasibility`
-    by name to see the refusal and the construct it names.
-
-    Args:
-        code: The source text.
-        max_paths: As :func:`path_feasibility`.
-        max_block_visits: As :func:`path_feasibility`.
-        max_steps: As :func:`path_feasibility`.
-        solver_timeout_ms: As :func:`path_feasibility`.
-
-    Returns:
-        One entry per function with a finding, shaped as
-        :func:`path_feasibility`'s return value.
-
-    Raises:
-        RuntimeError: If the extension was built without ``symbolic``.
-    """
-    return [
-        dict(entry)
-        for entry in _native.source.source_findings(
-            code,
-            max_paths=max_paths,
-            max_block_visits=max_block_visits,
-            max_steps=max_steps,
-            solver_timeout_ms=solver_timeout_ms,
-        )
-    ]
-
-
 def reaches(code: str, source: str, parameter: int, sink: str) -> str:
-    """Whether a value in one function's parameter can reach another function.
+    """Whether one function's parameter can reach another function.
 
-    The query a code property graph is used for, answered across calls.
-
-    Args:
-        code: The source text.
-        source: The function the value starts in.
-        parameter: Which of its parameters, by position.
-        sink: The function to reach.
-
-    Returns:
-        ``"yes"``, ``"no"`` or ``"unknown"``.
-
-        ``"unknown"`` is not a failure and must not be read as ``"no"``. It
-        means the search met an indirect call, a callee defined in another
-        translation unit, or a bound -- and reporting any of those as ``"no"``
-        would be a claim rather than an analysis.
+    Returns ``"yes"``, ``"no"`` or ``"unknown"``. Unknown means the bounded
+    analysis encountered an indirect call or a callee outside this translation
+    unit; callers must not treat it as no.
     """
     return _native.source.reaches(code, source, parameter, sink)
 
@@ -815,15 +697,14 @@ def export_graphs(
 ) -> list[tuple[str, str]]:
     """Serialize every function's graph in one wire format.
 
-    The replacement for ``joern-export --repr {ast,cfg} --format {dot,graphml,
-    ...}``. Joern also offers ``cdg``, ``ddg`` and ``pdg``; those need a
-    data-dependence analysis this front end does not do, so they raise here
-    rather than returning a control-flow graph under another name.
+    A native alternative to ``joern-export`` for AST, CFG, CDG, DDG and PDG
+    representations in DOT, GraphML, JSON or Mermaid. This is Cindergraph's
+    own graph model, not a Joern code-property graph or JIL representation.
 
     ``repr="cfg"`` exports the *general* control-flow graph, never the
-    Joern-parity one -- the graph a person would draw, with real successors,
+    parity one -- the graph a person would draw, with real successors,
     real join points and real loop back edges. Use
-    :func:`glaurung.source_cfg.parity_cfgs` when the parity shape is what you
+    :func:`cindergraph.source_cfg.parity_cfgs` when the parity shape is what you
     want.
 
     Args:
@@ -939,7 +820,7 @@ def control_flow_graphs(code: str) -> Sequence[Mapping[str, Any]]:
 
     This is the graph a person would draw -- real successors, real join points,
     real loop back edges, typed nodes and edges. It is deliberately *not*
-    :func:`glaurung.source_cfg.parity_cfgs`, which reproduces another tool's
+    :func:`cindergraph.source_cfg.parity_cfgs`, which reproduces another tool's
     artifacts so that one similarity score can be compared against it.
 
     Args:
@@ -1088,19 +969,27 @@ def compare(
 
 
 # File-based graph and function APIs. The implementation keeps NetworkX lazy.
-from glaurung._source_files import (
+from cindergraph.compat.pyjoern import (
     Function as Function,
+)
+from cindergraph.compat.pyjoern import (
     SourceParseError as SourceParseError,
+)
+from cindergraph.compat.pyjoern import (
     SourceParseWarning as SourceParseWarning,
+)
+from cindergraph.compat.pyjoern import (
     fast_cfgs_from_source as fast_cfgs_from_source,
+)
+from cindergraph.compat.pyjoern import (
     parse_callgraph as parse_callgraph,
+)
+from cindergraph.compat.pyjoern import (
     parse_source as parse_source,
 )
 
 __all__ += [
     "Function",
-    "path_feasibility",
-    "source_findings",
     "SourceParseError",
     "SourceParseWarning",
     "fast_cfgs_from_source",

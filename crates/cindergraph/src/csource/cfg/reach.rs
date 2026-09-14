@@ -61,7 +61,7 @@
 //!
 //! [`Coverage`] is the switch. `REQ-GEN-1` is the right rule for every consumer
 //! of the *general* graph, and it stays the default. It is the wrong rule for
-//! exactly one caller: [`crate::csource::joern`], whose whole job is to
+//! exactly one caller: [`crate::csource::parity`], whose whole job is to
 //! reproduce a tool whose CFG construction is syntax-directed and therefore
 //! keeps what control cannot reach. Measured on the published DecBench source
 //! CFGs, 105 of 91,548 functions carry a component with no path from the entry,
@@ -125,7 +125,7 @@ pub enum Coverage {
     ///
     /// A graph built this way deliberately fails `REQ-GEN-1`, so it is for
     /// callers that do not validate --- today, only
-    /// [`crate::csource::joern`].
+    /// [`crate::csource::parity`].
     Syntactic,
 }
 
@@ -210,6 +210,7 @@ impl Reach {
     /// names are read out of the source text, and re-lexing the file per
     /// function to get one identifier back would make the whole pass quadratic
     /// in the number of functions.
+    #[cfg(test)]
     pub(super) fn new(tree: &Tree, text: &str, spans: &[Span], body: NodeId) -> Self {
         Self::with_coverage(tree, text, spans, body, Coverage::Reachable)
     }
@@ -840,11 +841,11 @@ mod tests {
         // The option is worth nothing unless its one caller passes it, and the
         // call site is a single argument that a refactor can quietly drop. The
         // guard lives here, next to the mode it protects, because
-        // `csource::joern` has no other reason to know this module exists.
+        // `csource::parity` has no other reason to know this module exists.
         //
         // `O0 openssh-portable sshd process_server_config_line_depth`: 663
         // published nodes against the 48 the pruned build reached.
-        let parity = crate::csource::joern::parity_cfgs(STRANDED_ARM);
+        let parity = crate::csource::parity::parity_cfgs(STRANDED_ARM);
         let f = parity.get("f").expect("f is recovered");
         let mut seen: BTreeSet<u32> = f.entry.iter().copied().collect();
         let mut stack: Vec<u32> = f.entry.clone();

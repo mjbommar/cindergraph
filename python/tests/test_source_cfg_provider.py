@@ -1,14 +1,14 @@
-"""The `glaurung.source_cfg` provider that `tools/source_cfg_parity.py` resolves.
+"""The `cindergraph.source_cfg` provider that `tools/source_cfg_parity.py` resolves.
 
 Two layers are covered separately because they fail differently:
 
-* the PyO3 binding (`glaurung._native.csource`), which needs nothing but the
+* the PyO3 binding (`cindergraph._native.csource`), which needs nothing but the
   built extension and is therefore `core`;
 * the `networkx` adaptation, which needs a graph library the project itself does
   not depend on.
 
 The second layer would otherwise be a silent skip on every developer machine,
-which reads exactly like a passing test. `GLAURUNG_REQUIRE_NETWORKX=1` turns
+which reads exactly like a passing test. `CINDERGRAPH_REQUIRE_NETWORKX=1` turns
 that skip into a failure so the parity lane -- which runs under DecBench's venv,
 where `networkx` is present -- cannot lose these assertions without going red.
 """
@@ -18,10 +18,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import cindergraph
 import pytest
-
-import glaurung
-from glaurung.source_cfg import (
+from cindergraph.source_cfg import (
     SourceCfgNode,
     cfgs_from_decompiled,
     graph_from_serialized,
@@ -47,22 +46,22 @@ int classify(int n) {
 
 def _require_networkx() -> Any:
     """Import `networkx`, skipping unless the caller demanded it be present."""
-    if os.environ.get("GLAURUNG_REQUIRE_NETWORKX") == "1":
+    if os.environ.get("CINDERGRAPH_REQUIRE_NETWORKX") == "1":
         import networkx
 
         return networkx
     return pytest.importorskip(
         "networkx",
-        reason="networkx is a DecBench dependency, not a Glaurung one; "
-        "set GLAURUNG_REQUIRE_NETWORKX=1 to make this a failure instead",
+        reason="networkx is a DecBench dependency, not a Cindergraph one; "
+        "set CINDERGRAPH_REQUIRE_NETWORKX=1 to make this a failure instead",
     )
 
 
 @pytest.mark.core
 def test_provider_entry_point_is_reachable_the_way_the_harness_resolves_it() -> None:
-    """`GlaurungProvider._resolve` does exactly this getattr chain."""
-    module = getattr(glaurung, "source_cfg", None)
-    assert module is not None, "glaurung.source_cfg must be imported by the package"
+    """`CindergraphProvider._resolve` does exactly this getattr chain."""
+    module = getattr(cindergraph, "source_cfg", None)
+    assert module is not None, "cindergraph.source_cfg must be imported by the package"
     entry = getattr(module, "cfgs_from_decompiled", None)
     assert callable(entry), "the harness calls cfgs_from_decompiled(text)"
 
@@ -99,9 +98,9 @@ def test_unparseable_text_loses_only_the_function_it_cannot_recover() -> None:
 
 @pytest.mark.core
 def test_synthetic_names_are_filtered_from_the_scored_set() -> None:
-    assert glaurung._native.csource.is_scoreable_name("main")
-    assert not glaurung._native.csource.is_scoreable_name("<global>")
-    assert not glaurung._native.csource.is_scoreable_name("JUMPOUT")
+    assert cindergraph._native.csource.is_scoreable_name("main")
+    assert not cindergraph._native.csource.is_scoreable_name("<global>")
+    assert not cindergraph._native.csource.is_scoreable_name("JUMPOUT")
 
 
 @pytest.mark.core

@@ -1,19 +1,18 @@
 """File-based Joern migration API over committed C fixtures."""
 
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-
-from glaurung import source
+from cindergraph import source
 
 
 @pytest.fixture
 def networkx_available():
     """Run graph tests only when the optional extra is installed."""
-    return pytest.importorskip("networkx", reason="install glaurung[graphs]")
+    return pytest.importorskip("networkx", reason="install cindergraph[graphs]")
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,7 +130,7 @@ def test_import_and_metadata_only_do_not_load_networkx_or_pyjoern():
         [
             sys.executable,
             "-c",
-            "import sys; import glaurung.source as source; "
+            "import sys; import cindergraph.source as source; "
             "functions = source.parse_source(sys.argv[1], no_cfg=True); "
             "assert set(functions) == {'classify', 'nested'}; "
             "assert 'networkx' not in sys.modules; assert 'pyjoern' not in sys.modules",
