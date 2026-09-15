@@ -124,6 +124,41 @@ Install the optional `graphs` extra when you specifically need NetworkX
 objects. File and directory adapters for callers migrating from `pyjoern` are
 documented in the [Python reference](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-python.md).
 
+## DecBench-adjacent CFG workflows
+
+Cindergraph provides a separate parity projection for workflows that compare
+per-function source CFG topology using entry and exit roles. It accepts a whole
+translation unit and returns the compact serialized shape without requiring
+NetworkX or DecBench:
+
+```python
+from cindergraph import source_cfg
+
+cfgs = source_cfg.parity_cfgs("int abs(int x){return x < 0 ? -x : x;}")
+cfg = cfgs["abs"]
+assert set(cfg) == {"nodes", "edges", "entry", "exit", "degenerate"}
+```
+
+With the `graphs` extra installed,
+`source_cfg.cfgs_from_decompiled(text)` returns NetworkX graphs whose node
+identity and `is_entrypoint` / `is_exitpoint` attributes match the inputs read
+by DecBench's VJ-GED calculation. Existing topology-only `pyjoern` callers can
+move from `pyjoern.fast_cfgs_from_source` to
+`cindergraph.source.fast_cfgs_from_source`; file, recursive-directory, and
+direct-call-graph adapters are also available.
+
+This surface covers tolerant function recovery, DecBench-shaped CFG
+serialization, GED-ready NetworkX adaptation, and the documented subset of
+file-based `pyjoern` calls. It does not implement Joern JIL nodes, Joern AST or
+DDG results, a code-property graph, DecBench publishing, or arbitrary DecBench
+pipelines. The parity projection is intentionally separate from the general
+CFG used by metrics, slicing, dependence analysis, and ordinary graph export.
+
+See [DecBench-adjacent workflows](https://github.com/mjbommar/cindergraph/blob/main/docs/use-cases/decbench-adjacent.md)
+for installation, migration examples, preprocessing behavior, result schemas,
+and limitations. The measured comparison with Joern is reported in
+[Cindergraph versus Joern for DecBench-adjacent CFG extraction](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/joern-decbench-2026-09-15.md).
+
 ## Rust quick start
 
 Parsing and metrics return the recovered value together with diagnostics:
@@ -270,6 +305,7 @@ a negative analysis result as an assurance claim.
 - [Release operator checklist](https://github.com/mjbommar/cindergraph/blob/main/docs/releasing.md)
 - [Changelog](https://github.com/mjbommar/cindergraph/blob/main/CHANGELOG.md)
 - [Python analysis reference](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-python.md)
+- [DecBench-adjacent CFG workflows](https://github.com/mjbommar/cindergraph/blob/main/docs/use-cases/decbench-adjacent.md)
 - [Metric definitions](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-metrics.md)
 - [Support and evidence matrix](https://github.com/mjbommar/cindergraph/blob/main/docs/support-and-evidence.md)
 - [Benchmarks and cross-tool comparisons](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/README.md)

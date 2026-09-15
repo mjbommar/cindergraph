@@ -23,6 +23,9 @@ CI job is not evidence that a release artifact has passed on that platform.
   boundary, required graph contract, optional expansion, and measured baseline.
 - [Python source analysis](reference/source-python.md) documents parsing,
   diagnostics, graphs, dataflow, summaries, slicing, export and compatibility.
+- [DecBench-adjacent CFG workflows](use-cases/decbench-adjacent.md) documents
+  parity serialization, GED-ready NetworkX graphs, topology-only `pyjoern`
+  migration, and the explicit boundary of that compatibility surface.
 - [Rust analysis sessions](reference/rust-api.md) documents the owning
   `AnalysisUnit`, cached flows and summaries, typed function views, and identity
   boundaries.
