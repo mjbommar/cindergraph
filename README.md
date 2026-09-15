@@ -1,25 +1,50 @@
 # Cindergraph
 
-Cindergraph is a native, tolerant C source-analysis library written in Rust with
-native Rust and Python APIs. It parses ordinary and decompiler-shaped C,
+Cindergraph is a tolerant C source-analysis library written in Rust with Rust
+and Python APIs. It parses ordinary and decompiler-shaped C,
 measures functions, builds control and dependence graphs, follows supported
 parameter flows across calls, and exports deterministic graph formats.
-
-The project was extracted from
-[Glaurung](https://github.com/mjbommar/glaurung), where this analysis first
-lived. The extraction copied the selected implementation with history; later
-Cindergraph QA repaired and extended it. Glaurung still carries its original
-copy and does not yet consume this crate, so fixes do not currently flow back
-automatically. See [Relationship to Glaurung](https://github.com/mjbommar/cindergraph/blob/main/docs/architecture/glaurung.md)
-for the exact boundary and migration status.
 
 Cindergraph is a standalone analysis engine: no JVM, Java service, Graphviz
 process or C compiler is required at runtime.
 
-> **Pre-alpha and not yet published.** The public APIs and serialized schemas
-> can still change. Build from this checkout for now; the `pip install` and
-> `cargo add` commands will become valid only after the corresponding registry
-> releases are independently verified.
+The current release candidate is available from GitHub. PyPI and crates.io
+packages are not published yet, and APIs and serialized schemas may change
+before the first stable release.
+
+## Install
+
+Python 3.12 or newer and a Rust 1.88 or newer toolchain are required while the
+package is installed from source. Add Cindergraph to a uv-managed project:
+
+```bash
+uv add "cindergraph @ git+https://github.com/mjbommar/cindergraph.git@main"
+```
+
+To try it in a new environment without modifying an existing project:
+
+```bash
+uv venv
+uv pip install "cindergraph @ git+https://github.com/mjbommar/cindergraph.git@main"
+uv run python -c 'import cindergraph as cg; print(cg.analyze("int f(void){return 1;}").functions[0].name)'
+```
+
+Add the optional NetworkX adapter only when a downstream library requires
+NetworkX objects:
+
+```bash
+uv add "cindergraph[graphs] @ git+https://github.com/mjbommar/cindergraph.git@main"
+```
+
+Rust projects can use the core crate directly from GitHub:
+
+```bash
+cargo add cindergraph --git https://github.com/mjbommar/cindergraph.git
+```
+
+Pin a Git commit instead of `main` when a build must be reproducible. See the
+[installation guide](https://github.com/mjbommar/cindergraph/blob/main/docs/install.md)
+for local checkout, wheel, source-distribution, and development workflows.
 
 ## Why Cindergraph?
 
@@ -35,8 +60,6 @@ process or C compiler is required at runtime.
   dependencies and does not start an external analysis server.
 
 ## Python quick start
-
-After [building the checkout](https://github.com/mjbommar/cindergraph/blob/main/docs/install.md):
 
 ```python
 import cindergraph as cg
@@ -103,13 +126,6 @@ documented in the [Python reference](https://github.com/mjbommar/cindergraph/blo
 
 ## Rust quick start
 
-Until crates.io publication, depend on the core by path:
-
-```toml
-[dependencies]
-cindergraph = { path = "../cindergraph/crates/cindergraph" }
-```
-
 Parsing and metrics return the recovered value together with diagnostics:
 
 ```rust
@@ -125,7 +141,6 @@ assert_eq!(report.functions[0].graph.cyclomatic, 1);
 
 The core re-exports `dataflow`, `export`, `metrics`, `normalize`, `parity` and
 `parse`; lower-level syntax and C modules remain available for native callers.
-API documentation is built with warnings denied as part of the Rust gate.
 For multi-product analysis, use the owning `AnalysisUnit` session documented in
 the [Rust API guide](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/rust-api.md)
 so CFGs, cached dataflow,
@@ -187,6 +202,32 @@ General CFGs and parity CFGs are intentionally different. Metrics, slicing and
 ordinary export use the general CFG. The parity graph preserves a particular
 comparison shape and is not a richer representation.
 
+## How it compares
+
+Cindergraph is designed for embedded, tolerant analysis of C and
+decompiler-shaped C. Similar tools solve overlapping but broader or different
+problems:
+
+| Tool | Best fit | Difference from Cindergraph |
+| --- | --- | --- |
+| Cindergraph | In-process C recovery, metrics, CFG and dependence graphs, bounded flow summaries, and deterministic export | Focuses on one C analysis surface; does not provide a compiler or general code-property graph platform |
+| Joern | Multi-language code-property graphs, a query language, and a mature security-analysis ecosystem | Broader platform and query model; requires an external JVM-based toolchain |
+| Eclipse CDT | IDE-grade C/C++ parsing, indexing, bindings, and editor tooling | Richer C/C++ semantic and IDE model; not packaged as a small Rust/Python analysis library |
+| Clang | Standards-oriented C/C++ compilation, diagnostics, ASTs, and compiler tooling | Provides compiler-grade semantics and build-context integration; malformed decompiler output is not its primary input |
+| Tree-sitter C | Fast incremental concrete-syntax parsing and editor integration | Provides syntax trees rather than Cindergraph's metrics, CFG, dataflow, summaries, and graph exports |
+
+The comparisons are measured for specific tasks rather than presented as
+overall rankings:
+
+- [Cindergraph versus Joern for DecBench-adjacent CFG extraction](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/joern-decbench-2026-09-15.md)
+  reports function recovery, CFG agreement, decompiler-input recovery, and
+  end-to-end provider time over a fixed corpus.
+- [Robustness comparison with Joern, Eclipse CDT, Clang, and Tree-sitter](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/joern-cdt-robustness-2026-09-15.md)
+  reports clean input, named decompiler cases, controlled damage, and random
+  damage. Function yield is distinguished from semantic correctness.
+- [Benchmark index](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/README.md)
+  links the datasets, methodology, version pins, and follow-up analyses.
+
 ## Boundaries you should know first
 
 Cindergraph is not a C compiler, a code property graph, a Joern distribution,
@@ -208,6 +249,14 @@ In particular:
 - compatibility adapters implement only the explicitly documented `pyjoern`
   subset and reject unsupported AST, DDG and option semantics.
 
+Use Joern when the application needs its CPG schema, query language,
+multi-language frontends, or security-analysis ecosystem. Use CDT or Clang when
+complete build context, C++ support, compiler-grade types, ABI layout, or IDE
+indexing is required. Use Tree-sitter when incremental concrete syntax trees
+are the primary product. Cindergraph is intended for callers that need a small,
+in-process C analysis engine and useful, explicitly qualified results from
+imperfect source.
+
 Read [Python source analysis](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-python.md)
 for precise API contracts and
 [support and evidence](https://github.com/mjbommar/cindergraph/blob/main/docs/support-and-evidence.md) before using
@@ -223,12 +272,8 @@ a negative analysis result as an assurance claim.
 - [Python analysis reference](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-python.md)
 - [Metric definitions](https://github.com/mjbommar/cindergraph/blob/main/docs/reference/source-metrics.md)
 - [Support and evidence matrix](https://github.com/mjbommar/cindergraph/blob/main/docs/support-and-evidence.md)
+- [Benchmarks and cross-tool comparisons](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/README.md)
 - [Relationship to Glaurung](https://github.com/mjbommar/cindergraph/blob/main/docs/architecture/glaurung.md)
-- [Chronological QA records](https://github.com/mjbommar/cindergraph/blob/main/review/README.md)
-
-The reference examples and local documentation links are tested. QA records
-identify their source baseline and are historical evidence, not automatically
-current release claims.
 
 ## Development
 
@@ -246,17 +291,14 @@ uv run --no-sync pytest python/tests/ review/test_design_contracts.py
 
 See [Install and build](https://github.com/mjbommar/cindergraph/blob/main/docs/install.md)
 for the complete gate and isolated
-wheel/sdist smoke workflows. Tests that invoke external Joern tooling are
-optional and deselected by default.
+wheel and source-distribution smoke workflows.
 
 ## Release status
 
-Release automation is configured for Linux x86-64/AArch64, macOS x86-64/arm64
-and Windows x86-64 wheels plus an sdist. An earlier pending snapshot has local
-manylinux 2.17 audit and smoke evidence; the current pending tree has a
-normalized, relocatable local manylinux 2.34 candidate but is not a clean
-release snapshot. The remote platform matrix has not been claimed green.
-Nothing in this README asserts that either registry package has been published.
+Cindergraph 0.1.0 is preparing for its first registry release. GitHub CI tests
+the Rust crate, Python package, wheel, source distribution, supported CPython
+versions, dependency audits, and package provenance. Until PyPI and crates.io
+publication is complete, install from GitHub as shown above.
 
 ## License and provenance
 

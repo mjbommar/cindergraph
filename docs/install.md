@@ -1,8 +1,8 @@
 # Install and build Cindergraph
 
-Cindergraph is not documented as published on PyPI or crates.io. The commands
-below build this checkout or install an artifact you created from it. Pin the
-Git revision and record artifact hashes when reproducibility matters.
+Cindergraph is not yet published on PyPI or crates.io. Install the release
+candidate from GitHub, or use the checkout and artifact workflows below. Pin
+the Git revision and record artifact hashes when reproducibility matters.
 
 ## Requirements
 
@@ -14,6 +14,35 @@ Git revision and record artifact hashes when reproducibility matters.
 NetworkX is optional. Core parsing, metrics, serialized graph export and
 dataflow do not require it. Install the `graphs` extra only for adapters that
 return NetworkX objects.
+
+## Install from GitHub
+
+Add the Python package to a uv-managed project:
+
+```bash
+uv add "cindergraph @ git+https://github.com/mjbommar/cindergraph.git@main"
+```
+
+Include the optional NetworkX adapter with:
+
+```bash
+uv add "cindergraph[graphs] @ git+https://github.com/mjbommar/cindergraph.git@main"
+```
+
+Installation from GitHub builds the native extension from source and therefore
+requires Rust and a platform linker. For a temporary environment:
+
+```bash
+uv venv
+uv pip install "cindergraph @ git+https://github.com/mjbommar/cindergraph.git@main"
+uv run python -c 'import cindergraph as cg; print(cg.analyze("int f(void){return 1;}").functions[0].name)'
+```
+
+Rust projects can add the core crate directly:
+
+```bash
+cargo add cindergraph --git https://github.com/mjbommar/cindergraph.git
+```
 
 Use a disk-backed temporary directory for builds:
 
@@ -58,8 +87,9 @@ These commands test the current tree. They do not prove that a generated
 wheel, sdist or crate contains the same files.
 
 The security commands require current `cargo-audit` and `cargo-deny` binaries.
-CI uses pinned actions for both checks; neither an old local advisory database
-nor a previous green run is evidence about the current lockfile.
+CI installs a locked `cargo-audit` version and uses a commit-pinned
+`cargo-deny` action; neither an old local advisory database nor a previous
+green run is evidence about the current lockfile.
 
 ## Build and test a wheel
 
@@ -136,7 +166,7 @@ network-free or hermetic.
 
 ## Use the Rust crate from a sibling checkout
 
-Until a crates.io release is independently verified, use an explicit path
+For local development against a sibling checkout, use an explicit path
 dependency:
 
 ```toml
