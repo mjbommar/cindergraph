@@ -381,6 +381,13 @@ impl<'a> Parser<'a> {
         self.events.error(id);
     }
 
+    /// Record a recovery qualification that does not make the tree unusable.
+    fn warning(&mut self, message: impl Into<String>) {
+        let span = self.cursor.span();
+        let id = self.diags.push(Diagnostic::warning(span, message));
+        self.events.error(id);
+    }
+
     /// Push a task to run next.
     fn push(&mut self, task: Task) {
         self.tasks.push(task);
@@ -737,6 +744,30 @@ mod tests {
             "int main(void) { return 0; }"
         );
         assert_eq!(&text[functions[0].name_span.range()], "main");
+        assert!(functions[0].body.is_some());
+    }
+
+    #[test]
+    fn a_legacy_implicit_int_definition_keeps_the_function_name() {
+        let text = "main(B) { return B; }\n";
+        let parsed = parse(text);
+        assert!(parsed.diagnostics().iter().any(|diagnostic| {
+            diagnostic.severity == crate::syntax::diag::Severity::Warning
+                && diagnostic.message.contains("legacy implicit `int`")
+        }));
+        let functions = parsed.value().functions(text);
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "main");
+        assert_eq!(&text[functions[0].name_span.range()], "main");
+    }
+
+    #[test]
+    fn old_style_parameter_declarations_keep_the_function_name() {
+        let text = "sum(a, b) int a; char *b; { return a + *b; }\n";
+        let parsed = parse(text);
+        let functions = parsed.value().functions(text);
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "sum");
         assert!(functions[0].body.is_some());
     }
 

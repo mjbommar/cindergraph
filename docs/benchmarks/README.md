@@ -14,6 +14,10 @@ benchmark record.
 
 ## Current comparisons
 
+- [IOCCC source CFG comparison, 2026-09-15](ioccc-cfg-comparison-2026-09-15.md)
+  compares Cindergraph and Joern on 15 cross-era obfuscated-C winners, with
+  independently adjudicated function sets, identical-input CFG comparison,
+  diagnostics, provenance, crashes, and wall-clock provider time.
 - [Cindergraph and Joern for DecBench-adjacent CFG work, 2026-09-15](joern-decbench-2026-09-15.md)
   compares function recovery, DecBench VJ-GED, a stronger graph-isomorphism
   check, decompiler-dialect tolerance, and end-to-end provider time.

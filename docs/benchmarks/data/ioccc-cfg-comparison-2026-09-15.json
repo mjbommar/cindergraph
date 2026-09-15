@@ -1,0 +1,2855 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T23:16:15Z",
+  "scope": "15 adjudicated IOCCC C sources; raw and shared-preprocessing Joern lanes",
+  "provenance": {
+    "ioccc_git_head": "4e10cbf3187c5d7cd882d10e107de1d56375c70c",
+    "cindergraph_git_head": "650f8d6815c58050cbf62743378a252dd953ed23",
+    "cindergraph_worktree_dirty": true,
+    "python": "3.12.13 (main, Mar 20 2026, 00:33:26) [Clang 22.1.1 ]",
+    "platform": "Linux-7.0.0-27-generic-x86_64-with-glibc2.43",
+    "pyjoern": "4.0.150.4",
+    "decbench": "1.1"
+  },
+  "population": {
+    "cases": 15,
+    "expected_functions": 44,
+    "sha256": "f5b1cbacb32aa57de11b5dab4a5bd9ab9c474c0ec6dad7faa308cfe65c4892dc"
+  },
+  "summary": {
+    "cindergraph": {
+      "true_positive": 44,
+      "false_positive": 0,
+      "false_negative": 0,
+      "micro_precision": 1.0,
+      "micro_recall": 1.0,
+      "crashes": 0,
+      "total_seconds": 0.1691537406295538,
+      "median_seconds": 0.00956658273935318
+    },
+    "joern_raw": {
+      "true_positive": 44,
+      "false_positive": 28,
+      "false_negative": 0,
+      "micro_precision": 0.6111111111111112,
+      "micro_recall": 1.0,
+      "crashes": 0,
+      "total_seconds": 85.88840444199741,
+      "median_seconds": 5.461865711957216
+    },
+    "joern_prepared": {
+      "true_positive": 44,
+      "false_positive": 0,
+      "false_negative": 0,
+      "micro_precision": 1.0,
+      "micro_recall": 1.0,
+      "crashes": 0,
+      "total_seconds": 82.2212756164372,
+      "median_seconds": 5.403990942053497
+    },
+    "shared_cfgs": 44,
+    "shared_vj_ged_zero": 37,
+    "shared_vj_ged_nonzero": 7,
+    "shared_vj_ged_total": 301.0
+  },
+  "cases": [
+    {
+      "id": "1984/mullender",
+      "source": "1984/mullender/mullender.c",
+      "expected_functions": [],
+      "cindergraph": {
+        "functions": [],
+        "accuracy": {
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.0001492844894528389,
+        "cfgs": {},
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {}
+      },
+      "joern_raw": {
+        "functions": [],
+        "accuracy": {
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.389979831874371,
+        "cfgs": {},
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [],
+        "accuracy": {
+          "true_positive": 0,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 4.9933048859238625,
+        "cfgs": {},
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {}
+    },
+    {
+      "id": "1985/applin",
+      "source": "1985/applin/applin.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.0003111083060503006,
+        "cfgs": {
+          "main": {
+            "nodes": 9,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 1,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 0,
+            "end": 137
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.51009467523545,
+        "cfgs": {
+          "main": {
+            "nodes": 9,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 4.98866436816752,
+        "cfgs": {
+          "main": {
+            "nodes": 9,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "1986/wall",
+      "source": "1986/wall/wall.c",
+      "expected_functions": [
+        "cc",
+        "ccc",
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "cc",
+          "ccc",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 3,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.010834692046046257,
+        "cfgs": {
+          "cc": {
+            "nodes": 6,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "ccc": {
+            "nodes": 20,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 1,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmp18gk90g3.c:21:9: warning: \u2018keyboard\u2019 redefined\n   21 | #define keyboard \"dijs QH.soav Vdtnsaoh DmfpaksoQz;kkt oa, -dijs\"\n      |         ^~~~~~~~\n/home/mjbommar/.cache/glaurung/tmp/tmp18gk90g3.c:3:9: note: this is the location of the previous definition\n    3 | #define keyboard \",,B3-u;.(&*5., /(b*(1\\036!a%\\031m,,,,,\\r\\n\"\n      |         ^~~~~~~~",
+          "includes_removed": false
+        },
+        "provenance": {
+          "cc": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 868,
+            "end": 1199
+          },
+          "ccc": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 54,
+            "end": 868
+          },
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 1199,
+            "end": 1214
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "C",
+          "O",
+          "_",
+          "__",
+          "__LINE__",
+          "_c",
+          "cc",
+          "ccc",
+          "keyboard",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 3,
+          "false_positive": 7,
+          "false_negative": 0,
+          "precision": 0.3,
+          "recall": 1.0
+        },
+        "seconds": 5.39084242656827,
+        "cfgs": {
+          "C": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "O": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "_": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "__": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "__LINE__": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "_c": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "cc": {
+            "nodes": 19,
+            "edges": 28,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "ccc": {
+            "nodes": 36,
+            "edges": 53,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "keyboard": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "cc",
+          "ccc",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 3,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.355862936004996,
+        "cfgs": {
+          "cc": {
+            "nodes": 6,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "ccc": {
+            "nodes": 20,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "cc": 0.0,
+        "ccc": 0.0,
+        "main": 0.0
+      }
+    },
+    {
+      "id": "1987/korn",
+      "source": "1987/korn/korn.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.00012316182255744934,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 1,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 1,
+            "end": 69
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.393767054192722,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.151930985040963,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "1988/westley",
+      "source": "1988/westley/westley.c",
+      "expected_functions": [
+        "F_OO",
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "F_OO",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 2,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.020169745199382305,
+        "cfgs": {
+          "F_OO": {
+            "nodes": 403,
+            "edges": 603,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 2,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "F_OO": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 62,
+            "end": 3544
+          },
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 2,
+            "start": 17,
+            "end": 62
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "F_OO",
+          "_",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 2,
+          "false_positive": 1,
+          "false_negative": 0,
+          "precision": 0.6666666666666666,
+          "recall": 1.0
+        },
+        "seconds": 6.171079323627055,
+        "cfgs": {
+          "F_OO": {
+            "nodes": 805,
+            "edges": 1206,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "_": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "F_OO",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 2,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 6.250369030982256,
+        "cfgs": {
+          "F_OO": {
+            "nodes": 403,
+            "edges": 603,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "F_OO": 0.0,
+        "main": 0.0
+      }
+    },
+    {
+      "id": "1990/theorem",
+      "source": "1990/theorem/theorem.c",
+      "expected_functions": [
+        "K",
+        "L",
+        "P",
+        "S",
+        "e",
+        "main",
+        "w"
+      ],
+      "cindergraph": {
+        "functions": [
+          "K",
+          "L",
+          "P",
+          "S",
+          "e",
+          "main",
+          "w"
+        ],
+        "accuracy": {
+          "true_positive": 7,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.011075494810938835,
+        "cfgs": {
+          "K": {
+            "nodes": 10,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "P": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "S": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "e": {
+            "nodes": 23,
+            "edges": 29,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 27,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "w": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 6,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:92:9: warning: \u2018Y\u2019 redefined\n   92 | #define Y\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:6:9: note: this is the location of the previous definition\n    6 | #define Y {}\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:93:9: warning: \u2018X\u2019 redefined\n   93 | #define X {}\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:5:9: note: this is the location of the previous definition\n    5 | #define X\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:94:9: warning: \u2018o\u2019 redefined\n   94 | #define o }\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:8:9: note: this is the location of the previous definition\n    8 | #define o {\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:95:9: warning: \u2018C\u2019 redefined\n   95 | #define C {\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:7:9: note: this is the location of the previous definition\n    7 | #define C  }\n      |         ^",
+          "includes_removed": true
+        },
+        "provenance": {
+          "K": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 132,
+            "end": 250
+          },
+          "L": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 1281,
+            "end": 1305
+          },
+          "P": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 78,
+            "end": 130
+          },
+          "S": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 1306,
+            "end": 1398
+          },
+          "e": {
+            "origin": "expansion-generated",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 934,
+            "end": 1276
+          },
+          "main": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 374,
+            "end": 933
+          },
+          "w": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 251,
+            "end": 373
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "K",
+          "L",
+          "P",
+          "S",
+          "e",
+          "main",
+          "o",
+          "w"
+        ],
+        "accuracy": {
+          "true_positive": 7,
+          "false_positive": 1,
+          "false_negative": 0,
+          "precision": 0.875,
+          "recall": 1.0
+        },
+        "seconds": 5.198495187796652,
+        "cfgs": {
+          "K": {
+            "nodes": 10,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "P": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "S": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "e": {
+            "nodes": 21,
+            "edges": 27,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 27,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "o": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "w": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "K",
+          "L",
+          "P",
+          "S",
+          "e",
+          "main",
+          "w"
+        ],
+        "accuracy": {
+          "true_positive": 7,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.154120821505785,
+        "cfgs": {
+          "K": {
+            "nodes": 10,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "P": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "S": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "e": {
+            "nodes": 21,
+            "edges": 27,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 25,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "w": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "K": 0.0,
+        "L": 0.0,
+        "P": 0.0,
+        "S": 0.0,
+        "e": 8.0,
+        "main": 10.0,
+        "w": 0.0
+      }
+    },
+    {
+      "id": "1992/adrian",
+      "source": "1992/adrian/adrian.c",
+      "expected_functions": [
+        "A",
+        "E",
+        "N",
+        "O",
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "A",
+          "E",
+          "N",
+          "O",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 5,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.007371759042143822,
+        "cfgs": {
+          "A": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "E": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "N": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "O": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 25,
+            "edges": 36,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 2,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmpqs5bjf8f.c:50:9: warning: \u2018v\u2019 redefined\n   50 | #define v(x )\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmpqs5bjf8f.c:7:9: note: this is the location of the previous definition\n    7 | #define v(jr) jr\n      |         ^",
+          "includes_removed": true
+        },
+        "provenance": {
+          "A": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 756,
+            "end": 1050
+          },
+          "E": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 198,
+            "end": 364
+          },
+          "N": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 365,
+            "end": 755
+          },
+          "O": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 2127,
+            "end": 2209
+          },
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 1052,
+            "end": 2126
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "A",
+          "E",
+          "G",
+          "N",
+          "O",
+          "P",
+          "S",
+          "__FILE__",
+          "gets",
+          "main",
+          "z"
+        ],
+        "accuracy": {
+          "true_positive": 5,
+          "false_positive": 6,
+          "false_negative": 0,
+          "precision": 0.45454545454545453,
+          "recall": 1.0
+        },
+        "seconds": 5.487886578775942,
+        "cfgs": {
+          "A": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "E": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "G": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "N": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "O": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "P": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "S": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "__FILE__": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "gets": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 29,
+            "edges": 43,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "z": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "A",
+          "E",
+          "N",
+          "O",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 5,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.372291059233248,
+        "cfgs": {
+          "A": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "E": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "N": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "O": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 25,
+            "edges": 36,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "A": 0.0,
+        "E": 0.0,
+        "N": 0.0,
+        "O": 0.0,
+        "main": 0.0
+      }
+    },
+    {
+      "id": "1995/vanschnitz",
+      "source": "1995/vanschnitz/vanschnitz.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.00956658273935318,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 1,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:4:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n    4 | #endif   pqbd\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:10:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   10 | #endif   bpdq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:13:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   13 | #endif   pbdq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:16:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   16 | #endif   qbpb\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:19:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   19 | #endif   pbbq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:26:10: warning: extra tokens at end of \u2018#else\u2019 directive [-Wendif-labels]\n   26 | #else    dpdp\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:152:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n  152 | #endif   qbpp\n      |          ^~~~",
+          "includes_removed": true
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 0,
+            "end": 19
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.478013013489544,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.403990942053497,
+        "cfgs": {
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "2001/anonymous",
+      "source": "2001/anonymous/anonymous.c",
+      "expected_functions": [
+        "E",
+        "K",
+        "L",
+        "Li",
+        "Run",
+        "Runi",
+        "Sca",
+        "Scan",
+        "V",
+        "main",
+        "pain",
+        "ru",
+        "run"
+      ],
+      "cindergraph": {
+        "functions": [
+          "E",
+          "K",
+          "L",
+          "Li",
+          "Run",
+          "Runi",
+          "Sca",
+          "Scan",
+          "V",
+          "main",
+          "pain",
+          "ru",
+          "run"
+        ],
+        "accuracy": {
+          "true_positive": 13,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.0182386739179492,
+        "cfgs": {
+          "E": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "K": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Li": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Runi": {
+            "nodes": 2,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "Sca": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Scan": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "V": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "pain": {
+            "nodes": 67,
+            "edges": 92,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "ru": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 16,
+          "warnings": 17,
+          "messages": [
+            "expected an expression, found `.`",
+            "expected `)`, found `identifier`",
+            "expected `)`, found `identifier`",
+            "expected `)`, found `identifier`",
+            "expected `;`, found `identifier`",
+            "expected `;`, found `)`",
+            "expected an expression, found `)`",
+            "expected `;`, found `)`",
+            "no statement can start with `)`; skipping it",
+            "expected an expression, found `)`",
+            "expected `;`, found `)`",
+            "no statement can start with `)`; skipping it",
+            "expected an expression, found `?`",
+            "expected `;`, found `identifier`",
+            "expected `;`, found `)`",
+            "expected an expression, found `)`",
+            "expected `;`, found `)`",
+            "no statement can start with `)`; skipping it",
+            "expected an expression, found `?`",
+            "expected `;`, found `identifier`",
+            "expected `;`, found `:`",
+            "expected an expression, found `:`",
+            "expected `;`, found `:`",
+            "no statement can start with `:`; skipping it",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "expected an expression, found `.`",
+            "function definition has no return type; assuming legacy implicit `int`",
+            "expected a member name after `.` or `->`"
+          ]
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "",
+          "includes_removed": true
+        },
+        "provenance": {
+          "E": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 802,
+            "end": 875
+          },
+          "K": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 876,
+            "end": 920
+          },
+          "L": {
+            "origin": "expansion-generated",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 285,
+            "end": 329
+          },
+          "Li": {
+            "origin": "expansion-generated",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 107,
+            "end": 284
+          },
+          "Run": {
+            "origin": "expansion-generated",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 520,
+            "end": 568
+          },
+          "Runi": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 24,
+            "start": 330,
+            "end": 519
+          },
+          "Sca": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 569,
+            "end": 638
+          },
+          "Scan": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 639,
+            "end": 680
+          },
+          "V": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 921,
+            "end": 944
+          },
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 2,
+            "start": 2784,
+            "end": 2954
+          },
+          "pain": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 945,
+            "end": 2783
+          },
+          "ru": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 681,
+            "end": 761
+          },
+          "run": {
+            "origin": "expansion-generated",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 762,
+            "end": 801
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "E",
+          "K",
+          "L",
+          "Li",
+          "Run",
+          "Runi",
+          "Sca",
+          "Scan",
+          "V",
+          "c",
+          "main",
+          "pain",
+          "ru",
+          "run"
+        ],
+        "accuracy": {
+          "true_positive": 13,
+          "false_positive": 1,
+          "false_negative": 0,
+          "precision": 0.9285714285714286,
+          "recall": 1.0
+        },
+        "seconds": 5.461865711957216,
+        "cfgs": {
+          "E": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "K": {
+            "nodes": 2,
+            "edges": 1,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Li": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Runi": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Sca": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Scan": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "V": {
+            "nodes": 2,
+            "edges": 1,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "c": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "pain": {
+            "nodes": 2,
+            "edges": 1,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "ru": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "E",
+          "K",
+          "L",
+          "Li",
+          "Run",
+          "Runi",
+          "Sca",
+          "Scan",
+          "V",
+          "main",
+          "pain",
+          "ru",
+          "run"
+        ],
+        "accuracy": {
+          "true_positive": 13,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.520567409694195,
+        "cfgs": {
+          "E": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "K": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "L": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Li": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Runi": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Sca": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "Scan": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "V": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "pain": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "ru": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "run": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "E": 0.0,
+        "K": 0.0,
+        "L": 0.0,
+        "Li": 0.0,
+        "Run": 0.0,
+        "Runi": 3.0,
+        "Sca": 0.0,
+        "Scan": 0.0,
+        "V": 0.0,
+        "main": 13.0,
+        "pain": 252.0,
+        "ru": 0.0,
+        "run": 0.0
+      }
+    },
+    {
+      "id": "2005/anon",
+      "source": "2005/anon/anon.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.011065837927162647,
+        "cfgs": {
+          "main": {
+            "nodes": 259,
+            "edges": 387,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "",
+          "includes_removed": true
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 0,
+            "end": 6929
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "C",
+          "D",
+          "M",
+          "do",
+          "f",
+          "main",
+          "p",
+          "return"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 7,
+          "false_negative": 0,
+          "precision": 0.125,
+          "recall": 1.0
+        },
+        "seconds": 6.523410654626787,
+        "cfgs": {
+          "C": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "D": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "M": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "do": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "f": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 282,
+            "edges": 427,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "p": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "return": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 6.326220096088946,
+        "cfgs": {
+          "main": {
+            "nodes": 259,
+            "edges": 387,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "2011/akari",
+      "source": "2011/akari/akari.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.001012427732348442,
+        "cfgs": {
+          "main": {
+            "nodes": 61,
+            "edges": 86,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 396,
+            "end": 3315
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.158114356920123,
+        "cfgs": {
+          "main": {
+            "nodes": 61,
+            "edges": 86,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.442561929114163,
+        "cfgs": {
+          "main": {
+            "nodes": 61,
+            "edges": 86,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "2018/algmyr",
+      "source": "2018/algmyr/prog.c",
+      "expected_functions": [
+        "C",
+        "F",
+        "T",
+        "d",
+        "f",
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "C",
+          "F",
+          "T",
+          "d",
+          "f",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 6,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.015057473443448544,
+        "cfgs": {
+          "C": {
+            "nodes": 9,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "F": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "T": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "d": {
+            "nodes": 29,
+            "edges": 42,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "f": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 30,
+            "edges": 43,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "",
+          "includes_removed": true
+        },
+        "provenance": {
+          "C": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 1902,
+            "end": 2303
+          },
+          "F": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 1010,
+            "end": 1456
+          },
+          "T": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 1472,
+            "end": 1679
+          },
+          "d": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 2304,
+            "end": 2974
+          },
+          "f": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 1680,
+            "end": 1901
+          },
+          "main": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 2974,
+            "end": 3794
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "C",
+          "E",
+          "F",
+          "M",
+          "R",
+          "T",
+          "d",
+          "f",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 6,
+          "false_positive": 3,
+          "false_negative": 0,
+          "precision": 0.6666666666666666,
+          "recall": 1.0
+        },
+        "seconds": 6.135888011194766,
+        "cfgs": {
+          "C": {
+            "nodes": 9,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "E": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "F": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "M": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "R": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "T": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "d": {
+            "nodes": 41,
+            "edges": 62,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "f": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 41,
+            "edges": 58,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "C",
+          "F",
+          "T",
+          "d",
+          "f",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 6,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.745749423280358,
+        "cfgs": {
+          "C": {
+            "nodes": 9,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "F": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "T": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "d": {
+            "nodes": 29,
+            "edges": 42,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "f": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 28,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "C": 0.0,
+        "F": 0.0,
+        "T": 0.0,
+        "d": 0.0,
+        "f": 0.0,
+        "main": 10.0
+      }
+    },
+    {
+      "id": "2020/carlini",
+      "source": "2020/carlini/prog.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.06310655642300844,
+        "cfgs": {
+          "main": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "succeeded",
+          "compiler": "/usr/bin/gcc",
+          "command": [
+            "/usr/bin/gcc",
+            "-E",
+            "-P",
+            "-x",
+            "c"
+          ],
+          "stderr": "",
+          "includes_removed": true
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 556071,
+            "end": 556527
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "O",
+          "arg",
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 2,
+          "false_negative": 0,
+          "precision": 0.3333333333333333,
+          "recall": 1.0
+        },
+        "seconds": 8.015176584012806,
+        "cfgs": {
+          "O": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "arg": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          },
+          "main": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.549814913421869,
+        "cfgs": {
+          "main": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "2025/diels-grabsch",
+      "source": "2025/diels-grabsch/prog.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.0002447124570608139,
+        "cfgs": {
+          "main": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 1,
+          "messages": [
+            "function definition has no return type; assuming legacy implicit `int`"
+          ]
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": true,
+            "diagnostic_count": 1,
+            "start": 23,
+            "end": 148
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.222534927539527,
+        "cfgs": {
+          "main": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.4038302674889565,
+        "cfgs": {
+          "main": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 0.0
+      }
+    },
+    {
+      "id": "2025/kurdyukov",
+      "source": "2025/kurdyukov/prog.c",
+      "expected_functions": [
+        "main"
+      ],
+      "cindergraph": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 0.0008262302726507187,
+        "cfgs": {
+          "main": {
+            "nodes": 59,
+            "edges": 86,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "diagnostics": {
+          "errors": 0,
+          "warnings": 0,
+          "messages": []
+        },
+        "preprocessing": {
+          "status": "not-needed",
+          "compiler": null,
+          "command": [],
+          "stderr": "",
+          "includes_removed": false
+        },
+        "provenance": {
+          "main": {
+            "origin": "source",
+            "recovery_qualified": false,
+            "diagnostic_count": 0,
+            "start": 53,
+            "end": 1193
+          }
+        }
+      },
+      "joern_raw": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.351256104186177,
+        "cfgs": {
+          "main": {
+            "nodes": 60,
+            "edges": 87,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "joern_prepared": {
+        "functions": [
+          "main"
+        ],
+        "accuracy": {
+          "true_positive": 1,
+          "false_positive": 0,
+          "false_negative": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "seconds": 5.561996548436582,
+        "cfgs": {
+          "main": {
+            "nodes": 60,
+            "edges": 87,
+            "entry_nodes": 1,
+            "exit_nodes": 0,
+            "has_single_entry": true
+          }
+        },
+        "error": null,
+        "diagnostics": "unavailable through pyjoern"
+      },
+      "prepared_shared_vj_ged": {
+        "main": 5.0
+      }
+    }
+  ]
+}

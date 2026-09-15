@@ -223,7 +223,7 @@ NetworkX; it remains an optional interoperability dependency.
 
 | Surface | What it provides |
 | --- | --- |
-| Parsing | Tokens, spans, recovered syntax tree and diagnostics |
+| Parsing | Tokens, spans, recovered syntax tree and diagnostics, including implicit-int and K&R definitions |
 | Metrics | Physical size, CFG complexity, syntax nesting, calls and Halstead measures |
 | General CFG | Statement-oriented control flow used by metrics and graph export |
 | Dataflow | Lexically scoped definitions, uses, reaching edges and dead-store observations |
@@ -257,6 +257,9 @@ overall rankings:
 - [Cindergraph versus Joern for DecBench-adjacent CFG extraction](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/joern-decbench-2026-09-15.md)
   reports function recovery, CFG agreement, decompiler-input recovery, and
   end-to-end provider time over a fixed corpus.
+- [Cindergraph versus Joern on 15 IOCCC winners](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/ioccc-cfg-comparison-2026-09-15.md)
+  measures obfuscated-source function recovery, diagnostics, CFG agreement,
+  crashes, and provider time with identical-input comparisons.
 - [Robustness comparison with Joern, Eclipse CDT, Clang, and Tree-sitter](https://github.com/mjbommar/cindergraph/blob/main/docs/benchmarks/joern-cdt-robustness-2026-09-15.md)
   reports clean input, named decompiler cases, controlled damage, and random
   damage. Function yield is distinguished from semantic correctness.
@@ -266,9 +269,12 @@ overall rankings:
 ## Boundaries you should know first
 
 Cindergraph is not a C compiler, a code property graph, a Joern distribution,
-or a drop-in implementation of arbitrary Joern queries. It does not resolve
-headers, execute a preprocessor, infer ABI layout or model all C aliasing and
-side effects.
+or a drop-in implementation of arbitrary Joern queries. Its Rust core does not
+resolve headers or execute a preprocessor, infer ABI layout or model all C
+aliasing and side effects. The optional DecBench-facing Python adapter can
+invoke a discovered or explicitly selected host C preprocessor for local macro
+and conditional expansion; it removes includes first and returns an observable
+status report, so this adds no mandatory wheel dependency.
 
 In particular:
 

@@ -255,6 +255,17 @@ impl Parser<'_> {
                     }
                     self.eat(Gt);
                 }
+                Identifier
+                    if kind == DeclarationKind::Ordinary
+                        && !saw_type
+                        && self.implicit_int_definition_ahead() =>
+                {
+                    self.warning(
+                        "function definition has no return type; assuming legacy implicit `int`",
+                    );
+                    self.finish_decl_specifiers(declaration, specifiers, kind);
+                    return;
+                }
                 Identifier if self.identifier_is_a_specifier(saw_type) => {
                     saw_type = true;
                     self.bump();
@@ -498,6 +509,96 @@ impl Parser<'_> {
             next,
             Star | LParen | KwConst | KwVolatile | KwRestrict | KwDeclspec
         ) || is_type_keyword(next)
+    }
+
+    /// Whether the current identifier is the name of a legacy implicit-int
+    /// function definition rather than a typedef-like declaration specifier.
+    ///
+    /// `main(B) { ... }` and `f(a) int a; { ... }` were valid definition
+    /// shapes in historical C. Without this lookahead, the ordinary
+    /// identifier-as-type heuristic consumes `main`/`f` and the declarator
+    /// incorrectly names the first parameter. A prototype such as `T(x);`
+    /// deliberately stays on the typedef-like path: only a body, or the
+    /// declaration sequence that must precede an old-style body, justifies the
+    /// implicit-int recovery.
+    fn implicit_int_definition_ahead(&self) -> bool {
+        use TokenKind::*;
+        if self.nth(1) != LParen {
+            return false;
+        }
+        let Some(after) = self.after_matching(1) else {
+            return false;
+        };
+        match self.look(after) {
+            Some(LBrace) => true,
+            Some(kind)
+                if super::look::is_decl_start_keyword(kind)
+                    || (kind == Identifier
+                        && matches!(self.look(after + 1), Some(Identifier | Star))) =>
+            {
+                self.old_style_parameter_declarations_ahead(after)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `after` begins a semicolon-terminated K&R declaration sequence.
+    ///
+    /// Looking only at its first token is unsound. In
+    /// `MACRO(x)\nint real(void) { ... }`, the `int` starts a later definition,
+    /// not a parameter declaration belonging to `MACRO`. Every old-style
+    /// parameter declaration ends in `;`; therefore the body brace is accepted
+    /// only immediately after at least one top-level semicolon. Nested
+    /// declarator groups are skipped so pointer and array parameters remain
+    /// valid. The bound makes malformed generated input a constant-cost look.
+    fn old_style_parameter_declarations_ahead(&self, after: u32) -> bool {
+        use TokenKind::*;
+        const MAX_K_AND_R_LOOKAHEAD: u32 = 512;
+
+        let mut nested = 0_u32;
+        let mut at_segment_start = false;
+        for offset in after..after.saturating_add(MAX_K_AND_R_LOOKAHEAD) {
+            let Some(kind) = self.look(offset) else {
+                return false;
+            };
+            match kind {
+                LParen | LBracket => nested = nested.saturating_add(1),
+                RParen | RBracket if nested > 0 => nested -= 1,
+                Semi if nested == 0 => at_segment_start = true,
+                LBrace if nested == 0 => return at_segment_start,
+                _ if nested == 0 => at_segment_start = false,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Whether the current token begins a new physical source line.
+    ///
+    /// This is a recovery discriminator, not a C grammar rule: ordinary
+    /// parsing accepts a definition anywhere whitespace is legal. During an
+    /// error skip, however, a newline is the evidence that `f(...) {` is a
+    /// subsequent external definition rather than the tail of the malformed
+    /// declaration being discarded. Horizontal indentation is accepted; a
+    /// backslash-spliced newline is not a boundary.
+    fn at_recovery_line_start(&self) -> bool {
+        let start = self.cursor.span().lo as usize;
+        let Some(prefix) = self.text.get(..start) else {
+            return false;
+        };
+        let Some(newline) = prefix.rfind('\n') else {
+            return false;
+        };
+        let mut before = newline;
+        if before > 0 && prefix.as_bytes()[before - 1] == b'\r' {
+            before -= 1;
+        }
+        if before > 0 && prefix.as_bytes()[before - 1] == b'\\' {
+            return false;
+        }
+        prefix[newline + 1..]
+            .bytes()
+            .all(|byte| matches!(byte, b' ' | b'\t' | b'\r'))
     }
 
     /// Whether the identifier under the cursor carries an angle-bracketed
@@ -797,6 +898,7 @@ impl Parser<'_> {
             && index == 0
             && self.previous_kind() == Some(RParen)
             && self.starts_declaration()
+            && self.old_style_parameter_declarations_ahead(0)
         {
             let params = self.open(NodeTag::ParamList);
             while !self.at_eof() && !self.at(LBrace) && self.work.charge(1) {
@@ -876,13 +978,21 @@ impl Parser<'_> {
     /// its termination argument, are the parts worth reusing, so this bumps
     /// rather than skips and asks the set the same membership question.
     ///
-    /// A declaration keyword also stops the skip. Without that, garbage between
-    /// two functions would be skipped past the next function's header and eat
-    /// it, turning one bad construct into a lost definition.
+    /// A declaration keyword or a structurally complete identifier-led legacy
+    /// definition also stops the skip. Without those boundaries, garbage
+    /// between two functions is skipped past the next function's header and
+    /// eats it, turning one bad construct into a lost definition. The latter
+    /// cannot be represented by a keyword because implicit-int definitions
+    /// begin with their name: `main(B) { ... }`.
     fn skip_into_error(&mut self, set: &SyncSet) {
         while !self.at_eof() && self.work.charge(1) {
             let kind = self.peek();
-            if set.contains(kind.as_u16()) || super::look::is_decl_start_keyword(kind) {
+            if set.contains(kind.as_u16())
+                || super::look::is_decl_start_keyword(kind)
+                || (kind == TokenKind::Identifier
+                    && self.at_recovery_line_start()
+                    && self.implicit_int_definition_ahead())
+            {
                 return;
             }
             self.bump();
@@ -1998,5 +2108,59 @@ mod tests {
         let tree = parse(text).into_parts().0;
         let names: Vec<String> = tree.functions(text).into_iter().map(|f| f.name).collect();
         assert_eq!(names, vec!["after"]);
+    }
+
+    #[test]
+    fn an_implicit_int_definition_after_a_damaged_declaration_is_not_swallowed() {
+        for (text, requires_diagnostic) in [
+            ("int broken ???\nmain(B) { return B; }\n", true),
+            ("int broken\nmain(B) { return B; }\n", false),
+        ] {
+            let parsed = parse(text);
+            let names: Vec<String> = parsed
+                .value()
+                .functions(text)
+                .into_iter()
+                .map(|function| function.name)
+                .collect();
+            assert_eq!(names, vec!["main"], "{text}: {:?}", errors(text));
+            if requires_diagnostic {
+                assert!(
+                    !parsed.diagnostics().is_empty(),
+                    "the damaged declaration must remain observable: {text}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_identifier_led_prototype_is_not_a_recovery_boundary() {
+        // `T(x);` may be a typedef-named prototype or declaration. Unlike a
+        // body-bearing definition, it is not enough evidence to split a
+        // damaged declaration and invent a recovered function.
+        let text = "int broken ??? T(x);\nint after(void) { return 2; }\n";
+        let names: Vec<String> = parse(text)
+            .into_parts()
+            .0
+            .functions(text)
+            .into_iter()
+            .map(|function| function.name)
+            .collect();
+        assert_eq!(names, vec!["after"]);
+    }
+
+    #[test]
+    fn a_macro_invocation_cannot_steal_the_next_function_body_as_k_and_r() {
+        let text = concat!(
+            "#define DEFINE(name) int name(void) { return 1; }\n",
+            "DEFINE(generated)\n",
+            "int source_defined(void) { return 2; }\n",
+        );
+        let functions = parse(text).into_parts().0.functions(text);
+        let names: Vec<String> = functions
+            .into_iter()
+            .map(|function| function.name)
+            .collect();
+        assert_eq!(names, vec!["source_defined"]);
     }
 }

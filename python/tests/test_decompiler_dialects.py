@@ -13,7 +13,7 @@ Our own parity evidence has been one-sided: every decompiled artifact in the
 materialized tree is Glaurung's own output. These tests close that gap with
 fixtures that are, wherever possible, *captured* text from other backends --
 see `tests/fixtures/decompiler_dialects/` and
-`docs/design/source-front-ends/decompiler-dialects.md`.
+`docs/benchmarks/joern-decbench-2026-09-15.md`.
 
 Every case in every fixture declares what it expects, including the ones we
 cannot parse: a dialect we lose gets a case whose `expect` is `-`, because an
@@ -52,13 +52,12 @@ _PROVENANCE = frozenset({"captured", "RECONSTRUCTION"})
 #: loudly as one that stops. When a fix lands, delete the entry -- do not relax
 #: the assertion. The reproduction bodies are minimal by design; the realistic
 #: captured text for each lives in the fixture file named in the comment.
-KNOWN_GAPS: dict[str, str] = {
-    "implicit-int-definition": "f(int a, int b)\n{\n  return a;\n}\n",
-}
+KNOWN_GAPS: dict[str, str] = {}
 
 #: Constructs that DO parse today and must keep parsing. Several were gaps until
 #: the lexer/parser calling-convention work landed; they are regression cases now.
 RECOVERED_CONSTRUCTS: dict[str, str] = {
+    "implicit-int-definition": "f(int a, int b)\n{\n  return a;\n}\n",
     "msvc-cdecl": "int __cdecl f(char *fmt, ...)\n{\n  return 0;\n}\n",
     "msvc-stdcall": "long __stdcall f(void)\n{\n  return 0;\n}\n",
     "msvc-fastcall": "__int64 __fastcall f(__int64 a1)\n{\n  return a1;\n}\n",
@@ -219,7 +218,7 @@ def test_a_case_recovers_exactly_what_it_declares(case: DialectCase) -> None:
         assert recovered == [], (
             f"{case.id} is recorded as a gap ({case.gap}) but recovered {recovered}. "
             f"If this is a fix, update the case's expect/gap lines, KNOWN_GAPS, and "
-            f"docs/design/source-front-ends/decompiler-dialects.md."
+            f"docs/benchmarks/joern-decbench-2026-09-15.md."
         )
     else:
         assert case.expect in recovered, (
@@ -290,7 +289,7 @@ def test_a_known_gap_is_still_a_gap(name: str) -> None:
     assert recovered == [], (
         f"{name} now recovers {recovered}. That is good news: remove it from "
         f"KNOWN_GAPS, update the matching case in tests/fixtures/decompiler_dialects/, "
-        f"and update docs/design/source-front-ends/decompiler-dialects.md."
+        f"and update docs/benchmarks/joern-decbench-2026-09-15.md."
     )
 
 

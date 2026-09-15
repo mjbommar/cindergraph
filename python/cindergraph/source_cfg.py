@@ -24,7 +24,8 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 from cindergraph import _native
 
@@ -32,10 +33,15 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     import networkx
 
 __all__ = [
+    "DecompiledCfgAnalysis",
+    "FunctionProvenance",
+    "PreprocessingReport",
     "SourceCfgNode",
+    "analyze_decompiled",
     "cfgs_from_decompiled",
     "graph_from_serialized",
     "parity_cfgs",
+    "preprocess_decompiled",
 ]
 
 logger = logging.getLogger(__name__)
@@ -45,40 +51,165 @@ _PREPROCESSOR_CONTROL = re.compile(
 _INCLUDE_DIRECTIVE = re.compile(r"^\s*#\s*include\b[^\n]*(?:\n|$)", re.MULTILINE)
 
 
-def _preprocess_decompiled_c(text: str) -> str:
-    """Expand local directives the DecBench provider contract expands.
+@dataclass(frozen=True)
+class PreprocessingReport:
+    """Observable outcome of preparing decompiler C for CFG recovery.
+
+    Attributes:
+        text: Text that should be analyzed. This is the original input when no
+            preprocessing was needed or preprocessing could not run.
+        status: ``"not-needed"``, ``"succeeded"``, ``"unavailable"``,
+            ``"failed"``, or ``"timed-out"``.
+        compiler: Resolved preprocessor executable, if one was found.
+        command: Exact command used, excluding the temporary input filename.
+        stderr: Captured preprocessor error output or exception text.
+        includes_removed: Whether include directives were removed before
+            invoking the preprocessor. Includes are never loaded implicitly.
+
+    The type contains only standard-library values. A wheel therefore retains
+    zero mandatory runtime dependencies and callers can decide whether a
+    fail-open result is acceptable instead of having to infer it from logs.
+    """
+
+    text: str
+    status: Literal["not-needed", "succeeded", "unavailable", "failed", "timed-out"]
+    compiler: str | None = None
+    command: tuple[str, ...] = ()
+    stderr: str = ""
+    includes_removed: bool = False
+
+    @property
+    def succeeded(self) -> bool:
+        """Whether preprocessing ran and produced non-empty output."""
+        return self.status == "succeeded"
+
+
+@dataclass(frozen=True)
+class DecompiledCfgAnalysis:
+    """GED-ready graphs together with their preprocessing evidence."""
+
+    graphs: dict[str, Any]
+    preprocessing: PreprocessingReport
+    provenance: dict[str, FunctionProvenance]
+    diagnostics: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class FunctionProvenance:
+    """How one recovered definition reached the analyzed translation unit.
+
+    ``origin`` and ``recovery_qualified`` are deliberately independent. A
+    macro-generated definition can itself require parser recovery, and callers
+    must not have to collapse those two facts into one ambiguous label.
+    """
+
+    name: str
+    origin: Literal["source", "expansion-generated"]
+    recovery_qualified: bool
+    start: int
+    end: int
+    diagnostic_count: int
+
+
+def preprocess_decompiled(
+    text: str,
+    *,
+    compiler: str | None = None,
+    timeout: float = 30.0,
+) -> PreprocessingReport:
+    """Expand local directives and return the complete preparation outcome.
 
     The native parser intentionally has no compiler dependency. This adapter
     is the DecBench-facing boundary, where Joern likewise receives text after
     local macro expansion and conditional selection. Includes are removed so
     a decompiler cannot make the host preprocessor import arbitrary headers;
-    failure is fail-open and returns the original tolerant-parser input.
+    failure is explicit in the report and its ``text`` remains the original
+    tolerant-parser input.
+
+    Args:
+        text: Decompiled C source text.
+        compiler: Preprocessor executable. When omitted, ``gcc`` and then
+            ``cc`` are discovered on ``PATH``. Passing a value makes the
+            selected executable deterministic.
+        timeout: Maximum preprocessing time in seconds.
+
+    Returns:
+        A dependency-free :class:`PreprocessingReport`.
     """
     if _PREPROCESSOR_CONTROL.search(text) is None:
-        return text
-    compiler = shutil.which("gcc") or shutil.which("cc")
+        return PreprocessingReport(text=text, status="not-needed")
+    resolved = shutil.which(compiler) if compiler is not None else None
     if compiler is None:
-        logger.warning("cannot preprocess decompiled C: no host C preprocessor")
-        return text
+        resolved = shutil.which("gcc") or shutil.which("cc")
+    if resolved is None:
+        message = (
+            "no host C preprocessor"
+            if compiler is None
+            else f"preprocessor not found: {compiler}"
+        )
+        logger.warning("cannot preprocess decompiled C: %s", message)
+        return PreprocessingReport(text=text, status="unavailable", stderr=message)
     safe_text = _INCLUDE_DIRECTIVE.sub("\n", text)
+    includes_removed = safe_text != text
+    command = (resolved, "-E", "-P", "-x", "c")
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".c") as source:
             source.write(safe_text)
             source.flush()
             result = subprocess.run(
-                [compiler, "-E", "-P", "-x", "c", source.name],
+                [*command, source.name],
                 check=False,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=timeout,
             )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except subprocess.TimeoutExpired as error:
         logger.warning("cannot preprocess decompiled C: %s", error)
-        return text
+        return PreprocessingReport(
+            text=text,
+            status="timed-out",
+            compiler=resolved,
+            command=command,
+            stderr=str(error),
+            includes_removed=includes_removed,
+        )
+    except OSError as error:
+        logger.warning("cannot preprocess decompiled C: %s", error)
+        return PreprocessingReport(
+            text=text,
+            status="failed",
+            compiler=resolved,
+            command=command,
+            stderr=str(error),
+            includes_removed=includes_removed,
+        )
     if result.returncode != 0 or not result.stdout.strip():
-        logger.warning("cannot preprocess decompiled C: %s", result.stderr.strip())
-        return text
-    return result.stdout
+        message = (
+            result.stderr.strip()
+            or f"preprocessor exited {result.returncode} without output"
+        )
+        logger.warning("cannot preprocess decompiled C: %s", message)
+        return PreprocessingReport(
+            text=text,
+            status="failed",
+            compiler=resolved,
+            command=command,
+            stderr=message,
+            includes_removed=includes_removed,
+        )
+    return PreprocessingReport(
+        text=result.stdout,
+        status="succeeded",
+        compiler=resolved,
+        command=command,
+        stderr=result.stderr.strip(),
+        includes_removed=includes_removed,
+    )
+
+
+def _preprocess_decompiled_c(text: str) -> str:
+    """Compatibility shim returning only the prepared text."""
+    return preprocess_decompiled(text).text
 
 
 class SourceCfgNode:
@@ -171,14 +302,89 @@ def graph_from_serialized(cfg: dict[str, Any]) -> networkx.DiGraph:
     return graph
 
 
-def cfgs_from_decompiled(text: str) -> dict[str, networkx.DiGraph]:
-    """GED-ready CFGs for every scoreable function in decompiled C.
+def _function_provenance(
+    original: str,
+    preprocessing: PreprocessingReport,
+    scoreable_names: set[str],
+) -> tuple[dict[str, FunctionProvenance], tuple[dict[str, Any], ...]]:
+    """Derive definition origin and local recovery from observable artifacts."""
+    original_names = set(parity_cfgs(original))
+    session = _native.source.AnalysisSession(preprocessing.text)
+    diagnostics = session.diagnostics
+    provenance: dict[str, FunctionProvenance] = {}
+    for function in session.control_flow_graphs():
+        name = function["name"]
+        if name not in scoreable_names:
+            continue
+        start = function["start"]
+        end = function["end"]
+        local = [
+            diagnostic
+            for diagnostic in diagnostics
+            if diagnostic["start"] <= end and diagnostic["end"] >= start
+        ]
+        origin: Literal["source", "expansion-generated"] = "source"
+        if preprocessing.succeeded and name not in original_names:
+            origin = "expansion-generated"
+        candidate = FunctionProvenance(
+            name=name,
+            origin=origin,
+            recovery_qualified=bool(local),
+            start=start,
+            end=end,
+            diagnostic_count=len(local),
+        )
+        previous = provenance.get(name)
+        if previous is None or (candidate.end - candidate.start) > (
+            previous.end - previous.start
+        ):
+            provenance[name] = candidate
+    return provenance, tuple(dict(diagnostic) for diagnostic in diagnostics)
+
+
+def analyze_decompiled(
+    text: str,
+    *,
+    compiler: str | None = None,
+    timeout: float = 30.0,
+) -> DecompiledCfgAnalysis:
+    """Build GED-ready CFGs and retain preprocessing evidence.
 
     This is the provider entry point `tools/source_cfg_parity.py` resolves.
 
     Args:
         text: Decompiled C source text. May be partly unparseable; the front end
             is total, so the functions it did recover are still returned.
+        compiler: Optional explicit C preprocessor executable.
+        timeout: Maximum preprocessing time in seconds.
+
+    Returns:
+        Graphs and the observable preprocessing report that produced them.
+
+    Raises:
+        ImportError: If `networkx` is not installed in the running environment.
+    """
+    preprocessing = preprocess_decompiled(text, compiler=compiler, timeout=timeout)
+    serialized = parity_cfgs(preprocessing.text)
+    graphs = {name: graph_from_serialized(cfg) for name, cfg in serialized.items()}
+    provenance, diagnostics = _function_provenance(text, preprocessing, set(serialized))
+    return DecompiledCfgAnalysis(
+        graphs=graphs,
+        preprocessing=preprocessing,
+        provenance=provenance,
+        diagnostics=diagnostics,
+    )
+
+
+def cfgs_from_decompiled(text: str) -> dict[str, networkx.DiGraph]:
+    """GED-ready CFGs for every scoreable function in decompiled C.
+
+    This compatibility entry point preserves the mapping expected by DecBench.
+    New callers that need to enforce or record preprocessing outcomes should use
+    :func:`analyze_decompiled`.
+
+    Args:
+        text: Decompiled C source text.
 
     Returns:
         ``{function name: DiGraph}`` whose nodes are :class:`SourceCfgNode`.
@@ -186,7 +392,4 @@ def cfgs_from_decompiled(text: str) -> dict[str, networkx.DiGraph]:
     Raises:
         ImportError: If `networkx` is not installed in the running environment.
     """
-    prepared = _preprocess_decompiled_c(text)
-    return {
-        name: graph_from_serialized(cfg) for name, cfg in parity_cfgs(prepared).items()
-    }
+    return analyze_decompiled(text).graphs

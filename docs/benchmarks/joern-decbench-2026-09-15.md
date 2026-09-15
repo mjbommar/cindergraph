@@ -156,6 +156,13 @@ The full case record is
 Its 26-case population hash is
 `8c9c7190985942b37dc7758495160fa7a2caded5e9b2036c6a3db0ea5549fc86`.
 
+The parser also accepts legacy implicit-int definitions and K&R parameter
+declaration lists. This capability was added after the fixed 26-case dialect
+run and therefore does not change the table above. Regression coverage includes
+both `main(B) { ... }` and semicolon-terminated old-style parameter declarations;
+macro invocations followed by an ordinary definition are explicitly rejected
+as false K&R headers.
+
 ## Control dependence
 
 `python/tests/test_source_dependence_joern.py` is an optional differential test

@@ -38,6 +38,33 @@ same transformation. An unknown dialect raises `ValueError`.
 APIs, as well as the graph/dataflow APIs below, currently discard parser
 diagnostics; inspect an analysis report for the same text when recovery matters.
 
+The comparison-oriented decompiler adapter has a separate, explicit host
+preprocessing boundary:
+
+```python
+from cindergraph import source_cfg
+
+result = source_cfg.analyze_decompiled("""
+#define DEFINE(name) int name(void) { return 1; }
+DEFINE(generated)
+""")
+assert result.preprocessing.status in {"succeeded", "unavailable", "failed", "timed-out"}
+if result.preprocessing.succeeded:
+    assert result.provenance["generated"].origin == "expansion-generated"
+```
+
+`preprocess_decompiled()` can be called independently without importing
+NetworkX. Its report records the exact analyzed text, status, selected compiler
+and command, captured stderr, and whether include directives were removed.
+Statuses are `not-needed`, `succeeded`, `unavailable`, `failed`, and
+`timed-out`. Failure remains fail-open for tolerant recovery but is never
+silent. `analyze_decompiled()` returns that report alongside GED-ready graphs
+and per-function provenance. Provenance keeps `origin` (`source` or
+`expansion-generated`) separate from `recovery_qualified`, because a generated
+definition may also require parser recovery. The compatibility
+`cfgs_from_decompiled()` function still returns only the graph mapping expected
+by existing DecBench tooling.
+
 ## Reuse one analysis snapshot
 
 ```python

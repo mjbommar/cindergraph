@@ -22,9 +22,11 @@ import cindergraph
 import pytest
 from cindergraph.source_cfg import (
     SourceCfgNode,
+    analyze_decompiled,
     cfgs_from_decompiled,
     graph_from_serialized,
     parity_cfgs,
+    preprocess_decompiled,
 )
 
 #: A branch and a loop, so the CFG is neither a single block nor a chain.
@@ -64,6 +66,65 @@ def test_provider_entry_point_is_reachable_the_way_the_harness_resolves_it() -> 
     assert module is not None, "cindergraph.source_cfg must be imported by the package"
     entry = getattr(module, "cfgs_from_decompiled", None)
     assert callable(entry), "the harness calls cfgs_from_decompiled(text)"
+
+
+@pytest.mark.core
+def test_preprocessing_that_is_not_needed_is_explicit() -> None:
+    report = preprocess_decompiled("int f(void) { return 1; }")
+    assert report.status == "not-needed"
+    assert not report.succeeded
+    assert report.compiler is None
+    assert report.command == ()
+    assert report.text == "int f(void) { return 1; }"
+
+
+@pytest.mark.core
+def test_an_unavailable_explicit_preprocessor_fails_open_observably() -> None:
+    text = "#define VALUE 1\nint f(void) { return VALUE; }\n"
+    report = preprocess_decompiled(
+        text, compiler="cindergraph-preprocessor-that-does-not-exist"
+    )
+    assert report.status == "unavailable"
+    assert not report.succeeded
+    assert report.text == text
+    assert "not found" in report.stderr
+
+
+def test_cfg_analysis_exposes_the_preprocessing_that_produced_it() -> None:
+    _require_networkx()
+    result = analyze_decompiled(BRANCH_AND_LOOP)
+    assert set(result.graphs) == {"classify"}
+    assert result.preprocessing.status == "not-needed"
+    assert result.provenance["classify"].origin == "source"
+    assert not result.provenance["classify"].recovery_qualified
+    assert result.diagnostics == ()
+
+
+def test_legacy_recovery_is_function_local_provenance() -> None:
+    _require_networkx()
+    result = analyze_decompiled(
+        "int clean(void) { return 1; }\nmain(B) { return B; }\n"
+    )
+    assert not result.provenance["clean"].recovery_qualified
+    assert result.provenance["main"].recovery_qualified
+    assert result.provenance["main"].diagnostic_count == 1
+    assert result.provenance["main"].origin == "source"
+    assert [diagnostic["severity"] for diagnostic in result.diagnostics] == ["warning"]
+
+
+def test_macro_generated_definition_has_expansion_provenance() -> None:
+    _require_networkx()
+    if not (__import__("shutil").which("gcc") or __import__("shutil").which("cc")):
+        pytest.skip("no host C preprocessor")
+    text = """
+#define DEFINE(name) int name(void) { return 1; }
+DEFINE(generated)
+int source_defined(void) { return 2; }
+"""
+    result = analyze_decompiled(text)
+    assert result.preprocessing.status == "succeeded"
+    assert result.provenance["generated"].origin == "expansion-generated"
+    assert result.provenance["source_defined"].origin == "source"
 
 
 @pytest.mark.core
