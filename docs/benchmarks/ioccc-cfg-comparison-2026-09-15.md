@@ -16,9 +16,9 @@ that is made executable by the build procedure.
 
 | Provider/input | TP | FP | FN | Precision | Recall | Crashes | Total time |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Cindergraph automatic preparation | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 0.169 s |
-| Joern raw source | 44 | 28 | 0 | 0.611 | 1.000 | 0 | 85.888 s |
-| Joern identical prepared source | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 82.221 s |
+| Cindergraph automatic preparation | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 0.149 s |
+| Joern raw source | 44 | 28 | 0 | 0.611 | 1.000 | 0 | 86.744 s |
+| Joern identical prepared source | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 101.961 s |
 
 The raw-source Joern false positives are macro identifiers interpreted as
 functions. They disappear when Joern receives the same preprocessed text as
@@ -27,8 +27,8 @@ Cindergraph accuracy win. The timing is wall-clock provider time on this host;
 it includes Joern process and workspace overhead and is not a parser-kernel
 microbenchmark.
 
-For the 44 shared functions on identical prepared input, 37 CFGs have zero
-VJ-GED distance and seven do not. The total distance is 301. The largest
+For the 44 shared functions on identical prepared input, 38 CFGs have zero
+VJ-GED distance and six do not. The total distance is 296. The largest
 residual is `2001/anonymous::pain` at 252; that translation unit also requires
 substantial parser recovery. A recovered graph is useful output, but its
 presence is not proof that every edge is semantically correct.
@@ -49,9 +49,9 @@ presence is not proof that every edge is semantically correct.
 | 2018/algmyr | 6 | 0 | 0 | 3 | 5 | 1 | 10 |
 | 2020/carlini | 1 | 0 | 0 | 2 | 1 | 0 | 0 |
 | 2025/diels-grabsch | 1 | 0 | 1 | 0 | 1 | 0 | 0 |
-| 2025/kurdyukov | 1 | 0 | 0 | 0 | 0 | 1 | 5 |
+| 2025/kurdyukov | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 
-The seven non-zero distances are:
+The six non-zero distances are:
 
 | Function | VJ-GED |
 |---|---:|
@@ -61,15 +61,27 @@ The seven non-zero distances are:
 | `2001/anonymous::main` | 13 |
 | `2001/anonymous::pain` | 252 |
 | `2018/algmyr::main` | 10 |
-| `2025/kurdyukov::main` | 5 |
 
-The Kurdyukov difference has been reduced to a small interaction between a
-comma expression, a conditional expression, and a loop body. Both graphs keep
-the same alternatives, but Cindergraph coalesces the comma-left effect with
-the conditional fork where Joern retains a separate node. This is a CFG
-granularity difference, not evidence of a missing path. Algmyr's earlier large
-raw-source difference was mainly a preprocessing comparison artifact: with
-identical prepared input only `main` remains non-exact, at distance 10.
+The Kurdyukov difference was reduced to the evaluation-order boundary between
+a comma prefix and a nested conditional expression. Restoring that boundary
+in the parity projection closes the full winner at 60 nodes, 87 edges and
+VJ-GED zero.
+
+Algmyr's earlier large raw-source difference was mainly a preprocessing
+comparison artifact. Its remaining distance of 10 reduces independently to
+two empty-body loop forms:
+
+```c
+while (C());
+while (fclose(f[--w]), w);
+```
+
+Joern 4.0.150.4 omits the loop back-edge in both minimized cases. C semantics
+require the condition to be evaluated again when it is true, and Clang 22's
+`debug.DumpCFG` independently emits that cyclic edge for both forms.
+Cindergraph retains the cycles. The remaining Algmyr distance is therefore an
+adjudicated Joern-side CFG defect; changing Cindergraph to score zero would
+delete real control flow.
 
 ## Reproduction
 

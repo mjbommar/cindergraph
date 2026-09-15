@@ -202,6 +202,9 @@ pub struct GranularityStats {
     pub inserted: u32,
     /// Operand nodes deleted because the operand materializes nothing (phase 3).
     pub elided: u32,
+    /// Straight-line comma prefixes restored before an elided conditional
+    /// condition so the fork stays at the right evaluation boundary.
+    pub sequence_prefixes_inserted: u32,
     /// Jump and jump-target nodes deleted because Joern has none (phase 4).
     pub jumps_elided: u32,
     /// Redundant structural loop headers removed when an expression operator
@@ -245,6 +248,7 @@ pub fn expression_granular(
     }
     let mut work = Work::from_cfg(cfg);
     remember_operand_spans(&mut work, tree, token_spans, &regions);
+    insert_sequence_prefixes(&mut work, &regions, &mut stats);
     for region in &regions {
         nest(&mut work, region, &mut stats);
     }
@@ -399,9 +403,18 @@ struct Region {
     operands: Vec<NodeId>,
     /// The CFG node each operand's evaluation ends at, parallel to `operands`.
     ends: Vec<NodeId>,
+    /// The CFG node at which evaluation of the first operand begins. This can
+    /// differ from `ends[0]` when that operand is itself short-circuiting.
+    entry: NodeId,
     /// The CFG node the whole expression ends at --- the operator node S2
     /// already materializes for the outermost operator of the region.
     terminal: NodeId,
+    /// A materialized straight-line prefix immediately before this operator
+    /// in an enclosing comma expression. S2 represents it only in the outer
+    /// statement node, after the operator region; Joern evaluates it before
+    /// the region and needs it as a distinct fork carrier when the condition
+    /// itself is later elided.
+    sequence_prefix: Option<Span>,
 }
 
 /// Every short-circuit region under `body` whose S2 shape this rewrite models.
@@ -418,6 +431,7 @@ fn collect(
     stats: &mut GranularityStats,
 ) -> Vec<Region> {
     let index = span_index(cfg);
+    let parents = parent_index(tree);
     let mut claimed: BTreeSet<NodeId> = BTreeSet::new();
     let mut regions = Vec::new();
     for node in tree.arena().preorder(body) {
@@ -428,7 +442,7 @@ fn collect(
             continue;
         };
         stats.operators = stats.operators.saturating_add(1);
-        match resolve(tree, token_spans, cfg, &index, node, shape) {
+        match resolve(tree, token_spans, cfg, &index, &parents, node, shape) {
             Some(region) if region.ends.iter().all(|end| !claimed.contains(end)) => {
                 claimed.extend(region.ends.iter().copied());
                 regions.push(region);
@@ -451,6 +465,7 @@ fn resolve(
     token_spans: &[Span],
     cfg: &Cfg,
     index: &BTreeMap<(u32, u32), Option<NodeId>>,
+    parents: &[Option<NodeId>],
     node: NodeId,
     shape: Shape,
 ) -> Option<Region> {
@@ -508,12 +523,130 @@ fn resolve(
         }
     }
 
+    let entry = evaluation_entry(tree, token_spans, index, operands[0]).unwrap_or(ends[0]);
     Some(Region {
         shape,
         operands,
+        entry,
         ends,
         terminal,
+        sequence_prefix: (shape == Shape::Conditional)
+            .then(|| comma_sequence_prefix(tree, token_spans, parents, node))
+            .flatten(),
     })
+}
+
+/// Resolve the first evaluated CFG node of a possibly nested short-circuit
+/// operand. `resolve` otherwise records where each operand ends, which is not
+/// enough when a preceding comma expression must be spliced before it.
+fn evaluation_entry(
+    tree: &Tree,
+    token_spans: &[Span],
+    index: &BTreeMap<(u32, u32), Option<NodeId>>,
+    node: NodeId,
+) -> Option<NodeId> {
+    let mut current = node;
+    for _ in 0..=tree.arena().len() {
+        match tag_of(tree, current) {
+            Some(NodeTag::ParenExpr) if tree.arena().child_count(current) == 1 => {
+                current = tree.arena().child(current, 0)?;
+            }
+            Some(tag) if short_circuit_shape(tree, current, tag).is_some() => {
+                current = tree.arena().child(current, 0)?;
+            }
+            _ => {
+                let span = tree.arena().span(current, token_spans)?;
+                return index.get(&(span.lo, span.hi)).copied().flatten();
+            }
+        }
+    }
+    None
+}
+
+/// Parent links for the immutable syntax arena, built once per function walk.
+fn parent_index(tree: &Tree) -> Vec<Option<NodeId>> {
+    let mut parents = vec![None; tree.arena().len()];
+    for raw in 0..tree.arena().len() {
+        let parent = NodeId::new(raw as u32);
+        for child in tree.arena().children_iter(parent) {
+            if let Some(slot) = parents.get_mut(child.index()) {
+                *slot = Some(parent);
+            }
+        }
+    }
+    parents
+}
+
+/// The evaluated prefix before `node` when it is a later comma operand.
+///
+/// Parentheses are transparent. A bare-name/literal prefix does not cost
+/// Joern a node, matching [`materializes`]; a materialized prefix may contain
+/// several straight-line operations, but F-10 contracts that chain to one
+/// block before the published graph is observed.
+fn comma_sequence_prefix(
+    tree: &Tree,
+    token_spans: &[Span],
+    parents: &[Option<NodeId>],
+    node: NodeId,
+) -> Option<Span> {
+    let mut current = node;
+    for _ in 0..=tree.arena().len() {
+        let parent = parents.get(current.index()).copied().flatten()?;
+        match tag_of(tree, parent) {
+            Some(NodeTag::ParenExpr) if tree.arena().child_count(parent) == 1 => {
+                current = parent;
+            }
+            Some(NodeTag::CommaExpr) => {
+                let siblings: Vec<NodeId> = tree.arena().children_iter(parent).collect();
+                let position = siblings.iter().position(|&sibling| sibling == current)?;
+                let prefix = siblings.get(..position)?;
+                if prefix.is_empty() || !prefix.iter().copied().any(|item| materializes(tree, item))
+                {
+                    return None;
+                }
+                let first = tree.arena().span(prefix[0], token_spans)?;
+                let last = tree.arena().span(*prefix.last()?, token_spans)?;
+                return Some(first.to(last));
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Restore a comma-left evaluation block before a conditional region.
+///
+/// S2 intentionally emits no nodes for ordinary expression evaluation. That
+/// is normally harmless because F-10 contracts Joern's straight-line nodes
+/// away. It becomes observable when the following `?:` has a bare condition:
+/// phase 3 transfers the fork to its predecessor, and without this boundary
+/// that predecessor can be an enclosing loop test rather than the comma-left
+/// assignment or call that Joern uses.
+fn insert_sequence_prefixes(work: &mut Work, regions: &[Region], stats: &mut GranularityStats) {
+    for region in regions {
+        let Some(span) = region.sequence_prefix else {
+            continue;
+        };
+        if region.shape != Shape::Conditional {
+            continue;
+        }
+        let condition = region.entry;
+        if !work.alive[condition.index()] {
+            continue;
+        }
+        let predecessors = work.pred[condition.index()].clone();
+        if predecessors.is_empty() {
+            continue;
+        }
+        let Some(prefix) = work.push_node(NodeKind::Stmt, span) else {
+            continue;
+        };
+        for predecessor in predecessors {
+            work.retarget(predecessor, condition, prefix);
+        }
+        work.add_edge(prefix, condition, EdgeKind::Fall, false);
+        stats.sequence_prefixes_inserted = stats.sequence_prefixes_inserted.saturating_add(1);
+    }
 }
 
 /// Phase 2: give a flat chain of `n` operands its `n - 2` inner operator nodes.
@@ -1247,6 +1380,101 @@ mod tests {
             projected(&after),
             published(3, &[(0, 1), (0, 2), (2, 1)]),
             "bash hash_size, published as 3 nodes / 3 edges"
+        );
+    }
+
+    /// Minimized from IOCCC 2025 `kurdyukov::main` against Joern 4.0.150.4.
+    /// S2 has no separate node for `x=1`, but it becomes observable here: the
+    /// bare `q` is elided and Joern makes the assignment, not the enclosing
+    /// loop condition, carry the ternary fork.
+    #[test]
+    fn a_comma_prefix_carries_the_following_bare_condition_fork() {
+        let text = "int f(),g(); int a(int d,int c,int x,int q) { \
+                    for (; d || --c > 0;) x=1,(q ? f() : g()); }";
+        let (_, after, stats) = rewrite(text, "a");
+        assert_eq!(stats.sequence_prefixes_inserted, 1);
+        assert_eq!(stats.elided, 2, "bare `d` and bare `q`");
+        assert_eq!(
+            projected(&after),
+            published(
+                7,
+                &[
+                    (0, 1),
+                    (1, 2),
+                    (1, 3),
+                    (2, 6),
+                    (3, 6),
+                    (4, 0),
+                    (4, 5),
+                    (5, 0),
+                    (6, 0),
+                    (6, 5),
+                ]
+            ),
+            "the minimized Joern graph is 7 nodes / 10 edges"
+        );
+    }
+
+    /// The irreducible control core of IOCCC 2025 `kurdyukov::main`. The
+    /// conditional's condition is itself a short-circuit region, so the comma
+    /// prefix belongs before that region's first operand rather than its join.
+    #[test]
+    fn a_comma_prefix_precedes_a_nested_short_circuit_condition() {
+        let text = "int a(int d,int c,int x,int y,int z) { \
+                    for (; d || --c > 0;) x=1,((x && d < 3) ? y : z); }";
+        let (_, after, stats) = rewrite(text, "a");
+        assert_eq!(stats.sequence_prefixes_inserted, 1);
+        assert_eq!(stats.elided, 4, "bare `d`, `x`, `y`, and `z`");
+        assert_eq!(
+            projected(&after),
+            published(
+                6,
+                &[
+                    (0, 1),
+                    (1, 2),
+                    (1, 5),
+                    (2, 5),
+                    (3, 0),
+                    (3, 4),
+                    (4, 0),
+                    (5, 0),
+                    (5, 4),
+                ]
+            ),
+            "the minimized Joern graph is 6 nodes / 9 edges"
+        );
+    }
+
+    /// Minimized from IOCCC 2018 `algmyr::main`. Joern 4.0.150.4 emits no
+    /// back edge for an empty-body `while (C());`; Clang 22's CFG emits the
+    /// condition block with a cyclic true arm, as C's semantics require. The
+    /// parity projection must not erase a real control path to lower VJ-GED.
+    #[test]
+    fn an_empty_while_body_retains_its_semantic_back_edge() {
+        let text = "int C(void); int r; int f(void) { \
+                    while (++r < 6) { while (C()); r--; } }";
+        let (_, after, _) = rewrite(text, "f");
+        assert_eq!(
+            projected(&after),
+            published(4, &[(0, 1), (1, 2), (2, 2), (2, 3), (3, 1)]),
+            "the inner condition's true edge returns to itself"
+        );
+    }
+
+    /// The second independently minimized Algmyr residue. Joern merges this
+    /// function to one acyclic block, but the comma operator yields `w` as the
+    /// loop condition after `fclose` runs. Clang's CFG confirms both the
+    /// condition-to-condition back edge and the false edge to `free`.
+    #[test]
+    fn a_comma_condition_empty_while_retains_its_semantic_cycle() {
+        let text = "int fclose(void *); void free(void *); \
+                    int f(int w, void **p) { \
+                    while (fclose(p[--w]), w); free(p); }";
+        let (_, after, _) = rewrite(text, "f");
+        assert_eq!(
+            projected(&after),
+            published(3, &[(0, 1), (1, 1), (1, 2)]),
+            "the loop condition has a self-edge and a cleanup successor"
         );
     }
 
