@@ -234,14 +234,17 @@ def test_ci_and_release_smoke_the_graphs_extra_from_sdist() -> None:
 
 
 def test_ci_and_release_enforce_rust_advisory_audits() -> None:
-    action = "rustsec/audit-check@858dc40f52ca2b8570b7a997c1c4e35c6fc9a432"
+    install = "cargo install cargo-audit --version 0.22.2 --locked"
+    audit = "cargo audit"
     deny_action = (
         "EmbarkStudios/cargo-deny-action@9c67a826e39827395bfa619cd85cb2aaeb43cfaa"
     )
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    assert action in ci
-    assert action in release
+    assert install in ci
+    assert install in release
+    assert audit in ci
+    assert audit in release
     assert deny_action in ci
     assert deny_action in release
     assert (ROOT / "deny.toml").is_file()

@@ -48,9 +48,10 @@ def test_public_outputs_match_across_hash_seeds(tmp_path: Path) -> None:
             text=True,
             # The worker deliberately rebuilds 4 analyses and 20 graph
             # serializations for each of 210 files. Keep a real hang bound,
-            # but leave headroom above the measured roughly 30-second runtime
-            # now that data-flow output includes memory-region records.
-            timeout=45,
+            # but leave headroom above the measured roughly 30-second local
+            # runtime and slower shared CI runners now that data-flow output
+            # includes memory-region records.
+            timeout=90,
             check=True,
         )
         results.append(json.loads(result.stdout))
