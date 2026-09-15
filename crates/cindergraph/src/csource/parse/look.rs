@@ -1,9 +1,5 @@
 //! Bounded lookahead: the questions C's grammar cannot answer from one token.
 //!
-//! Spec: `docs/design/static-c-analysis/requirements.md` section 9 open
-//! question 1 (the declaration-versus-expression ambiguity) and `REQ-SYN-4`
-//! (every entry point is bounded).
-//!
 //! # Why there is no typedef table
 //!
 //! `A * b;` is a declaration when `A` names a type and a multiplication
@@ -14,7 +10,7 @@
 //! (`REQ-CFG-3`), and the initializer or right-hand side --- the part that can
 //! contain a call, a `&&` or a `?:` --- is parsed identically either way. The
 //! rule chosen instead is syntactic and stated in
-//! [`Parser::starts_declaration`]: an identifier followed by pointers and
+//! `Parser::starts_declaration`: an identifier followed by pointers and
 //! another identifier, in a position where a declaration is legal, is a
 //! declaration. It is wrong for `a * b;` where both are variables, and the
 //! consequence of being wrong is nil.
@@ -604,7 +600,7 @@ impl Parser<'_> {
     /// Consume a balanced bracket group starting at the cursor's opener.
     ///
     /// The tool for every construct with no control flow and no lowering
-    /// consequence --- an attribute, an `asm` operand list, a parameter list, a
+    /// consequence --- an attribute, an `asm` operand list, a parameter declaration, a
     /// `struct` body, a `_Generic` selection. The tokens land in whatever node
     /// is open, so `REQ-GEN-2` still holds and a later consumer can re-read
     /// them; what is skipped is writing a grammar for them.
@@ -613,9 +609,10 @@ impl Parser<'_> {
     /// is the right call wherever the group's own brackets are the only thing
     /// that can end it: a `struct` body, a `sizeof` type name, a `typeof`
     /// operand. A construct that also has a *grammatical* terminator --- a
-    /// parameter list, which a function body's `{` ends whether or not the `)`
-    /// arrived --- must pass that terminator instead, or a single missing
-    /// closer costs the rest of the file.
+    /// declarator suffix, which a function body's `{` ends whether or not its
+    /// closer arrived --- must pass that terminator instead, or a single
+    /// missing closer costs the rest of the file. Parameter lists use their
+    /// specialized declaration-boundary scanner with the same rule.
     pub(super) fn eat_balanced(&mut self) {
         self.eat_balanced_until(&SyncSet::EMPTY);
     }

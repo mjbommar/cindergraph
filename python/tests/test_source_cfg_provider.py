@@ -133,6 +133,44 @@ def test_the_graph_matches_the_serialized_form_node_for_node() -> None:
     assert sorted(n.id for n in graph.nodes if n.is_exitpoint) == serialized["exit"]
 
 
+def test_decompiled_provider_expands_local_control_flow_macros() -> None:
+    """The DecBench-facing adapter, unlike the native parser, preprocesses."""
+    _require_networkx()
+    if not (__import__("shutil").which("gcc") or __import__("shutil").which("cc")):
+        pytest.skip("no host C preprocessor")
+    text = """
+#define ARMS(X) X(0) X(1)
+#define CASE(n) case n: return n;
+int f(int x) { switch (x) { ARMS(CASE) default: return -1; } }
+"""
+    native = parity_cfgs(text)["f"]
+    adapted = cfgs_from_decompiled(text)["f"]
+    assert adapted.number_of_nodes() == 4
+    assert adapted.number_of_edges() == 3
+    assert (len(native["nodes"]), len(native["edges"])) != (4, 3), (
+        "the native parser intentionally does not expand the two generated cases"
+    )
+
+
+def test_decompiled_provider_selects_one_conditional_compilation_arm() -> None:
+    _require_networkx()
+    if not (__import__("shutil").which("gcc") or __import__("shutil").which("cc")):
+        pytest.skip("no host C preprocessor")
+    text = """
+int f(void) {
+#if defined(__x86_64__)
+  int x = 1;
+#else
+  int x = 2;
+#endif
+  return x;
+}
+"""
+    graph = cfgs_from_decompiled(text)["f"]
+    assert graph.number_of_nodes() == 1
+    assert graph.number_of_edges() == 0
+
+
 def test_isolated_blocks_survive_the_conversion() -> None:
     """A block named by no edge still reaches the graph.
 

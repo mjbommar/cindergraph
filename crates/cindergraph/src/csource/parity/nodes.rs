@@ -1,16 +1,12 @@
 //! F-9: which constructs cost Joern a CFG node, and which cost none.
 //!
-//! Spec: `docs/design/static-c-analysis/implementation-inventory.md` F-9, and
-//! `docs/design/static-c-analysis/joern-behavior.md` sections 1.2 and 4. Owned
-//! by stage S3 of `docs/design/static-c-analysis/roadmap.md`.
-//!
 //! Two halves, and the second one is the larger. The *expression* half is what
 //! the inventory describes: `&&`, `||` and `?:` are forks whose operator is
 //! itself a node, and a bare operand is not. The *jump* half is the converse
 //! and is not in the inventory at all: `goto`, `break`, `continue` and every
 //! label --- ordinary, `case` and `default` --- cost Joern **nothing**, where
-//! S2 gives each of them a node. See [`is_jump_node`] for the corpus census
-//! that fixes that, and [`elide_jumps`] for why F-10 does not already absorb
+//! S2 gives each of them a node. See `is_jump_node` for the corpus census
+//! that fixes that, and `elide_jumps` for why F-10 does not already absorb
 //! them.
 //!
 //! # The rule, and the published functions that establish it
@@ -18,8 +14,8 @@
 //! Joern's CFG is a graph over CPG nodes in evaluation order, so a short-circuit
 //! operator is *itself* a node in addition to the fork it creates. Two further
 //! facts are not in the inventory's description of F-9 and were read off the
-//! published tree (`~/.cache/glaurung/decbench-full/tree`, `O0/bash`,
-//! `O0/base-passwd`); both change the node count, so both are load-bearing.
+//! research corpus (`O0/bash` and `O0/base-passwd`); both change the node
+//! count, so both are load-bearing.
 //!
 //! **A bare identifier or literal operand materializes no node.** Over 60
 //! published `O0` translation units, every `IDENTIFIER` CFG node has an
@@ -208,6 +204,12 @@ pub struct GranularityStats {
     pub elided: u32,
     /// Jump and jump-target nodes deleted because Joern has none (phase 4).
     pub jumps_elided: u32,
+    /// Redundant structural loop headers removed when an expression operator
+    /// is the loop's actual test in Joern's evaluation-order CFG.
+    pub loop_headers_elided: u32,
+    /// Structural headers removed from `for (;;)` loops, which have no test
+    /// expression and therefore no Joern CFG node.
+    pub empty_for_headers_elided: u32,
 }
 
 /// Rewrite one function's S2 graph to Joern's expression granularity.
@@ -225,7 +227,7 @@ pub struct GranularityStats {
 ///
 /// The returned graph does not carry [`Cfg::continue_targets`]: they exist so
 /// [`Cfg::validate`] can check `REQ-GEN-1`, and the parity layer's output is
-/// deliberately not a `REQ-GEN-1` graph (`requirements.md` section 0.0).
+/// deliberately not the general analysis graph.
 pub fn expression_granular(
     tree: &Tree,
     token_spans: &[Span],
@@ -234,10 +236,11 @@ pub fn expression_granular(
 ) -> (Cfg, GranularityStats) {
     let mut stats = GranularityStats::default();
     let regions = collect(tree, token_spans, body, cfg, &mut stats);
+    let empty_for_spans = empty_for_spans(tree, token_spans, body);
     let jumps = cfg.nodes().iter().any(|node| is_jump_node(node.kind()));
     // Staying free where neither half applies is deliberate: `Cfg`'s `PartialEq`
     // is over the edge *vector*, and rebuilding one through `Work` reorders it.
-    if regions.is_empty() && !jumps {
+    if regions.is_empty() && empty_for_spans.is_empty() && !jumps {
         return (cfg.clone(), stats);
     }
     let mut work = Work::from_cfg(cfg);
@@ -245,11 +248,106 @@ pub fn expression_granular(
     for region in &regions {
         nest(&mut work, region, &mut stats);
     }
+    elide_redundant_loop_headers(&mut work, &regions, &mut stats);
+    elide_empty_for_headers(&mut work, &empty_for_spans, &mut stats);
     for region in &regions {
         elide(tree, &mut work, region, &mut stats);
     }
     elide_jumps(&mut work, &mut stats);
     (work.finish(cfg.entry(), cfg.exit()), stats)
+}
+
+/// Spans of `for` statements whose condition clause is empty.
+fn empty_for_spans(tree: &Tree, token_spans: &[Span], body: NodeId) -> Vec<Span> {
+    tree.arena()
+        .preorder(body)
+        .filter(|&node| tag_of(tree, node) == Some(NodeTag::ForStmt))
+        .filter(|&node| {
+            tree.arena()
+                .children_iter(node)
+                .find(|&child| tag_of(tree, child) == Some(NodeTag::ForCond))
+                .is_some_and(|cond| tree.arena().child_count(cond) == 0)
+        })
+        .filter_map(|node| tree.arena().span(node, token_spans))
+        .collect()
+}
+
+/// Remove the non-evaluated header of `for (;;)`, preserving its real body
+/// successor and discarding S2's conservative direct-exit edge.
+fn elide_empty_for_headers(work: &mut Work, spans: &[Span], stats: &mut GranularityStats) {
+    for span in spans {
+        let header = (0..work.kinds.len()).find(|&index| {
+            work.alive[index]
+                && work.kinds[index] == NodeKind::LoopHeader
+                && work.spans[index].contains(span)
+        });
+        let Some(header) = header.map(|index| NodeId::new(index as u32)) else {
+            continue;
+        };
+        let Some(body) = work.succ[header.index()]
+            .iter()
+            .find(|out| out.kind == EdgeKind::True)
+            .map(|out| out.dst)
+        else {
+            continue;
+        };
+        let other_targets: Vec<NodeId> = work.succ[header.index()]
+            .iter()
+            .filter_map(|out| (out.dst != body).then_some(out.dst))
+            .collect();
+        for target in other_targets {
+            work.remove_edges(header, target);
+        }
+        if work.bypass(header) {
+            stats.empty_for_headers_elided = stats.empty_for_headers_elided.saturating_add(1);
+        }
+    }
+}
+
+/// Remove S2's conservative structural header from a short-circuit loop test.
+///
+/// The general CFG deliberately keeps both a [`NodeKind::LoopHeader`] and the
+/// expression operator for `while (a && b)`: its header has a direct exit edge
+/// so the graph remains a safe over-approximation. Joern's evaluation-order
+/// CFG has no such structural node. Entry and back edges reach `a`, whose false
+/// edge exits and whose true edge reaches `b`; the operator then selects the
+/// body or exit. Keeping both nodes in the parity projection adds one node and
+/// two edges and, more importantly, admits an exit path that evaluates neither
+/// operand.
+///
+/// A header belongs to a region only when it covers exactly the operator span
+/// and reaches the first operand. This avoids changing ordinary loop headers
+/// or a short-circuit expression merely nested inside a loop body.
+fn elide_redundant_loop_headers(work: &mut Work, regions: &[Region], stats: &mut GranularityStats) {
+    for region in regions {
+        let Some(&first) = region.ends.first() else {
+            continue;
+        };
+        let terminal_spans = work.spans[region.terminal.index()].clone();
+        let header = (0..work.kinds.len()).find(|&index| {
+            work.alive[index]
+                && work.kinds[index] == NodeKind::LoopHeader
+                && work.spans[index] == terminal_spans
+                && work.succ[index].iter().any(|out| out.dst == first)
+        });
+        let Some(header) = header.map(|index| NodeId::new(index as u32)) else {
+            continue;
+        };
+
+        // The header's other edge is S2's conservative direct exit. Once it is
+        // removed, ordinary bypass sends entry and loop-back predecessors to
+        // the first expression operand and preserves their back-edge flags.
+        let other_targets: Vec<NodeId> = work.succ[header.index()]
+            .iter()
+            .filter_map(|out| (out.dst != first).then_some(out.dst))
+            .collect();
+        for target in other_targets {
+            work.remove_edges(header, target);
+        }
+        if work.bypass(header) {
+            stats.loop_headers_elided = stats.loop_headers_elided.saturating_add(1);
+        }
+    }
 }
 
 /// [`expression_granular`] over every function graph of one translation unit.
@@ -948,6 +1046,42 @@ mod tests {
         (nodes, edges.len(), degrees)
     }
 
+    /// Local DecBench corpus `strops.c::str_cmp`, checked directly against
+    /// Joern 4.0.150.4. Joern has six blocks and seven edges: entry reaches the
+    /// first dereference, the two operands and `&&` implement the test, the
+    /// body returns to the first dereference, and false reaches the return.
+    /// There is no separate structural loop-header block.
+    #[test]
+    fn a_short_circuit_while_uses_the_expression_as_its_header() {
+        let text = "int str_cmp(const char *a, const char *b) { \
+                    while (*a && *a == *b) { a++; b++; } return *a - *b; }";
+        let (before, after, stats) = rewrite(text, "str_cmp");
+        assert_eq!(stats.loop_headers_elided, 1);
+        assert_ne!(projected(&before), projected(&after));
+        assert_eq!(
+            projected(&after),
+            published(6, &[(0, 3), (0, 4), (1, 0), (1, 5), (2, 1), (3, 1), (5, 0)]),
+            "entry and the back edge evaluate `*a`; no path skips the test"
+        );
+    }
+
+    /// A conditionless loop has no expression for Joern to materialize. The
+    /// internal `if` is the first block reached on entry and on the back edge;
+    /// only its true arm exits the loop.
+    #[test]
+    fn a_conditionless_for_has_no_structural_header() {
+        let text = "int f(int limit) { int i = 0; for (;;) { \
+                    if (i >= limit) break; i++; } return i; }";
+        let (before, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.empty_for_headers_elided, 1);
+        assert_ne!(projected(&before), projected(&after));
+        assert_eq!(
+            projected(&after),
+            published(4, &[(0, 1), (0, 2), (1, 0), (3, 0)]),
+            "Joern 4.0.150.4: entry and body reach the internal test directly"
+        );
+    }
+
     /// bash `strmatch`, `O0/bash/source_cfgs/bash.json`: 5 nodes, 8 edges? no
     /// --- 5 nodes and 5 edges, entry `[4]`, exit `[]`. Both operands of the
     /// `||` are `==` comparisons, so both materialize and Joern's shape is
@@ -1137,6 +1271,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_pure_indirect_store_may_follow_its_conditional_value() {
+        let text = include_str!("../../../tests/decompiler_fixtures/src/45_string_algorithms.c");
+        let sequenced = text.replace(
+            "*value = (int32_t)(negative ? -accumulator : accumulator);",
+            "int32_t selected = (int32_t)(negative ? -accumulator : accumulator);\n\
+             *value = selected;",
+        );
+        let (_, raw, _) = rewrite(text, "parse_decimal");
+        let (_, explicit, _) = rewrite(&sequenced, "parse_decimal");
+        assert_eq!(projected(&raw), projected(&explicit));
+        let (nodes, edges, _) = projected(&raw);
+        assert_eq!(
+            (nodes, edges),
+            (26, 35),
+            "the pure lvalue-address computation does not add a control alternative"
+        );
+    }
+
     /// base-passwd `xmalloc`, `O0/base-passwd/source_cfgs/update-passwd.json`,
     /// published as 6 nodes and 8 edges: the `joern-behavior.md` section 4
     /// canonical `&&`, both operands `== 0` comparisons. The rewrite must leave
@@ -1322,6 +1475,31 @@ mod tests {
     /// takes it. The published in/out degrees are `(0,2)`, `(1,1)`, `(1,0)`,
     /// `(1,0)` --- the `(1,1)` is that second `if`, which S2 reports at `(1,2)`.
     #[test]
+    fn an_indirect_dispatch_survives_parity_as_one_multiway_node() {
+        let text = "int f(int x) { static void *t[3] = {&&a, &&b, &&c}; \
+                    goto *t[x % 3]; a: return 1; b: return 2; c: return 3; }";
+        let (_, after, _) = rewrite(text, "f");
+        let dispatches: Vec<NodeId> = after
+            .nodes()
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.kind() == NodeKind::IndirectDispatch)
+            .map(|(index, _)| NodeId::new(index as u32))
+            .collect();
+        assert_eq!(dispatches.len(), 1);
+        assert_eq!(after.out_degree(dispatches[0]), 3);
+        assert_eq!(
+            after
+                .nodes()
+                .iter()
+                .filter(|node| node.kind() == NodeKind::Cond)
+                .count(),
+            0,
+            "parity does not reconstruct synthetic tests"
+        );
+    }
+
+    #[test]
     fn eliding_a_goto_gives_its_fork_back_the_right_out_degree() {
         let text = "void open_diag(long arg0, long arg1) {\n\
                     \x20   extern long sub_32ea0(long, long);\n\
@@ -1404,7 +1582,7 @@ mod tests {
     /// has none of those either, so a loop that uses them must not pay for
     /// them. Checked as a census rather than against one published function
     /// because the shape is the same rule as the two above; what this pins is
-    /// that the set in [`is_jump_node`] is applied to all five kinds.
+    /// that the set in `is_jump_node` is applied to all five kinds.
     #[test]
     fn break_and_continue_cost_no_node_either() {
         let text = "int f(int n) {\n\

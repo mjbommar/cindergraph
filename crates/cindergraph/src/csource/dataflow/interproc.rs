@@ -1,25 +1,26 @@
 //! Dependence that crosses a call, by summary rather than by inlining.
 //!
 //! The intraprocedural analysis in [`super::solve`] stops at the call: a call
-//! reads its arguments and defines nothing. That is safe and it is also the
-//! reason `reaches(source, sink)` --- the query a code property graph is
-//! actually used for --- cannot be asked. This module answers it.
+//! records argument uses but does not by itself model callee effects. This
+//! module adds parameter-to-return summaries and cross-call reachability.
+//! Caller-visible memory effects remain outside that model.
 //!
 //! # Summaries, not inlining
 //!
-//! For each function, compute once which parameters flow to the return value
-//! and which flow to which other parameter. A caller then *applies* the
+//! For each function, compute which parameters flow to the return value.
+//! Caller-visible pointee outputs are not yet modeled. A caller then *applies* the
 //! summary instead of re-analysing the callee.
 //!
 //! Inlining is easier to write and does not terminate on recursion. Summaries
 //! do, because the lattice is finite --- a summary is a set of (parameter,
 //! destination) pairs and there are finitely many --- so iterating over the
-//! call graph to a fixed point converges. `f` calling `g` calling `f` costs
-//! one extra round, not an infinite descent.
+//! call graph to a fixed point converges without recursive inlining. The caller
+//! worklist can revisit functions many times as dependencies propagate. A total
+//! evaluation budget bounds the work; exhaustion marks summaries incomplete.
 //!
 //! # Where this refuses, and why refusing is the point
 //!
-//! Three cases produce [`Flow::Unknown`] rather than a yes or a no:
+//! Sources of uncertainty include:
 //!
 //! * **An indirect call.** `p(x)` names no callee, and
 //!   [`super::super::metrics`]'s call graph deliberately contributes no edge
@@ -30,17 +31,25 @@
 //!   does not" would be a claim rather than an analysis. A curated table of
 //!   libc effects is the obvious next increment and deliberately not smuggled
 //!   in here.
-//! * **A recursion depth or work bound exceeded.** Bounded rather than
+//! * **A work bound exceeded.** Bounded rather than
 //!   unbounded, so a pathological call graph costs an `Unknown` and not a
 //!   hang.
+//! * **Recovery, unresolved bindings or memory coverage.** Incomplete local
+//!   analysis propagates to callers. Duplicate source names cannot select a
+//!   parameter identity, even for a source-equals-sink query.
+//!
+//! A known positive path may still yield [`Flow::Yes`] in an incomplete
+//! analysis. [`Flow::No`] requires the explored summaries to be complete;
+//! unsupported semantic cases not detected by those flags remain limitations.
 //!
 //! A caller that treats `Unknown` as `No` gets an unsound answer; the type
 //! exists so that mistake has to be written down.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::model::Binding;
 use super::DataFlow;
+use crate::csource::semantic::{FunctionId, SourceUnitId};
 
 /// Whether a value reaches somewhere.
 ///
@@ -82,29 +91,264 @@ impl Flow {
     }
 }
 
+/// How summaries model a named direct callee with no body in this snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExternalCallPolicy {
+    /// Preserve uncertainty; the safe default.
+    #[default]
+    Unknown,
+    /// Conservatively let every argument influence the return value while
+    /// retaining incomplete coverage for other effects.
+    TaintReturn,
+    /// Explicitly assume the callee is pure and its return is independent of
+    /// its arguments. This may produce complete negative answers.
+    AssumePureNoFlow,
+}
+
+impl ExternalCallPolicy {
+    /// Stable spelling used by public configuration and result metadata.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::TaintReturn => "taint_return",
+            Self::AssumePureNoFlow => "assume_pure_no_flow",
+        }
+    }
+}
+
+/// Why a reachability query could not prove either presence or absence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReachabilityUncertainty {
+    /// The source name has more than one recovered definition.
+    AmbiguousSource,
+    /// The source function was not defined in this snapshot.
+    MissingSource,
+    /// The sink function identity was not defined in this snapshot.
+    MissingSink,
+    /// Recovered arity was insufficient and the source summary was incomplete.
+    IncompleteArity,
+    /// A traversed call target has no summary in this snapshot.
+    MissingCallee,
+    /// A traversed call name has more than one possible body.
+    AmbiguousCallee,
+    /// A traversed summary has incomplete semantic coverage.
+    IncompleteSummary,
+}
+
+impl ReachabilityUncertainty {
+    /// Stable serialized spelling.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AmbiguousSource => "ambiguous_source",
+            Self::MissingSource => "missing_source",
+            Self::MissingSink => "missing_sink",
+            Self::IncompleteArity => "incomplete_arity",
+            Self::MissingCallee => "missing_callee",
+            Self::AmbiguousCallee => "ambiguous_callee",
+            Self::IncompleteSummary => "incomplete_summary",
+        }
+    }
+}
+
+/// One function/parameter state on an interprocedural may-path.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ReachabilityStep {
+    /// Exact function identity when the name resolved uniquely.
+    pub function_id: Option<FunctionId>,
+    /// Function whose formal parameter carries the value at this step.
+    pub function: String,
+    /// Zero-based formal parameter position.
+    pub parameter: u32,
+}
+
+/// Structured result of an interprocedural reachability query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reachability {
+    /// Three-valued compatibility verdict.
+    pub verdict: Flow,
+    /// Deterministic source-to-sink may-path when one was found.
+    pub path: Vec<ReachabilityStep>,
+    /// States explored before a negative or unknown result.
+    pub explored: Vec<ReachabilityStep>,
+    /// Stable reasons qualifying an unknown result.
+    pub uncertainty: Vec<ReachabilityUncertainty>,
+}
+
 /// Where a value that entered a function can end up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Sink {
     /// The function's return value.
     Return,
     /// Through the pointer passed as parameter `n`, which the callee may write.
+    /// Reserved for future memory summaries; not currently emitted.
     Parameter(u32),
+}
+
+/// One component of a caller-visible path below a formal pointee.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MemoryEffectPath {
+    /// A named record member.
+    Field(String),
+    /// The conservative summary of all array elements.
+    Elements,
+}
+
+/// Direction of one caller-visible memory effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ParameterMemoryEffectKind {
+    Read,
+    Write,
+}
+
+impl ParameterMemoryEffectKind {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+        }
+    }
+}
+
+/// A read or write below one formal pointer's incoming value.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ParameterMemoryEffect {
+    pub parameter: u32,
+    pub path: Vec<MemoryEffectPath>,
+    pub kind: ParameterMemoryEffectKind,
+    pub precision: super::MemoryAccessPrecision,
 }
 
 /// What one function does with the values passed to it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Summary {
+    /// Exact source snapshot from which this summary was derived.
+    pub source_id: SourceUnitId,
+    /// Owning function, or `None` when duplicate names make it ambiguous.
+    pub function_id: Option<FunctionId>,
+    /// Semantic result contract revision.
+    pub analysis_revision: u32,
     /// The function's name.
     pub name: String,
-    /// How many parameters it declares.
+    /// How many parameters it declares. For ambiguous duplicate definitions,
+    /// the maximum recovered arity is reported, not a selected signature.
     pub parameters: u32,
     /// `(parameter index, sink)` pairs: this parameter's value can reach that
     /// sink.
     pub flows: Vec<(u32, Sink)>,
+    /// Caller-visible reads and writes rooted in formal pointees.
+    pub memory_effects: Vec<ParameterMemoryEffect>,
+    /// Whether the listed memory effects completely cover this body.
+    pub memory_effects_complete: bool,
     /// Whether the body contained something this analysis could not resolve,
     /// so a caller applying this summary inherits an `Unknown` rather than a
     /// clean `No`.
     pub complete: bool,
+}
+
+fn direct_memory_effects(flow: &DataFlow) -> Vec<ParameterMemoryEffect> {
+    let mut effects = Vec::new();
+    for access in &flow.memory_accesses {
+        let mut current = access.region;
+        let mut path = Vec::new();
+        let parameter = loop {
+            match flow
+                .memory_regions
+                .get(current.0 as usize)
+                .map(|region| &region.kind)
+            {
+                Some(super::MemoryRegionKind::ParameterPointee { parameter, .. }) => {
+                    break Some(*parameter);
+                }
+                Some(super::MemoryRegionKind::Field { base, member, .. }) => {
+                    path.push(MemoryEffectPath::Field(member.clone()));
+                    current = *base;
+                }
+                Some(super::MemoryRegionKind::Elements { base }) => {
+                    path.push(MemoryEffectPath::Elements);
+                    current = *base;
+                }
+                _ => break None,
+            }
+        };
+        let Some(parameter) = parameter else { continue };
+        path.reverse();
+        effects.push(ParameterMemoryEffect {
+            parameter,
+            path,
+            kind: match access.kind {
+                super::MemoryAccessKind::Read => ParameterMemoryEffectKind::Read,
+                super::MemoryAccessKind::Write => ParameterMemoryEffectKind::Write,
+            },
+            precision: access.precision,
+        });
+    }
+    effects.sort();
+    effects.dedup();
+    effects
+}
+
+fn composed_memory_effects(
+    flow: &DataFlow,
+    known: &BTreeMap<String, Summary>,
+) -> (Vec<ParameterMemoryEffect>, bool) {
+    let mut effects = direct_memory_effects(flow);
+    let modeled_call_spans = flow
+        .call_memory_arguments
+        .iter()
+        .map(|argument| argument.call_span)
+        .collect::<BTreeSet<_>>();
+    let mut complete = !flow.semantic_issues.iter().any(|issue| {
+        issue.kind == super::SemanticIssueKind::UnknownMemoryEffect
+            && issue
+                .span
+                .is_none_or(|span| !modeled_call_spans.contains(&span))
+    });
+
+    for call in &flow.calls {
+        let arguments = flow
+            .call_memory_arguments
+            .iter()
+            .filter(|argument| argument.call_span == call.span)
+            .collect::<Vec<_>>();
+        if arguments.is_empty() {
+            continue;
+        }
+        let Some(callee) = call.callee.as_ref().and_then(|name| known.get(name)) else {
+            complete = false;
+            continue;
+        };
+        if !callee.memory_effects_complete {
+            complete = false;
+        }
+        for callee_effect in &callee.memory_effects {
+            let matching = arguments
+                .iter()
+                .filter(|argument| argument.argument == callee_effect.parameter)
+                .copied()
+                .collect::<Vec<_>>();
+            if matching.is_empty() {
+                complete = false;
+                continue;
+            }
+            for argument in matching {
+                if !argument.complete {
+                    complete = false;
+                }
+                for &parameter in &argument.parameter_origins {
+                    effects.push(ParameterMemoryEffect {
+                        parameter,
+                        path: callee_effect.path.clone(),
+                        kind: callee_effect.kind,
+                        precision: super::MemoryAccessPrecision::MayAlias,
+                    });
+                }
+            }
+        }
+    }
+    effects.sort();
+    effects.dedup();
+    (effects, complete)
 }
 
 impl Summary {
@@ -118,7 +362,11 @@ impl Summary {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Summaries {
     by_name: BTreeMap<String, Summary>,
+    by_id: BTreeMap<FunctionId, Summary>,
+    external_by_name: BTreeMap<String, Summary>,
     calls: BTreeMap<String, Vec<(u32, String, u32)>>,
+    calls_by_id: BTreeMap<FunctionId, Vec<(u32, String, u32)>>,
+    ambiguous: BTreeSet<String>,
 }
 
 impl Summaries {
@@ -127,48 +375,90 @@ impl Summaries {
         self.by_name.get(name)
     }
 
-    /// Every summary, in name order.
+    /// Look up either a source-defined function or an external model.
+    ///
+    /// External models are deliberately not returned by [`Self::iter`] or
+    /// counted by [`Self::len`]: they are assumptions attached to this
+    /// snapshot, not functions recovered from its source.
+    pub(crate) fn lookup(&self, name: &str) -> Option<&Summary> {
+        self.by_name
+            .get(name)
+            .or_else(|| self.external_by_name.get(name))
+    }
+
+    /// The summary of one exact function in this source snapshot.
+    pub fn get_by_id(&self, id: FunctionId) -> Option<&Summary> {
+        self.by_id.get(&id)
+    }
+
+    /// Whether `name` has more than one recovered definition.
+    pub fn is_ambiguous(&self, name: &str) -> bool {
+        self.ambiguous.contains(name)
+    }
+
+    /// Every source-defined summary, in function-ID order.
     pub fn iter(&self) -> impl Iterator<Item = &Summary> {
-        self.by_name.values()
+        self.by_id.values()
     }
 
     /// How many functions are summarized.
     pub fn len(&self) -> usize {
-        self.by_name.len()
+        self.by_id.len()
     }
 
     /// Whether nothing was summarized.
     pub fn is_empty(&self) -> bool {
-        self.by_name.is_empty()
+        self.by_id.is_empty()
     }
 }
 
-/// The most rounds the fixed point may take.
+/// Maximum function evaluations per input function, across the worklist.
 ///
 /// A summary only ever grows --- a flow is added, never removed --- so the
 /// iteration is monotone over a finite lattice and terminates on its own. This
 /// bounds the pathological case rather than the normal one, and a run that hits
 /// it marks every summary incomplete rather than reporting a clean answer from
 /// a half-finished analysis.
-const MAX_ROUNDS: usize = 16;
+const EVALUATIONS_PER_FUNCTION: usize = 16;
 
 /// Compute a summary for every function in `flows`, to a fixed point.
 ///
 /// `flows` is the per-function analysis [`super::analyze`] already produced;
 /// this adds nothing to it and only reads.
 pub fn summarize(flows: &[DataFlow]) -> Summaries {
+    summarize_with_policy(flows, ExternalCallPolicy::Unknown)
+}
+
+/// Compute summaries with an explicit policy for undefined direct callees.
+pub fn summarize_with_policy(flows: &[DataFlow], external_calls: ExternalCallPolicy) -> Summaries {
+    let provenance: Vec<_> = flows
+        .iter()
+        .map(super::provenance::TraceIndex::new)
+        .collect();
     let mut by_name: BTreeMap<String, Summary> = BTreeMap::new();
     let mut ambiguous = BTreeSet::new();
+    let mut active_intrinsics = BTreeMap::new();
+    let source_names: BTreeSet<String> = flows.iter().map(|flow| flow.name.clone()).collect();
     for flow in flows {
+        let parameters = parameter_count(flow).max(
+            by_name
+                .get(&flow.name)
+                .map_or(0, |summary| summary.parameters),
+        );
         if by_name.contains_key(&flow.name) {
             ambiguous.insert(flow.name.clone());
         }
         by_name.insert(
             flow.name.clone(),
             Summary {
+                source_id: flow.source_id,
+                function_id: Some(flow.function_id),
+                analysis_revision: flow.analysis_revision,
                 name: flow.name.clone(),
-                parameters: parameter_count(flow),
+                parameters,
                 flows: Vec::new(),
+                memory_effects: direct_memory_effects(flow),
+                memory_effects_complete: flow.memory_complete,
                 complete: true,
             },
         );
@@ -176,36 +466,133 @@ pub fn summarize(flows: &[DataFlow]) -> Summaries {
     // Name-based queries cannot choose between recovered duplicate definitions.
     // Do not combine facts from different bodies into one positive answer.
     for name in &ambiguous {
-        by_name.get_mut(name).expect("inserted above").complete = false;
+        let summary = by_name.get_mut(name).expect("inserted above");
+        summary.complete = false;
+        summary.function_id = None;
     }
-
-    let mut rounds = 0usize;
-    loop {
-        rounds += 1;
-        let mut changed = false;
+    for (name, parameters, returns_first) in known_builtins() {
+        if !by_name.contains_key(*name) {
+            active_intrinsics.insert((*name).to_owned(), *parameters);
+            by_name.insert(
+                (*name).to_owned(),
+                Summary {
+                    source_id: SourceUnitId::default(),
+                    function_id: None,
+                    analysis_revision: crate::csource::semantic::ANALYSIS_REVISION,
+                    name: (*name).to_owned(),
+                    parameters: *parameters,
+                    flows: returns_first
+                        .then_some((0, Sink::Return))
+                        .into_iter()
+                        .collect(),
+                    memory_effects: Vec::new(),
+                    memory_effects_complete: true,
+                    complete: true,
+                },
+            );
+        }
+    }
+    if external_calls != ExternalCallPolicy::Unknown {
+        let mut externals: BTreeMap<String, u32> = BTreeMap::new();
         for flow in flows {
-            if ambiguous.contains(&flow.name) {
-                continue;
-            }
-            let (found, complete) = local_flows(flow, &by_name);
-            let Some(summary) = by_name.get_mut(&flow.name) else {
-                continue;
-            };
-            for pair in found {
-                if !summary.flows.contains(&pair) {
-                    summary.flows.push(pair);
-                    changed = true;
+            for call in &flow.calls {
+                let Some(name) = &call.callee else { continue };
+                if !by_name.contains_key(name) {
+                    let arity = call.arguments.len() as u32;
+                    externals
+                        .entry(name.clone())
+                        .and_modify(|known| *known = (*known).max(arity))
+                        .or_insert(arity);
                 }
             }
-            if summary.complete != complete {
-                summary.complete = complete;
+        }
+        for (name, parameters) in externals {
+            let (flows, complete) = match external_calls {
+                ExternalCallPolicy::TaintReturn => (
+                    (0..parameters).map(|index| (index, Sink::Return)).collect(),
+                    false,
+                ),
+                ExternalCallPolicy::AssumePureNoFlow => (Vec::new(), true),
+                ExternalCallPolicy::Unknown => unreachable!(),
+            };
+            by_name.insert(
+                name.clone(),
+                Summary {
+                    source_id: SourceUnitId::default(),
+                    function_id: None,
+                    analysis_revision: crate::csource::semantic::ANALYSIS_REVISION,
+                    name,
+                    parameters,
+                    flows,
+                    memory_effects: Vec::new(),
+                    memory_effects_complete: complete,
+                    complete,
+                },
+            );
+        }
+    }
+
+    let mut callers: BTreeMap<&str, BTreeSet<usize>> = BTreeMap::new();
+    for (index, flow) in flows.iter().enumerate() {
+        for call in &flow.calls {
+            if let Some(callee) = call.callee.as_deref() {
+                callers.entry(callee).or_default().insert(index);
+            }
+        }
+    }
+    let mut pending: VecDeque<usize> = (0..flows.len()).collect();
+    let mut queued = vec![true; flows.len()];
+    let mut evaluations = 0usize;
+    while let Some(index) = pending.pop_front() {
+        queued[index] = false;
+        let flow = &flows[index];
+        if ambiguous.contains(&flow.name) {
+            continue;
+        }
+        evaluations += 1;
+        let mut changed = false;
+        let (memory_effects, memory_effects_complete) = composed_memory_effects(flow, &by_name);
+        let (found, complete) = local_flows(
+            flow,
+            &provenance[index],
+            &by_name,
+            &active_intrinsics,
+            memory_effects_complete,
+        );
+        let Some(summary) = by_name.get_mut(&flow.name) else {
+            continue;
+        };
+        for pair in found {
+            if !summary.flows.contains(&pair) {
+                summary.flows.push(pair);
                 changed = true;
             }
         }
-        if !changed {
-            break;
+        for effect in memory_effects {
+            if !summary.memory_effects.contains(&effect) {
+                summary.memory_effects.push(effect);
+                changed = true;
+            }
         }
-        if rounds >= MAX_ROUNDS {
+        if summary.memory_effects_complete != memory_effects_complete {
+            summary.memory_effects_complete = memory_effects_complete;
+            changed = true;
+        }
+        if summary.complete != complete {
+            summary.complete = complete;
+            changed = true;
+        }
+        if changed {
+            for &caller in callers.get(flow.name.as_str()).into_iter().flatten() {
+                if !queued[caller] {
+                    queued[caller] = true;
+                    pending.push_back(caller);
+                }
+            }
+        }
+        if !pending.is_empty()
+            && evaluations >= flows.len().saturating_mul(EVALUATIONS_PER_FUNCTION)
+        {
             // Did not converge in the bound. Every summary becomes incomplete,
             // so a caller gets `Unknown` rather than a confident answer from a
             // half-finished fixed point.
@@ -219,20 +606,31 @@ pub fn summarize(flows: &[DataFlow]) -> Summaries {
     for summary in by_name.values_mut() {
         summary.flows.sort_unstable();
         summary.flows.dedup();
+        summary.memory_effects.sort();
+        summary.memory_effects.dedup();
     }
     let mut calls = BTreeMap::new();
-    for flow in flows {
-        if ambiguous.contains(&flow.name) {
+    let mut calls_by_id = BTreeMap::new();
+    for (flow_index, flow) in flows.iter().enumerate() {
+        // No direct call can consume a transfer. Avoid a full provenance
+        // traversal per parameter just to iterate an empty destination set.
+        if !flow.calls.iter().any(|call| call.callee.is_some()) {
+            calls_by_id.insert(flow.function_id, Vec::new());
+            if !ambiguous.contains(&flow.name) {
+                calls.insert(flow.name.clone(), Vec::new());
+            }
             continue;
         }
         let mut transfers = Vec::new();
-        for (position, parameter) in flow
+        for (position, (definition_index, _parameter)) in flow
             .definitions
             .iter()
-            .filter(|d| d.kind == super::DefKind::Parameter)
+            .enumerate()
+            .filter(|(_, definition)| definition.kind == super::DefKind::Parameter)
             .enumerate()
         {
-            let uses = super::provenance::uses(flow, parameter.binding, &by_name);
+            let uses =
+                super::provenance::uses(flow, &provenance[flow_index], definition_index, &by_name);
             for call in &flow.calls {
                 let Some(callee) = &call.callee else { continue };
                 for (argument, span) in call.argument_spans.iter().enumerate() {
@@ -244,9 +642,86 @@ pub fn summarize(flows: &[DataFlow]) -> Summaries {
         }
         transfers.sort();
         transfers.dedup();
-        calls.insert(flow.name.clone(), transfers);
+        calls_by_id.insert(flow.function_id, transfers.clone());
+        if !ambiguous.contains(&flow.name) {
+            calls.insert(flow.name.clone(), transfers);
+        }
     }
-    Summaries { by_name, calls }
+    let mut by_id = BTreeMap::new();
+    for (index, flow) in flows.iter().enumerate() {
+        let mut summary = if !ambiguous.contains(&flow.name) {
+            by_name.get(&flow.name).cloned().unwrap_or_default()
+        } else {
+            let (memory_effects, memory_effects_complete) = composed_memory_effects(flow, &by_name);
+            let (found, complete) = local_flows(
+                flow,
+                &provenance[index],
+                &by_name,
+                &active_intrinsics,
+                memory_effects_complete,
+            );
+            Summary {
+                source_id: flow.source_id,
+                function_id: Some(flow.function_id),
+                analysis_revision: flow.analysis_revision,
+                name: flow.name.clone(),
+                parameters: parameter_count(flow),
+                flows: found,
+                memory_effects,
+                memory_effects_complete,
+                complete,
+            }
+        };
+        summary.function_id = Some(flow.function_id);
+        summary.flows.sort_unstable();
+        summary.flows.dedup();
+        by_id.insert(flow.function_id, summary);
+    }
+    // Intrinsic and external summaries are call-site knowledge, not functions
+    // recovered from this source. Keep external models privately so queries
+    // apply the same policy as summary construction without exposing invented
+    // source functions through `iter` or `get`.
+    let external_by_name = by_name
+        .iter()
+        .filter(|(name, _)| !source_names.contains(*name) && !active_intrinsics.contains_key(*name))
+        .map(|(name, summary)| (name.clone(), summary.clone()))
+        .collect();
+    by_name.retain(|name, _| source_names.contains(name));
+    Summaries {
+        by_name,
+        by_id,
+        external_by_name,
+        calls,
+        calls_by_id,
+        ambiguous,
+    }
+}
+
+fn known_builtins() -> &'static [(&'static str, u32, bool)] {
+    &[
+        ("__builtin_constant_p", 1, false),
+        ("__builtin_expect", 2, true),
+        ("__builtin_expect_with_probability", 3, true),
+        ("__builtin_bswap16", 1, true),
+        ("__builtin_bswap32", 1, true),
+        ("__builtin_bswap64", 1, true),
+        ("__builtin_bswap128", 1, true),
+        ("__builtin_popcount", 1, true),
+        ("__builtin_popcountl", 1, true),
+        ("__builtin_popcountll", 1, true),
+        ("__builtin_parity", 1, true),
+        ("__builtin_parityl", 1, true),
+        ("__builtin_parityll", 1, true),
+        ("__builtin_clz", 1, true),
+        ("__builtin_clzl", 1, true),
+        ("__builtin_clzll", 1, true),
+        ("__builtin_ctz", 1, true),
+        ("__builtin_ctzl", 1, true),
+        ("__builtin_ctzll", 1, true),
+        ("__builtin_ffs", 1, true),
+        ("__builtin_ffsl", 1, true),
+        ("__builtin_ffsll", 1, true),
+    ]
 }
 
 /// How many parameters `flow`'s function declares.
@@ -269,9 +744,23 @@ fn parameter_count(flow: &DataFlow) -> u32 {
 /// anywhere before a return, which made `int b(int y) { return a(y); }` flow
 /// even when `a` returns a constant --- an answer that is right by accident and
 /// wrong in general.
-fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32, Sink)>, bool) {
+fn local_flows(
+    flow: &DataFlow,
+    provenance: &super::provenance::TraceIndex,
+    known: &BTreeMap<String, Summary>,
+    active_intrinsics: &BTreeMap<String, u32>,
+    memory_effects_complete: bool,
+) -> (Vec<(u32, Sink)>, bool) {
     let mut found: Vec<(u32, Sink)> = Vec::new();
-    let mut complete = flow.memory_complete;
+    // Unresolved bindings include globals. Their local edges remain useful,
+    // but this summary model has no global input/output slots to transfer
+    // effects between callees and callers. Do not certify their absence.
+    let mut complete = flow.effects_complete
+        && memory_effects_complete
+        && flow.vla_complete
+        && flow.control_targets_complete
+        && flow.recovery_free
+        && flow.unresolved_bindings.is_empty();
 
     let call_sites = flow.call_sites();
     for site in &call_sites {
@@ -279,7 +768,10 @@ fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32,
             // An indirect call: no name, so no summary can be applied.
             complete = false;
         } else if let Some(name) = &site.callee {
-            if !known.get(name).is_some_and(|summary| summary.complete) {
+            let wrong_intrinsic_arity = active_intrinsics
+                .get(name)
+                .is_some_and(|expected| site.arguments.len() as u32 != *expected);
+            if wrong_intrinsic_arity || !known.get(name).is_some_and(|summary| summary.complete) {
                 // Missing and incomplete callees both leave unknown effects.
                 // Completeness must propagate through recursion and call chains,
                 // not just one step beyond the missing definition.
@@ -288,36 +780,49 @@ fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32,
         }
     }
 
-    for index in 0..parameter_count(flow) {
-        let Some(parameter) = flow
-            .definitions
-            .iter()
-            .filter(|d| d.kind == super::DefKind::Parameter)
-            .nth(index as usize)
-        else {
-            continue;
-        };
-        let binding = parameter.binding;
+    for (index, (definition_index, parameter)) in flow
+        .definitions
+        .iter()
+        .enumerate()
+        .filter(|(_, definition)| definition.kind == super::DefKind::Parameter)
+        .enumerate()
+    {
+        let index = index as u32;
 
         // Direct: the parameter itself, or a local carrying it, is returned.
-        if returns_binding(flow, binding, &call_sites, known) {
+        if returns_binding(flow, provenance, definition_index, &call_sites, known)
+            || incoming_parameter_memory_reaches_return(flow, parameter.binding)
+        {
             found.push((index, Sink::Return));
         }
 
-        // Escaping: `&p` handed to something means the callee may write
-        // through it, so a value here can reach whatever that names.
-        if flow
-            .definitions
-            .iter()
-            .any(|d| d.binding == binding && d.kind == super::DefKind::AddressTaken)
-        {
-            found.push((index, Sink::Parameter(index)));
-        }
+        // Address-taking here refers to callee-local parameter storage, not
+        // the caller's pointee. It cannot justify a Parameter output flow.
+        // Real pointee effects require a separate interprocedural memory model.
     }
 
     found.sort_unstable();
     found.dedup();
     (found, complete)
+}
+
+fn incoming_parameter_memory_reaches_return(flow: &DataFlow, binding: Binding) -> bool {
+    flow.memory_edges.iter().any(|edge| {
+        let Some(definition) = flow.memory_definitions.get(edge.definition as usize) else {
+            return false;
+        };
+        if definition.kind != super::MemoryDefinitionKind::IncomingParameter
+            || flow.memory_region_root_binding(definition.region) != Some(binding)
+        {
+            return false;
+        }
+        let Some(use_) = flow.memory_uses.get(edge.use_ as usize) else {
+            return false;
+        };
+        flow.return_spans
+            .iter()
+            .any(|span| span.lo <= use_.span.lo && use_.span.hi <= span.hi)
+    })
 }
 
 /// Whether a value in `binding` reaches a `return` in this function.
@@ -327,11 +832,12 @@ fn local_flows(flow: &DataFlow, known: &BTreeMap<String, Summary>) -> (Vec<(u32,
 /// result is itself returned.
 fn returns_binding(
     flow: &DataFlow,
-    binding: Binding,
+    provenance: &super::provenance::TraceIndex,
+    parameter_definition: usize,
     _call_sites: &[CallSite],
     known: &BTreeMap<String, Summary>,
 ) -> bool {
-    super::provenance::returns(flow, binding, known)
+    super::provenance::returns(flow, provenance, parameter_definition, known)
 }
 
 /// One call in a function body, reduced to what a summary needs.
@@ -345,8 +851,6 @@ pub struct CallSite {
     /// [`Binding::FREE`], which no real binding equals, so it neither
     /// propagates nor blocks.
     pub arguments: Vec<Binding>,
-    /// Bindings the call's result is assigned to.
-    pub results: Vec<Binding>,
     /// Whether the call's result is itself returned.
     pub result_is_returned: bool,
 }
@@ -358,39 +862,249 @@ pub struct CallSite {
 /// does not define, or a bound --- see the module docs on why that is a
 /// separate answer from `No`.
 pub fn reaches(summaries: &Summaries, source: &str, index: u32, sink: &str) -> Flow {
+    reaches_detailed(summaries, source, index, sink).verdict
+}
+
+/// Structured form of [`reaches`] with path and uncertainty evidence.
+pub fn reaches_detailed(
+    summaries: &Summaries,
+    source: &str,
+    index: u32,
+    sink: &str,
+) -> Reachability {
+    let result = |verdict, path, explored, uncertainty: BTreeSet<_>| Reachability {
+        verdict,
+        path,
+        explored,
+        uncertainty: uncertainty.into_iter().collect(),
+    };
+    // A name alone cannot select a parameter identity among duplicate bodies,
+    // even for the zero-length source == sink path.
+    if summaries.ambiguous.contains(source) {
+        return result(
+            Flow::Unknown,
+            Vec::new(),
+            Vec::new(),
+            [ReachabilityUncertainty::AmbiguousSource].into(),
+        );
+    }
     let Some(start) = summaries.get(source) else {
-        return Flow::Unknown;
+        return result(
+            Flow::Unknown,
+            Vec::new(),
+            Vec::new(),
+            [ReachabilityUncertainty::MissingSource].into(),
+        );
     };
     if index >= start.parameters {
-        return Flow::No;
+        // Recovery or duplicate definitions may have lost parameters. An
+        // incomplete summary's recovered arity cannot prove their absence.
+        // Until signature certainty is tracked separately, conservatively
+        // apply this to all incomplete summaries.
+        return if start.complete {
+            result(Flow::No, Vec::new(), Vec::new(), BTreeSet::new())
+        } else {
+            result(
+                Flow::Unknown,
+                Vec::new(),
+                Vec::new(),
+                [ReachabilityUncertainty::IncompleteArity].into(),
+            )
+        };
     }
     let mut seen = BTreeSet::new();
-    let mut pending = vec![(source.to_string(), index)];
-    let mut sound = true;
-    while let Some((name, position)) = pending.pop() {
+    let first = ReachabilityStep {
+        function_id: start.function_id,
+        function: source.to_string(),
+        parameter: index,
+    };
+    let mut pending = vec![(first.clone(), vec![first])];
+    let mut uncertainty = BTreeSet::new();
+    while let Some((step, path)) = pending.pop() {
+        let name = &step.function;
+        let position = step.parameter;
         if !seen.insert((name.clone(), position)) {
             continue;
         }
         if name == sink {
-            return Flow::Yes;
+            let explored = seen
+                .iter()
+                .map(|(function, parameter)| ReachabilityStep {
+                    function_id: summaries
+                        .lookup(function)
+                        .and_then(|summary| summary.function_id),
+                    function: function.clone(),
+                    parameter: *parameter,
+                })
+                .collect();
+            return result(Flow::Yes, path, explored, BTreeSet::new());
         }
-        let Some(summary) = summaries.get(&name) else {
-            sound = false;
+        let Some(summary) = summaries.lookup(name) else {
+            uncertainty.insert(ReachabilityUncertainty::MissingCallee);
             continue;
         };
-        sound &= summary.complete;
-        if let Some(transfers) = summaries.calls.get(&name) {
+        if !summary.complete {
+            uncertainty.insert(ReachabilityUncertainty::IncompleteSummary);
+        }
+        if let Some(transfers) = summaries.calls.get(name) {
             for (parameter, callee, argument) in transfers {
                 if *parameter == position {
-                    pending.push((callee.clone(), *argument));
+                    let next = ReachabilityStep {
+                        function_id: summaries
+                            .lookup(callee)
+                            .and_then(|summary| summary.function_id),
+                        function: callee.clone(),
+                        parameter: *argument,
+                    };
+                    let mut next_path = path.clone();
+                    next_path.push(next.clone());
+                    pending.push((next, next_path));
                 }
             }
         }
     }
-    if sound {
-        Flow::No
+    let explored = seen
+        .into_iter()
+        .map(|(function, parameter)| ReachabilityStep {
+            function_id: summaries
+                .lookup(&function)
+                .and_then(|summary| summary.function_id),
+            function,
+            parameter,
+        })
+        .collect();
+    if uncertainty.is_empty() {
+        result(Flow::No, Vec::new(), explored, uncertainty)
     } else {
-        Flow::Unknown
+        result(Flow::Unknown, Vec::new(), explored, uncertainty)
+    }
+}
+
+/// Identity-first reachability query that never selects a duplicate by name.
+pub fn reaches_by_id_detailed(
+    summaries: &Summaries,
+    source: FunctionId,
+    index: u32,
+    sink: FunctionId,
+) -> Reachability {
+    let result = |verdict, path, explored, uncertainty: BTreeSet<_>| Reachability {
+        verdict,
+        path,
+        explored,
+        uncertainty: uncertainty.into_iter().collect(),
+    };
+    let Some(start) = summaries.get_by_id(source) else {
+        return result(
+            Flow::Unknown,
+            Vec::new(),
+            Vec::new(),
+            [ReachabilityUncertainty::MissingSource].into(),
+        );
+    };
+    if summaries.get_by_id(sink).is_none() {
+        return result(
+            Flow::Unknown,
+            Vec::new(),
+            Vec::new(),
+            [ReachabilityUncertainty::MissingSink].into(),
+        );
+    }
+    if index >= start.parameters {
+        return if start.complete {
+            result(Flow::No, Vec::new(), Vec::new(), BTreeSet::new())
+        } else {
+            result(
+                Flow::Unknown,
+                Vec::new(),
+                Vec::new(),
+                [ReachabilityUncertainty::IncompleteArity].into(),
+            )
+        };
+    }
+
+    let first = ReachabilityStep {
+        function_id: Some(source),
+        function: start.name.clone(),
+        parameter: index,
+    };
+    let mut pending = vec![(source, index, vec![first])];
+    let mut seen = BTreeSet::new();
+    let mut uncertainty = BTreeSet::new();
+    while let Some((function_id, parameter, path)) = pending.pop() {
+        if !seen.insert((function_id, parameter)) {
+            continue;
+        }
+        if function_id == sink {
+            let explored = seen
+                .iter()
+                .filter_map(|(id, parameter)| {
+                    Some(ReachabilityStep {
+                        function_id: Some(*id),
+                        function: summaries.get_by_id(*id)?.name.clone(),
+                        parameter: *parameter,
+                    })
+                })
+                .collect();
+            return result(Flow::Yes, path, explored, BTreeSet::new());
+        }
+        let Some(summary) = summaries.get_by_id(function_id) else {
+            uncertainty.insert(ReachabilityUncertainty::MissingCallee);
+            continue;
+        };
+        if !summary.complete {
+            uncertainty.insert(ReachabilityUncertainty::IncompleteSummary);
+        }
+        for (formal, callee, argument) in summaries
+            .calls_by_id
+            .get(&function_id)
+            .into_iter()
+            .flatten()
+        {
+            if *formal != parameter {
+                continue;
+            }
+            if summaries.is_ambiguous(callee) {
+                uncertainty.insert(ReachabilityUncertainty::AmbiguousCallee);
+                continue;
+            }
+            let Some(callee_summary) = summaries.lookup(callee) else {
+                uncertainty.insert(ReachabilityUncertainty::MissingCallee);
+                continue;
+            };
+            let Some(callee_id) = callee_summary.function_id else {
+                // A complete external model has no body to traverse and no
+                // caller-to-source-function path. An incomplete model cannot
+                // justify that negative conclusion.
+                if !callee_summary.complete {
+                    uncertainty.insert(ReachabilityUncertainty::IncompleteSummary);
+                }
+                continue;
+            };
+            let step = ReachabilityStep {
+                function_id: Some(callee_id),
+                function: callee.clone(),
+                parameter: *argument,
+            };
+            let mut next_path = path.clone();
+            next_path.push(step);
+            pending.push((callee_id, *argument, next_path));
+        }
+    }
+
+    let explored = seen
+        .into_iter()
+        .filter_map(|(id, parameter)| {
+            Some(ReachabilityStep {
+                function_id: Some(id),
+                function: summaries.get_by_id(id)?.name.clone(),
+                parameter,
+            })
+        })
+        .collect();
+    if uncertainty.is_empty() {
+        result(Flow::No, Vec::new(), explored, uncertainty)
+    } else {
+        result(Flow::Unknown, Vec::new(), explored, uncertainty)
     }
 }
 
@@ -408,6 +1122,34 @@ mod tests {
         let s = summaries("int a(int x) { return x; }\nint b(int y) { return a(y); }");
         assert_eq!(s.len(), 2);
         assert!(s.get("a").is_some() && s.get("b").is_some());
+    }
+
+    #[test]
+    fn duplicate_names_keep_separate_function_id_summaries() {
+        let s = summaries("int f(void){return 0;} int f(int x){return x;}");
+        assert_eq!(s.len(), 2);
+        let first = s.get_by_id(FunctionId(0)).expect("first f");
+        let second = s.get_by_id(FunctionId(1)).expect("second f");
+        assert_eq!(first.function_id, Some(FunctionId(0)));
+        assert_eq!(first.parameters, 0);
+        assert!(first.flows.is_empty());
+        assert_eq!(second.function_id, Some(FunctionId(1)));
+        assert_eq!(second.parameters, 1);
+        assert!(second.flows_to(0, Sink::Return));
+        assert!(s.is_ambiguous("f"));
+        assert_eq!(s.get("f").expect("compatibility summary").function_id, None);
+    }
+
+    #[test]
+    fn identity_first_query_distinguishes_duplicate_source_bodies() {
+        let s =
+            summaries("int f(int x){return g(x);} int f(int x){return 0;} int g(int y){return y;}");
+        let first = reaches_by_id_detailed(&s, FunctionId(0), 0, FunctionId(2));
+        let second = reaches_by_id_detailed(&s, FunctionId(1), 0, FunctionId(2));
+        assert_eq!(first.verdict, Flow::Yes);
+        assert_eq!(second.verdict, Flow::No);
+        assert_eq!(first.path[0].function_id, Some(FunctionId(0)));
+        assert_eq!(first.path[1].function_id, Some(FunctionId(2)));
     }
 
     #[test]
@@ -466,6 +1208,44 @@ mod tests {
         // Unknown must never weaken to No: a search that could not see
         // everywhere has not proven absence.
         assert_eq!(Flow::Unknown.or(Flow::No), Flow::Unknown);
+    }
+
+    #[test]
+    fn a_detailed_positive_names_the_interprocedural_path() {
+        let s = summaries("int sink(int z){return z;} int f(int x){return sink(x);}");
+        let answer = reaches_detailed(&s, "f", 0, "sink");
+        assert_eq!(answer.verdict, Flow::Yes);
+        assert_eq!(
+            answer.path,
+            vec![
+                ReachabilityStep {
+                    function_id: Some(FunctionId(1)),
+                    function: "f".into(),
+                    parameter: 0,
+                },
+                ReachabilityStep {
+                    function_id: Some(FunctionId(0)),
+                    function: "sink".into(),
+                    parameter: 0,
+                },
+            ]
+        );
+        assert!(answer.uncertainty.is_empty());
+    }
+
+    #[test]
+    fn a_detailed_unknown_explains_the_missing_callee() {
+        let s = summaries("int f(int x){external(x);return 0;}");
+        let answer = reaches_detailed(&s, "f", 0, "sink");
+        assert_eq!(answer.verdict, Flow::Unknown);
+        assert!(answer
+            .uncertainty
+            .contains(&ReachabilityUncertainty::IncompleteSummary));
+        assert!(answer
+            .uncertainty
+            .contains(&ReachabilityUncertainty::MissingCallee));
+        assert!(answer.path.is_empty());
+        assert!(!answer.explored.is_empty());
     }
 }
 
@@ -544,6 +1324,114 @@ mod cross_call_tests {
             b.flows
         );
     }
+
+    #[test]
+    fn external_call_policy_is_explicit_and_transitive() {
+        let analyzed = analyze(concat!(
+            "extern int external(int);",
+            "int f(int x) { return external(x); }",
+            "int g(int y) { return f(y); }",
+        ))
+        .into_parts()
+        .0;
+
+        let unknown = summarize_with_policy(&analyzed, ExternalCallPolicy::Unknown);
+        for name in ["f", "g"] {
+            let summary = unknown.get(name).expect(name);
+            assert!(!summary.complete, "{name}: {summary:?}");
+            assert!(!summary.flows_to(0, Sink::Return), "{name}: {summary:?}");
+        }
+
+        let tainted = summarize_with_policy(&analyzed, ExternalCallPolicy::TaintReturn);
+        for name in ["f", "g"] {
+            let summary = tainted.get(name).expect(name);
+            assert!(!summary.complete, "{name}: {summary:?}");
+            assert!(summary.flows_to(0, Sink::Return), "{name}: {summary:?}");
+        }
+
+        let pure = summarize_with_policy(&analyzed, ExternalCallPolicy::AssumePureNoFlow);
+        for name in ["f", "g"] {
+            let summary = pure.get(name).expect(name);
+            assert!(summary.complete, "{name}: {summary:?}");
+            assert!(!summary.flows_to(0, Sink::Return), "{name}: {summary:?}");
+        }
+        assert!(
+            pure.get("external").is_none(),
+            "models are not source bodies"
+        );
+    }
+
+    #[test]
+    fn external_policy_also_qualifies_reachability_queries() {
+        let analyzed = analyze(concat!(
+            "extern int external(int);",
+            "int f(int x) { external(x); return 0; }",
+            "int sink(int z) { return z; }",
+        ))
+        .into_parts()
+        .0;
+
+        let unknown = summarize_with_policy(&analyzed, ExternalCallPolicy::Unknown);
+        assert_eq!(
+            reaches_by_id_detailed(&unknown, FunctionId(0), 0, FunctionId(1)).verdict,
+            Flow::Unknown
+        );
+
+        let tainted = summarize_with_policy(&analyzed, ExternalCallPolicy::TaintReturn);
+        assert_eq!(
+            reaches_by_id_detailed(&tainted, FunctionId(0), 0, FunctionId(1)).verdict,
+            Flow::Unknown
+        );
+
+        let pure = summarize_with_policy(&analyzed, ExternalCallPolicy::AssumePureNoFlow);
+        assert_eq!(
+            reaches_by_id_detailed(&pure, FunctionId(0), 0, FunctionId(1)).verdict,
+            Flow::No
+        );
+    }
+
+    #[test]
+    fn pure_value_builtins_have_narrow_intrinsic_summaries() {
+        for expression in [
+            "__builtin_expect(x, 1)",
+            "__builtin_expect_with_probability(x, 1, 0.9)",
+            "__builtin_bswap32(x)",
+            "__builtin_popcount(x)",
+            "__builtin_clz(x)",
+        ] {
+            let s = summaries(&format!("int f(unsigned x) {{ return {expression}; }}"));
+            assert_eq!(s.len(), 1, "intrinsics are not public functions");
+            let f = s.get("f").expect("f");
+            assert!(f.complete, "{expression}: {f:?}");
+            assert!(f.flows_to(0, Sink::Return), "{expression}: {f:?}");
+        }
+
+        for expression in [
+            "__builtin_not_a_real_intrinsic(x)",
+            "__builtin_add_overflow(x, 1, &out)",
+            "__builtin_expect(x)",
+            "__builtin_expect(x, 1, 2)",
+        ] {
+            let source = format!("int f(unsigned x) {{ unsigned out = 0; return {expression}; }}");
+            assert!(!summaries(&source).get("f").expect("f").complete);
+        }
+
+        let overridden = summaries(concat!(
+            "int __builtin_expect(int x, int expected) { return 0; }",
+            "int f(int x) { return __builtin_expect(x, 1); }",
+        ));
+        let f = overridden.get("f").expect("f");
+        assert!(f.complete, "{f:?}");
+        assert!(!f.flows_to(0, Sink::Return), "source body wins: {f:?}");
+
+        let constant_override = summaries(concat!(
+            "int __builtin_constant_p(int x) { return x; }",
+            "int f(int x) { return __builtin_constant_p(x); }",
+        ));
+        let f = constant_override.get("f").expect("f");
+        assert!(f.complete, "{f:?}");
+        assert!(f.flows_to(0, Sink::Return), "source body wins: {f:?}");
+    }
 }
 
 #[cfg(test)]
@@ -557,22 +1445,12 @@ mod corpus_tests {
     fn the_fixture_corpus_summarizes_consistently() {
         let root =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/decompiler_fixtures/src");
-        let Ok(entries) = std::fs::read_dir(&root) else {
-            return;
-        };
         let mut functions = 0usize;
         let mut summarized = 0usize;
         let mut flows = 0usize;
         let mut incomplete = 0usize;
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("c") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
+        for (path, text) in crate::test_corpus::sources(&root) {
             let analyzed = analyze(&text).into_parts().0;
             functions += analyzed.len();
             let summaries = summarize(&analyzed);

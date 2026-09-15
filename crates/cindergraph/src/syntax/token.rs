@@ -1,7 +1,5 @@
 //! `SB-3` --- the struct-of-arrays token buffer and its cursor.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 2.1 and 7.
-//!
 //! # Why two vectors instead of one
 //!
 //! A token here is a `u16` tag plus a `u32` byte offset. As an array of structs

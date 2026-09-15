@@ -1,7 +1,5 @@
 //! `SB-6` --- the parser event stream and its sinks.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 3 and 7.
-//!
 //! The parser never builds a tree. It appends to a flat [`Events`] buffer, and
 //! a [`Sink`] turns that buffer into whatever the caller wants: an arena tree
 //! ([`crate::syntax::tree::TreeSink`]), a census that counts nodes and builds

@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:17:52Z",
+  "scope": "C complex-part operator control-topology adjudication",
+  "semantic_basis": "replacing a straight-line arithmetic return expression changes values, not control-flow alternatives",
+  "population_sha256": "0cf6cf633eaedd332f144d7102586f98fc096220d83e526991e1e0abf21e3be5",
+  "summary": {
+    "functions": 5,
+    "cindergraph_control_topology_invariant": 5,
+    "providers_equal_after_replacement": 5
+  },
+  "functions": [
+    {
+      "function": "complex_multiply",
+      "source_equivalent_control_transform": "return ar;",
+      "raw": {
+        "cindergraph_nodes": 1,
+        "cindergraph_edges": 0,
+        "joern_nodes": 5,
+        "joern_edges": 6
+      },
+      "cindergraph_control_topology_invariant": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_equal_after_straight_line_return_replacement": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "function": "complex_add_conj",
+      "source_equivalent_control_transform": "return ar;",
+      "raw": {
+        "cindergraph_nodes": 1,
+        "cindergraph_edges": 0,
+        "joern_nodes": 5,
+        "joern_edges": 6
+      },
+      "cindergraph_control_topology_invariant": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_equal_after_straight_line_return_replacement": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "function": "complex_float_multiply",
+      "source_equivalent_control_transform": "return ar;",
+      "raw": {
+        "cindergraph_nodes": 1,
+        "cindergraph_edges": 0,
+        "joern_nodes": 5,
+        "joern_edges": 6
+      },
+      "cindergraph_control_topology_invariant": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_equal_after_straight_line_return_replacement": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "function": "complex_through_call",
+      "source_equivalent_control_transform": "return ar;",
+      "raw": {
+        "cindergraph_nodes": 1,
+        "cindergraph_edges": 0,
+        "joern_nodes": 5,
+        "joern_edges": 6
+      },
+      "cindergraph_control_topology_invariant": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_equal_after_straight_line_return_replacement": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "function": "complex_array_sum",
+      "source_equivalent_control_transform": "return count;",
+      "raw": {
+        "cindergraph_nodes": 10,
+        "cindergraph_edges": 12,
+        "joern_nodes": 14,
+        "joern_edges": 18
+      },
+      "cindergraph_control_topology_invariant": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_equal_after_straight_line_return_replacement": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    }
+  ]
+}

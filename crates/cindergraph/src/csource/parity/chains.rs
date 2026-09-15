@@ -18,8 +18,7 @@
 //!
 //! Joern has no anchor concept. `to_supergraph` merges `METHOD` and
 //! `METHOD_RETURN` into their neighbours like any other node, and the published
-//! corpus shows it directly. All three of these are in
-//! `~/.cache/glaurung/decbench-full/tree/O0`:
+//! corpus shows it directly. These examples come from its `O0` partition:
 //!
 //! * `base-passwd/source_cfgs/update-passwd.json` `xasprintf` --- one `return`,
 //!   so `METHOD_RETURN` has in-degree 1 and merges: published block 0 is
@@ -47,7 +46,7 @@
 //!
 //! Only the anchor conjunct. The predicate, the single `O(V + E)` sweep from
 //! chain heads, and the deterministic cycle break at the lowest id are the same
-//! as [`crate::syntax::cfg::coalesce`]'s, because every argument that module
+//! as `crate::syntax::cfg::coalesce`'s, because every argument that module
 //! makes for them --- the contractible edges form a functional graph, so the
 //! chains can be read off in one pass instead of contracting to an `O(V * E)`
 //! fixpoint --- turns on the degree conditions alone and is untouched by

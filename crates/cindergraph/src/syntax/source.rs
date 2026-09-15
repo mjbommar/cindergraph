@@ -1,7 +1,5 @@
 //! `SB-1` --- source files, spans and position mapping.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 2.3 and 7.
-
 use std::fmt;
 
 use crate::syntax::ids::Span;
@@ -312,8 +310,7 @@ mod tests {
     }
 
     /// A deliberately linear reference implementation used only to check
-    /// `SourceFile::line_col` against, per the SB-1 test requirement in
-    /// `docs/design/source-front-ends/substrate.md` section 7.
+    /// `SourceFile::line_col` against.
     fn naive_line_col(text: &str, offset: u32) -> LineCol {
         let offset = offset.min(text.len() as u32) as usize;
         let mut line = 1u32;

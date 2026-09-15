@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:13:52Z",
+  "scope": "source-equivalent __builtin_expect adjudication; no upstream interaction",
+  "semantic_basis": "__builtin_expect returns its first argument and changes branch prediction, not C control-flow alternatives",
+  "cindergraph": {
+    "hinted_nodes": 13,
+    "hinted_edges": 16,
+    "control_nodes": 13,
+    "control_edges": 16,
+    "role_isomorphic": true
+  },
+  "joern": {
+    "hinted_nodes": 17,
+    "hinted_edges": 26,
+    "control_nodes": 13,
+    "control_edges": 16,
+    "role_isomorphic": false
+  },
+  "providers_on_unhinted_control_role_isomorphic": true
+}

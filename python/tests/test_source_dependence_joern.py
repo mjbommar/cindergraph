@@ -102,6 +102,8 @@ def test_we_find_every_control_dependence_joern_finds(stem):
         pytest.skip(f"joern-cli not installed at {JOERN}")
     path = (
         Path(__file__).resolve().parents[2]
+        / "crates"
+        / "cindergraph"
         / "tests"
         / "decompiler_fixtures"
         / "src"

@@ -1,0 +1,2 @@
+# Mutation and controlled-damage fixtures preserve their exact malformed bytes.
+docs/benchmarks/corpus/** -whitespace

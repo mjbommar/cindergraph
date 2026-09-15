@@ -1,0 +1,709 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:07:46Z",
+  "scope": "local object-like macro call adjudication; no upstream interaction",
+  "provenance": {
+    "cindergraph_git_head": "edf2777abc99e1c3113b4f1d51fe021f31432538",
+    "cindergraph_worktree_dirty": true,
+    "cindergraph_source_sha256": "3aa6f0f55e8e98f3b7e7360d61e7e2b586cf79b0ac8ff5ea8cb1f23bf3e9adda",
+    "decbench_git_head": "f76dae075d4d82004fb21132b3f15e43b680e179",
+    "python": "3.12.13 (main, Mar 20 2026, 00:33:26) [Clang 22.1.1 ]",
+    "platform": "Linux-7.0.0-27-generic-x86_64-with-glibc2.43",
+    "cc": "cc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "pyjoern": "4.0.150.4",
+    "decbench": "1.1",
+    "networkx": "3.6.1"
+  },
+  "population": {
+    "translation_units": 12,
+    "functions": 18,
+    "sha256": "91e6e89abe9860bb336175f872dbdfd25c2f44543b96fde449f9bb23b2e93154"
+  },
+  "summary": {
+    "functions": 18,
+    "with_object_macro_calls_in_raw_joern": 18,
+    "calls_surviving_preprocessing": 0,
+    "cindergraph_invariant_under_preprocessing": 18,
+    "providers_equal_after_preprocessing": 16
+  },
+  "functions": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/103_computed_goto.c",
+      "function": "threaded_interpreter",
+      "object_macro_calls_in_raw_joern": [
+        "TOKEN_MAX"
+      ],
+      "object_macro_declarations": {
+        "TOKEN_MAX": "#define TOKEN_MAX 16"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 9.0,
+        "role_isomorphic": false
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_accumulate",
+      "object_macro_calls_in_raw_joern": [
+        "FLAT145_MAX_ELEMS",
+        "FLAT145_MAX_STEPS",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_BODY",
+        "FLAT145_S_BODY",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "FLAT145_MAX_ELEMS": "#define FLAT145_MAX_ELEMS 16",
+        "FLAT145_MAX_STEPS": "#define FLAT145_MAX_STEPS 256",
+        "FLAT145_S_ARM_A": "#define FLAT145_S_ARM_A 3",
+        "FLAT145_S_ARM_B": "#define FLAT145_S_ARM_B 4",
+        "FLAT145_S_BODY": "#define FLAT145_S_BODY 2",
+        "FLAT145_S_DONE": "#define FLAT145_S_DONE 6",
+        "FLAT145_S_ENTRY": "#define FLAT145_S_ENTRY 0",
+        "FLAT145_S_NEXT": "#define FLAT145_S_NEXT 5",
+        "FLAT145_S_TEST": "#define FLAT145_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 22.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_classify",
+      "object_macro_calls_in_raw_joern": [
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "FLAT145_S_ARM_A": "#define FLAT145_S_ARM_A 3",
+        "FLAT145_S_ARM_B": "#define FLAT145_S_ARM_B 4",
+        "FLAT145_S_DONE": "#define FLAT145_S_DONE 6",
+        "FLAT145_S_ENTRY": "#define FLAT145_S_ENTRY 0",
+        "FLAT145_S_NEXT": "#define FLAT145_S_NEXT 5",
+        "FLAT145_S_TEST": "#define FLAT145_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 22.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_gcd",
+      "object_macro_calls_in_raw_joern": [
+        "FLAT145_MAX_STEPS",
+        "FLAT145_S_BODY",
+        "FLAT145_S_BODY",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "FLAT145_MAX_STEPS": "#define FLAT145_MAX_STEPS 256",
+        "FLAT145_S_BODY": "#define FLAT145_S_BODY 2",
+        "FLAT145_S_DONE": "#define FLAT145_S_DONE 6",
+        "FLAT145_S_NEXT": "#define FLAT145_S_NEXT 5",
+        "FLAT145_S_TEST": "#define FLAT145_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 11.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_search",
+      "object_macro_calls_in_raw_joern": [
+        "FLAT145_MAX_ELEMS",
+        "FLAT145_MAX_STEPS",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_BODY",
+        "FLAT145_S_BODY",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_DONE",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST",
+        "FLAT145_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "FLAT145_MAX_ELEMS": "#define FLAT145_MAX_ELEMS 16",
+        "FLAT145_MAX_STEPS": "#define FLAT145_MAX_STEPS 256",
+        "FLAT145_S_ARM_A": "#define FLAT145_S_ARM_A 3",
+        "FLAT145_S_BODY": "#define FLAT145_S_BODY 2",
+        "FLAT145_S_DONE": "#define FLAT145_S_DONE 6",
+        "FLAT145_S_ENTRY": "#define FLAT145_S_ENTRY 0",
+        "FLAT145_S_NEXT": "#define FLAT145_S_NEXT 5",
+        "FLAT145_S_TEST": "#define FLAT145_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 22.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/150_obfuscation_composite.c",
+      "function": "obfuscated_digest",
+      "object_macro_calls_in_raw_joern": [
+        "COMP150_MAX_BYTES",
+        "COMP150_MAX_ROUNDS",
+        "COMP150_MAX_STEPS",
+        "COMP150_OPS",
+        "COMP150_S_DONE",
+        "COMP150_S_DONE",
+        "COMP150_S_DONE",
+        "COMP150_S_MIX",
+        "COMP150_S_MIX",
+        "COMP150_S_STEP",
+        "COMP150_S_STEP",
+        "COMP150_S_TEST",
+        "COMP150_S_TEST",
+        "COMP150_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "COMP150_MAX_BYTES": "#define COMP150_MAX_BYTES 16",
+        "COMP150_MAX_ROUNDS": "#define COMP150_MAX_ROUNDS 4",
+        "COMP150_MAX_STEPS": "#define COMP150_MAX_STEPS 512",
+        "COMP150_OPS": "#define COMP150_OPS 4",
+        "COMP150_S_DONE": "#define COMP150_S_DONE 6",
+        "COMP150_S_MIX": "#define COMP150_S_MIX 2",
+        "COMP150_S_STEP": "#define COMP150_S_STEP 5",
+        "COMP150_S_TEST": "#define COMP150_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 11.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/150_obfuscation_composite.c",
+      "function": "obfuscated_transform",
+      "object_macro_calls_in_raw_joern": [
+        "COMP150_MAX_ELEMS",
+        "COMP150_MAX_STEPS",
+        "COMP150_OPS",
+        "COMP150_S_DONE",
+        "COMP150_S_DONE",
+        "COMP150_S_DONE",
+        "COMP150_S_ENTRY",
+        "COMP150_S_ENTRY",
+        "COMP150_S_GUARD",
+        "COMP150_S_GUARD",
+        "COMP150_S_MIX",
+        "COMP150_S_MIX",
+        "COMP150_S_STEP",
+        "COMP150_S_STEP",
+        "COMP150_S_STORE",
+        "COMP150_S_STORE",
+        "COMP150_S_TEST",
+        "COMP150_S_TEST",
+        "COMP150_S_TEST"
+      ],
+      "object_macro_declarations": {
+        "COMP150_MAX_ELEMS": "#define COMP150_MAX_ELEMS 16",
+        "COMP150_MAX_STEPS": "#define COMP150_MAX_STEPS 512",
+        "COMP150_OPS": "#define COMP150_OPS 4",
+        "COMP150_S_DONE": "#define COMP150_S_DONE 6",
+        "COMP150_S_ENTRY": "#define COMP150_S_ENTRY 0",
+        "COMP150_S_GUARD": "#define COMP150_S_GUARD 3",
+        "COMP150_S_MIX": "#define COMP150_S_MIX 2",
+        "COMP150_S_STEP": "#define COMP150_S_STEP 5",
+        "COMP150_S_STORE": "#define COMP150_S_STORE 4",
+        "COMP150_S_TEST": "#define COMP150_S_TEST 1"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 11.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/164_nested_tlv_walker.c",
+      "function": "tlv164_seek",
+      "object_macro_calls_in_raw_joern": [
+        "TLV164_CONTAINER",
+        "TLV164_HDR_BYTES",
+        "TLV164_HDR_BYTES",
+        "TLV164_HIT_BASE",
+        "TLV164_HIT_BASE",
+        "TLV164_MAX_BUF",
+        "TLV164_MAX_DEPTH"
+      ],
+      "object_macro_declarations": {
+        "TLV164_CONTAINER": "#define TLV164_CONTAINER 0x80u",
+        "TLV164_HDR_BYTES": "#define TLV164_HDR_BYTES 2",
+        "TLV164_HIT_BASE": "#define TLV164_HIT_BASE  1000",
+        "TLV164_MAX_BUF": "#define TLV164_MAX_BUF   16",
+        "TLV164_MAX_DEPTH": "#define TLV164_MAX_DEPTH 4"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 3.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/174_float_compare_classify.c",
+      "function": "classify_binary32",
+      "object_macro_calls_in_raw_joern": [
+        "FP174_CLASS_INFINITE",
+        "FP174_CLASS_NAN",
+        "FP174_CLASS_NORMAL",
+        "FP174_CLASS_SUBNORMAL",
+        "FP174_CLASS_ZERO",
+        "FP174_EXPONENT_MASK",
+        "FP174_EXPONENT_MASK",
+        "FP174_MANTISSA_MASK"
+      ],
+      "object_macro_declarations": {
+        "FP174_CLASS_INFINITE": "#define FP174_CLASS_INFINITE 3",
+        "FP174_CLASS_NAN": "#define FP174_CLASS_NAN 4",
+        "FP174_CLASS_NORMAL": "#define FP174_CLASS_NORMAL 2",
+        "FP174_CLASS_SUBNORMAL": "#define FP174_CLASS_SUBNORMAL 1",
+        "FP174_CLASS_ZERO": "#define FP174_CLASS_ZERO 0",
+        "FP174_EXPONENT_MASK": "#define FP174_EXPONENT_MASK 0x7F800000u",
+        "FP174_MANTISSA_MASK": "#define FP174_MANTISSA_MASK 0x007FFFFFu"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 22.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/31_edit_distance.c",
+      "function": "edit_distance",
+      "object_macro_calls_in_raw_joern": [
+        "ED_MAX",
+        "ED_MAX",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE",
+        "ED_STRIDE"
+      ],
+      "object_macro_declarations": {
+        "ED_MAX": "#define ED_MAX 8",
+        "ED_STRIDE": "#define ED_STRIDE (ED_MAX + 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 64.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/32_longest_common_subsequence.c",
+      "function": "lcs_length",
+      "object_macro_calls_in_raw_joern": [
+        "LCS_MAX",
+        "LCS_MAX",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE"
+      ],
+      "object_macro_declarations": {
+        "LCS_MAX": "#define LCS_MAX 8",
+        "LCS_STRIDE": "#define LCS_STRIDE (LCS_MAX + 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 72.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/32_longest_common_subsequence.c",
+      "function": "lcs_recover",
+      "object_macro_calls_in_raw_joern": [
+        "LCS_MAX",
+        "LCS_MAX",
+        "LCS_MAX",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE",
+        "LCS_STRIDE"
+      ],
+      "object_macro_declarations": {
+        "LCS_MAX": "#define LCS_MAX 8",
+        "LCS_STRIDE": "#define LCS_STRIDE (LCS_MAX + 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 80.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/35_matrix_chain.c",
+      "function": "matrix_chain_cost",
+      "object_macro_calls_in_raw_joern": [
+        "CHAIN_INFINITE",
+        "CHAIN_MAX",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE",
+        "CHAIN_STRIDE"
+      ],
+      "object_macro_declarations": {
+        "CHAIN_INFINITE": "#define CHAIN_INFINITE 2000000000",
+        "CHAIN_MAX": "#define CHAIN_MAX 7",
+        "CHAIN_STRIDE": "#define CHAIN_STRIDE (CHAIN_MAX + 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 64.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/45_string_algorithms.c",
+      "function": "parse_decimal",
+      "object_macro_calls_in_raw_joern": [
+        "STR_MAX"
+      ],
+      "object_macro_declarations": {
+        "STR_MAX": "#define STR_MAX 16"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 5.0,
+        "role_isomorphic": false
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/47_huffman.c",
+      "function": "huffman_code_lengths",
+      "object_macro_calls_in_raw_joern": [
+        "HUFF_NODES",
+        "HUFF_NODES",
+        "HUFF_NODES",
+        "HUFF_NODES",
+        "HUFF_NODES",
+        "HUFF_NODES",
+        "HUFF_SYMBOLS"
+      ],
+      "object_macro_declarations": {
+        "HUFF_NODES": "#define HUFF_NODES (2 * HUFF_SYMBOLS)",
+        "HUFF_SYMBOLS": "#define HUFF_SYMBOLS 8"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 48.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/78_ring_buffer.c",
+      "function": "ring_push",
+      "object_macro_calls_in_raw_joern": [
+        "RING_CAPACITY",
+        "RING_MASK"
+      ],
+      "object_macro_declarations": {
+        "RING_CAPACITY": "#define RING_CAPACITY 8",
+        "RING_MASK": "#define RING_MASK (RING_CAPACITY - 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 8.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/78_ring_buffer.c",
+      "function": "ring_pop",
+      "object_macro_calls_in_raw_joern": [
+        "RING_MASK"
+      ],
+      "object_macro_declarations": {
+        "RING_MASK": "#define RING_MASK (RING_CAPACITY - 1)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 8.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/79_segment_tree.c",
+      "function": "segment_build",
+      "object_macro_calls_in_raw_joern": [
+        "SEG_LEAVES",
+        "SEG_LEAVES",
+        "SEG_LEAVES",
+        "SEG_NODES"
+      ],
+      "object_macro_declarations": {
+        "SEG_LEAVES": "#define SEG_LEAVES 8",
+        "SEG_NODES": "#define SEG_NODES (2 * SEG_LEAVES)"
+      },
+      "same_calls_after_preprocessing": [],
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 8.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      }
+    }
+  ]
+}

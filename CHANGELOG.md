@@ -1,0 +1,248 @@
+# Changelog
+
+All notable changes to Cindergraph will be documented here. The project uses
+[Semantic Versioning](https://semver.org/) for released versions; pre-1.0 minor
+versions may change APIs and serialized schemas.
+
+## 0.1.0 — unreleased
+
+Initial standalone extraction from Glaurung:
+
+- tolerant parsing of ordinary and decompiler-shaped C with diagnostics;
+- function metrics, general control-flow graphs and graph serialization;
+- reaching definitions, dependence graphs, backward slicing and bounded call
+  summaries with explicit recovery/memory completeness signals;
+- an owning Rust/Python analysis session that reuses one parse, CFG set,
+  dataflow fixed point and summary set across queries, slicing and export;
+- identity-preserving summaries and typed reachability claims with exact
+  function IDs, may-path evidence, complete-negative coverage and explicit
+  uncertainty reasons;
+- abstract caller-owned regions for incoming pointer parameters, including
+  copy-stable formal identity, explicit cross-formal may-alias relationships,
+  and direct parameter-relative read/write effects in Rust and Python function
+  summaries without conflating pointer address provenance with loaded values;
+  complete pointee effects compose transitively through known direct callees
+  and instantiate as caller-region reads and weak writes, while incomplete,
+  indirect, external-unknown, and ambiguous calls retain conservative clobbers;
+- explicit ordinary, preprocessed and decompiler input options applied before
+  snapshot identity, with the prepared source and diagnostics retained;
+- explicit external-callee policies on Rust and Python analysis sessions: the
+  default preserves uncertainty, taint-return propagates conservative value
+  influence without claiming completeness, and an opt-in pure/no-flow contract
+  is recorded on results that may use it to justify negative answers;
+- read-only Rust-backed Python graph views for AST, CFG, DDG, CDG, and PDG,
+  with snapshot identity, bulk topology, compact forward/reverse adjacency,
+  native traversal, preserved parallel-edge multiplicity, and explicit
+  optional NetworkX conversion;
+- a dependency-free robustness benchmark contract that validates immutable
+  source identities, generated-case replay metadata, non-overlapping specimen
+  slices, canonical manifest hashes, and exactly one explicit success or
+  failure result per tool/specimen without denominator shrinkage;
+- a reproducible 525-specimen clean, decompiler, random-damage, and controlled
+  locality manifest plus a Cindergraph adapter that retains native evidence, validates
+  exported graph integrity, reports recovery completeness conservatively, and
+  isolates each specimen behind timeout, signal, and optional memory limits;
+- fixed-denominator robustness summaries that revalidate every result set and
+  keep unavailable damaged-input oracles distinct from successful recovery;
+- a dependency-free Clang robustness adapter that retains raw and normalized
+  partial AST evidence on ordinary compiler-error exits while leaving
+  unavailable CFG and resource claims explicitly unset;
+- a separately locked Tree-sitter C robustness worker and fail-closed
+  supervisor, isolated from the Cindergraph crate and wheel dependency graphs;
+- conservative lexical resynchronization after an unterminated block comment:
+  the error remains coverage-visible, while a later top-level-function-shaped
+  line can recover an unaffected neighbour;
+- grammar-owned local array-bound expressions that expose conditional and
+  short-circuit control to the CFG, resolve evaluation guards to concrete arm
+  edges, materialize language-defined short-circuit bypass values, preserve
+  conditional scalar writes on only their taken CFG arms, and prevent
+  duplicate legacy dataflow events; bound assignments explicitly distinguish
+  the prior target value from the assigned RHS and preserve computed-RHS
+  provenance; evaluation identity is distinct from captured-bound identity,
+  and supported pure scalar initializer and return roots retain explicit
+  purposes, CFG ownership, and topological result inputs; dataflow consumes
+  those roots for exact read/write placement and initializer visibility,
+  replaces legacy promoted writes, and distinguishes direct evaluation inputs
+  from transitive provenance so joins do not duplicate source reads; supported
+  call-bearing roots derive call records and direct-return identity from
+  operation/value edges, represent sequenced, indeterminately sequenced, and
+  mutually exclusive call execution, and preserve existing intrinsic,
+  defined-callee, and external-call policies; dependency-ordered call/write
+  expressions and mutually exclusive conditional call/write arms now share
+  this path without admitting unordered mixtures; recursive scalar reads are
+  explicit producers, and unsupported same-object unsequenced conflicts emit a
+  localized `unsequenced_access` coverage issue; comma expressions use one
+  sequence operation across bounds, initializers, and returns, retaining
+  discarded effects without adding discarded values to result provenance;
+  supported expression statements now use the same operation path with an
+  explicit discarded-result purpose; supported `if`, loop, and `switch`
+  conditions likewise use explicit control purposes and operation-owned
+  reads, writes, and calls, with `for` selecting its condition independently
+  of its initializer and step; expression-form `for` initialization and step
+  clauses have distinct operation-owned lifecycle phases while declaration
+  initialization retains its declaration owner; evaluation plans are now
+  lazily cached so AST and CFG-only consumers do not lower unused operations;
+  GNU computed-`goto` operands have explicit operation ownership without
+  misclassifying the statement's leading `*` marker as a memory load;
+- stable scalar `PlaceId`s derived from resolved declaration identity, used by
+  operation operands and dataflow binding lookup so source spans are no longer
+  the semantic identity of modeled scalar storage;
+- direct scalar address formation lowered through the shared evaluation plan as
+  `AddressOf(PlaceId)`, without falsely reading the object's stored value or
+  duplicating the legacy address event;
+- scalar dereferences represented as explicit `LoadScalar` operations over
+  pointer values; direct pointer loads now drive conservative points-to and
+  pointee-use projection from the operation record without duplicate syntax
+  discovery, while unsupported and VLA-bound loads continue to fail closed;
+- operation assembly now preserves producer-before-consumer lowering order for
+  nested expressions instead of re-sorting overlapping operations by source
+  span; computed pointer loads follow conditional and comma results through
+  `ValueId`, retain arithmetic may-targets with explicit uncertainty, and own
+  their parenthesized syntax without duplicate fallback discovery;
+- indirect stores now resolve their address through the same operation-derived
+  pointer constraints: conditional targets are unioned, comma targets use only
+  the result operand, and pointer arithmetic preserves known may-writes while
+  qualifying memory coverage; sequence-effect predecessors also keep comma
+  stores from being rejected as falsely unsequenced;
+- store constraints now retain pointer sources for the assigned `ValueId` as
+  well as the address, replacing RHS interval scans for supported second-order
+  writes; exact local address/copy/conditional values update pointer targets
+  without false incompleteness, while transformed values preserve may-targets
+  and propagate explicit unknown state; assigned provenance is evaluated lazily
+  only for stores that may actually update pointer objects;
+- plain indirect assignments represented as `StoreScalar` operations with
+  conservative alias-aware ordering checks; direct pointer stores now select
+  projection targets from the operation's pointer occurrence and emit each
+  memory write once, while transparent `*&place` stores canonicalize to direct
+  writes without a false address escape;
+- pointer-valued scalar initializers and assignments now generate address,
+  copy, load, and unknown constraints from `ValueId` producer edges; points-to
+  analysis maps their stable places to bindings instead of rescanning RHS
+  source ranges, retaining may-targets and explicit uncertainty through
+  arithmetic and unary transformations;
+- evaluation operations now attach a common semantic place: direct scalar
+  operations name declaration-backed places, while loads and stores name
+  interned projected dereferences keyed by their address `ValueId`; source
+  spans remain diagnostics rather than memory-object identity;
+- pointer-member and indexed scalar reads now lower as `LoadScalar` operations
+  with field and element projected places keyed by their base/index `ValueId`s;
+  these accesses retain explicit evaluation dependencies while remaining
+  fail-closed until layout and target projection are available;
+- plain assignments to pointer members and indexed elements now lower as
+  `StoreScalar` operations over the same projected places, with explicit base,
+  index, and assigned-value dependencies; memory projection remains
+  fail-closed rather than fabricating unresolved field or element targets;
+- projected-place bases distinguish evaluated pointer values from direct
+  object places; simple `object.member` reads and plain writes now share the
+  aggregate object's `PlaceId` without inventing a whole-object scalar read,
+  while unresolved layout remains explicitly incomplete;
+- projected places can themselves base a subsequent field projection, so
+  nested direct and mixed chains such as `object.inner.field` and
+  `pointer->inner.field` retain inside-out place identity without loading an
+  aggregate intermediate;
+- element lowering now uses structural declaration types to distinguish local
+  array storage from adjusted array-parameter pointers; local `array[index]`
+  reads and writes project from the array `PlaceId` without a fictitious
+  whole-array scalar read;
+- struct and union bodies now preserve grammar-owned member declarations whose
+  declarators feed stable record/member types; record-tag bindings respect
+  enclosing block/record extents, and array-valued fields consequently
+  decay from a nested field place for both `object.field[i]` and
+  `pointer->field[i]`, without a fictitious aggregate load;
+- structural element types now propagate through every index in
+  multidimensional local, parameter, and record-member arrays; intermediate
+  rows remain nested element places and only the terminal scalar is loaded;
+- public dataflow results now expose parent-linked memory regions and
+  operation-owned memory accesses; direct fields share structural identity
+  with fields reached through known local pointers, while array elements use
+  an explicit may-alias summary rather than pretending to be scalar bindings
+  or distinct offsets;
+- a separate region reaching-definition lattice now publishes memory
+  definitions, uses, and edges; exact writes are strong updates, may-alias
+  writes are weak updates, branch alternatives join, and loop back-edges
+  converge without conflating projected storage with scalar variables;
+- DDG and PDG export plus backward slicing now consume region flow edges;
+  DDGs retain memory definition/use nodes and structural region paths, while
+  PDGs lift those dependences to the common executable-CFG node set;
+- region results now expose ancestor/descendant containment and structural
+  union-member overlap; cross-member union writes reach reads and exact later
+  member writes kill sibling definitions, while ordinary struct members stay
+  disjoint and containment remains non-destructive pending aggregate
+  fragmentation;
+- accessed subregions of by-value aggregate parameters now receive explicit
+  incoming definitions and contribute positive return provenance until killed
+  by a strong write; evaluation-owned aggregate/array bases no longer leak
+  into the legacy scalar-use table as fictitious whole-object reads;
+- pointer-like call arguments now add weak call-clobber definitions for known
+  local scalar and projected targets while retaining memory uncertainty;
+  scalar-only calls remain memory-neutral, and local array arguments use an
+  explicit decay operation rather than fake scalar-read or address-taking
+  events;
+- compound assignments and prefix/postfix increments over dereferences,
+  fields, and elements now evaluate their place inputs once, explicitly load
+  the prior value, compute the replacement, and store once; projected stores
+  retain pre-write/post-write result semantics so postfix expressions yield
+  the old value without losing the write;
+- transparent `*&place` updates now share the direct-place path for plain and
+  compound assignment and prefix/postfix increment, preserving `PlaceId`
+  identity and avoiding false address-taken or indirect-memory facts;
+- complete postfix-call enumeration and accurate direct-return classification,
+  including fail-closed summaries for chained indirect calls such as
+  `factory()()`; the inherited, permanently empty `CallRecord.results` and
+  `CallSite.results` placeholders are removed rather than advertised as data;
+- parenthesized calls to functions defined in the same translation unit retain
+  direct-callee identity, while typedef-ambiguous external names remain
+  conservatively indirect;
+- a distinct `effects_complete` signal prevents opaque `_Generic`,
+  `__builtin_choose_expr` and `__builtin_va_arg` expressions from producing
+  falsely conclusive negative flow summaries, and likewise fails closed for
+  inline assembly operands and clobbers and implicit `cleanup(function)`
+  attribute calls;
+- a narrow parity CFG for offline comparison fixtures;
+- a pure Rust crate and a typed Maturin/PyO3 Python package;
+- ABI3 packaging for CPython 3.12 and newer, subject to the tested platform
+  matrix documented before release.
+- manylinux 2.17 release targeting, deterministic wheel packaging, structural
+  distribution/SBOM validation and fail-closed partial-publication recovery;
+- release dispatches that build candidates without publishing; only a pushed
+  `v*` tag can enter the protected registry jobs;
+- workflow security checks with non-persistent checkout credentials, disabled
+  release caches, serialized non-cancelling releases and a pinned Zizmor audit;
+- strict vulnerability auditing of every hash-pinned dependency reachable
+  through a published Python extra;
+- fail-closed PyPI artifact gathering that rejects missing producers, duplicate
+  filenames, mixed versions, producer/platform mismatches, internal wheel-tag
+  mismatches and unexpected files before upload;
+- isolated installed-wheel type checking that verifies representative public
+  core and optional NetworkX APIs resolve to concrete downstream types rather
+  than `Any`;
+- one purposeful published extra, `graphs`; test tooling remains a development
+  dependency instead of advertising an extra without a shipped test suite;
+- PyO3 0.29 with locked advisory, licence, duplicate-dependency and source
+  policy checks.
+- maintained extraction and Glaurung-migration documentation that separates the
+  copied baseline, standalone repairs and deliberately excluded integrations;
+- source distributions that carry the extraction record and architecture
+  documentation alongside the licence and release material.
+- schema-validated Python project metadata and registry-validated Trove
+  classifiers, including CPython and typed-package discovery signals, with the
+  complete registry-facing contract rechecked inside both wheels and sdists.
+- release-time validation and testing of the exact packaged Rust crate,
+  including archive safety, normalized metadata and registry-only dependencies.
+- end-to-end crate provenance from the reviewed workflow artifact through a
+  byte-identical publication rebuild and post-upload crates.io checksum check.
+- isolated installation and runtime smoke coverage for the optional `graphs`
+  extra from both native wheels and the source distribution.
+- explicit trusted-publisher attestations and post-upload PyPI reconciliation
+  of every reviewed filename and SHA-256 digest.
+- fail-closed PyPI rerun preflight that resumes only an exact partial subset,
+  skips a complete identical release and rejects conflicting immutable state.
+- pinned PEP 740 verification of every published artifact's signature and
+  Trusted Publisher repository identity through PyPI's Integrity API.
+- a 2 MiB compressed Rust-crate budget and explicit first-release bootstrap to
+  crates.io OIDC trusted-publishing migration procedure.
+
+Known limitations are maintained in the
+[Python reference](docs/reference/source-python.md) and
+[support matrix](docs/support-and-evidence.md). This entry must lose the
+“unreleased” marker only after the release commit and artifact set are fixed.

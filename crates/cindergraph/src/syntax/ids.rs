@@ -8,8 +8,7 @@
 //!
 //! `u32` rather than `usize` is deliberate. A translation unit larger than 4 GiB
 //! is not an input we accept, and halving the width of every child pointer is
-//! most of what makes the struct-of-arrays node arena worth having --- see
-//! `docs/design/source-front-ends/substrate.md` section 2.
+//! most of what makes the struct-of-arrays node arena worth having.
 
 use std::fmt;
 use std::ops::Range;

@@ -7,10 +7,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+documentation.workspace = true
 readme = "../../README.md"
 keywords = ["c", "parser", "control-flow", "static-analysis", "decompiler"]
 categories = ["parsing", "development-tools"]
+publish = ["crates-io"]
 
 [dependencies]
 regex.workspace = true
+
+[dev-dependencies]
 serde_json.workspace = true

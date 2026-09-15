@@ -1,0 +1,14 @@
+[package]
+name = "cindergraph-robustness-tree-sitter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Keep benchmark-only parser dependencies outside Cindergraph's workspace,
+# crate graph, lockfile, and wheel.
+[workspace]
+
+[dependencies]
+serde_json = "=1.0.150"
+tree-sitter = "=0.27.0"
+tree-sitter-c = "=0.24.2"

@@ -28,13 +28,60 @@
 //!   `BTreeMap`, so no hash iteration order reaches Python and two runs over
 //!   the same text produce byte-identical output.
 
+use std::collections::BTreeMap;
+
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 use cindergraph::csource::metrics::{self, FunctionMetrics, SourceReport};
 use cindergraph::csource::parse::parse;
+use cindergraph::csource::semantic::{AnalysisOptions, AnalysisUnit, InputDialect};
+use cindergraph::dataflow::ExternalCallPolicy;
 use cindergraph::syntax::cfg::Cfg;
 use cindergraph::syntax::diag::Diagnostics;
+
+fn input_dialect(name: Option<&str>) -> PyResult<InputDialect> {
+    match name.unwrap_or("ordinary") {
+        "ordinary" => Ok(InputDialect::Ordinary),
+        "preprocessed" => Ok(InputDialect::Preprocessed),
+        "decompiled" => Ok(InputDialect::Decompiled),
+        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown dialect {other:?}; expected ordinary, preprocessed, or decompiled"
+        ))),
+    }
+}
+
+fn external_call_policy(name: Option<&str>) -> PyResult<ExternalCallPolicy> {
+    match name.unwrap_or("unknown") {
+        "unknown" => Ok(ExternalCallPolicy::Unknown),
+        "taint_return" => Ok(ExternalCallPolicy::TaintReturn),
+        "assume_pure_no_flow" => Ok(ExternalCallPolicy::AssumePureNoFlow),
+        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown external-call policy {other:?}; expected unknown, taint_return, or assume_pure_no_flow"
+        ))),
+    }
+}
+
+fn diagnostics_list<'py>(
+    py: Python<'py>,
+    diagnostics: &Diagnostics,
+    text: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    let reported = PyList::empty(py);
+    for diagnostic in diagnostics.iter() {
+        let entry = PyDict::new(py);
+        entry.set_item(
+            "severity",
+            format!("{:?}", diagnostic.severity).to_lowercase(),
+        )?;
+        entry.set_item("message", diagnostic.message.clone())?;
+        entry.set_item("start", diagnostic.span.lo)?;
+        entry.set_item("end", diagnostic.span.hi)?;
+        entry.set_item("text", diagnostic.render(text))?;
+        reported.append(entry)?;
+    }
+    Ok(reported)
+}
 
 /// Build the `{"lines", "tokens", "bytes", "functions", "diagnostics"}` dict.
 fn report_dict<'py>(
@@ -60,20 +107,7 @@ fn report_dict<'py>(
     }
     out.set_item("functions", functions)?;
 
-    let reported = PyList::empty(py);
-    for diagnostic in diagnostics.iter() {
-        let entry = PyDict::new(py);
-        entry.set_item(
-            "severity",
-            format!("{:?}", diagnostic.severity).to_lowercase(),
-        )?;
-        entry.set_item("message", diagnostic.message.clone())?;
-        entry.set_item("start", diagnostic.span.lo)?;
-        entry.set_item("end", diagnostic.span.hi)?;
-        entry.set_item("text", diagnostic.render(text))?;
-        reported.append(entry)?;
-    }
-    out.set_item("diagnostics", reported)?;
+    out.set_item("diagnostics", diagnostics_list(py, diagnostics, text)?)?;
     Ok(out)
 }
 
@@ -227,6 +261,28 @@ fn cfg_dict<'py>(py: Python<'py>, cfg: &Cfg) -> PyResult<Bound<'py, PyDict>> {
         edges.append(entry)?;
     }
     out.set_item("edges", edges)?;
+    let dispatches = PyList::empty(py);
+    for info in cfg.indirect_dispatches() {
+        let entry = PyDict::new(py);
+        entry.set_item("node", info.node.raw())?;
+        entry.set_item(
+            "targets",
+            cfg.successors(info.node)
+                .map(|target| target.raw())
+                .collect::<Vec<_>>(),
+        )?;
+        entry.set_item("precision", info.precision.name())?;
+        entry.set_item("may_be_invalid", info.may_be_invalid)?;
+        entry.set_item(
+            "reasons",
+            info.reasons
+                .iter()
+                .map(|reason| reason.name())
+                .collect::<Vec<_>>(),
+        )?;
+        dispatches.append(entry)?;
+    }
+    out.set_item("indirect_dispatches", dispatches)?;
     out.set_item("entry", cfg.entry().raw())?;
     out.set_item("exit", cfg.exit().raw())?;
     Ok(out)
@@ -249,16 +305,26 @@ fn cfg_dict<'py>(py: Python<'py>, cfg: &Cfg) -> PyResult<Bound<'py, PyDict>> {
 #[pyfunction]
 #[pyo3(name = "control_flow_graphs")]
 pub fn control_flow_graphs_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    let graphs = py.detach(|| {
-        let tree = parse(text).into_parts().0;
-        cindergraph::csource::cfg::function_cfgs(&tree, text)
-            .into_parts()
-            .0
-    });
+    let unit = py.detach(|| AnalysisUnit::new(text));
+    control_flow_graphs_dict(py, &unit)
+}
+
+fn control_flow_graphs_dict<'py>(
+    py: Python<'py>,
+    unit: &AnalysisUnit,
+) -> PyResult<Bound<'py, PyList>> {
+    use cindergraph::csource::semantic::ANALYSIS_REVISION;
+
     let out = PyList::empty(py);
-    for graph in &graphs {
+    for (index, graph) in unit.functions().iter().enumerate() {
         let entry = PyDict::new(py);
         entry.set_item("name", graph.name.clone())?;
+        entry.set_item("source_id", unit.source_id().name())?;
+        entry.set_item("input_dialect", unit.options().dialect.name())?;
+        entry.set_item("external_call_policy", unit.options().external_calls.name())?;
+        entry.set_item("function_id", index as u32)?;
+        entry.set_item("analysis_revision", ANALYSIS_REVISION)?;
+        entry.set_item("graph_kind", "executable_cfg")?;
         entry.set_item("start", graph.span.lo)?;
         entry.set_item("end", graph.span.hi)?;
         entry.set_item("short_circuits", graph.short_circuits)?;
@@ -316,6 +382,7 @@ pub const FEATURE_NAMES: &[&str] = &[
     "nodes_cond",
     "nodes_loop_header",
     "nodes_switch",
+    "nodes_indirect_dispatch",
     "nodes_case",
     "nodes_label",
     "nodes_goto",
@@ -333,6 +400,7 @@ const KIND_COLUMNS: &[&str] = &[
     "cond",
     "loop_header",
     "switch",
+    "indirect_dispatch",
     "case",
     "label",
     "goto",
@@ -481,7 +549,17 @@ pub fn export_graphs_py<'py>(
     repr: &str,
     format: &str,
 ) -> PyResult<Bound<'py, PyList>> {
-    use cindergraph::csource::export::{export, Repr};
+    let unit = py.detach(|| AnalysisUnit::new(text));
+    export_graphs_dict(py, &unit, repr, format)
+}
+
+fn export_graphs_dict<'py>(
+    py: Python<'py>,
+    unit: &AnalysisUnit,
+    repr: &str,
+    format: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    use cindergraph::csource::export::{export_unit, Repr};
     use cindergraph::syntax::graph_export::{write, Format};
 
     let repr_value = Repr::parse(repr).ok_or_else(|| {
@@ -498,9 +576,7 @@ pub fn export_graphs_py<'py>(
     })?;
 
     let rendered = py.detach(|| {
-        export(text, repr_value)
-            .into_parts()
-            .0
+        export_unit(unit, repr_value)
             .iter()
             .map(|view| (view.name.clone(), write(view, format_value)))
             .collect::<Vec<(String, String)>>()
@@ -511,6 +587,334 @@ pub fn export_graphs_py<'py>(
         out.append((name, body))?;
     }
     Ok(out)
+}
+
+/// Read-only, Rust-backed exported graph for Python-scale traversal.
+#[pyclass(name = "NativeGraph", module = "cindergraph._native.source", frozen)]
+struct PyNativeGraph {
+    view: cindergraph::syntax::graph_export::GraphView,
+    adjacency: CompactAdjacency,
+    source_id: String,
+    function_id: u32,
+    representation: String,
+    graph_kind: String,
+    input_dialect: String,
+    external_call_policy: String,
+}
+
+/// Immutable forward and reverse adjacency over dense exported node IDs.
+///
+/// Exported graphs assign IDs in `0..node_count`. Two offset arrays and two
+/// contiguous neighbor arrays avoid the tree node and per-node `Vec`
+/// allocations of the original Python-facing graph while retaining edge
+/// insertion order and parallel-edge multiplicity.
+struct CompactAdjacency {
+    successor_offsets: Vec<usize>,
+    successors: Vec<u32>,
+    predecessor_offsets: Vec<usize>,
+    predecessors: Vec<u32>,
+}
+
+impl CompactAdjacency {
+    fn new(view: &cindergraph::syntax::graph_export::GraphView) -> Self {
+        let node_count = view.nodes.len();
+        debug_assert!(
+            view.nodes
+                .iter()
+                .enumerate()
+                .all(|(index, node)| node.id as usize == index),
+            "exported graph node IDs must be dense"
+        );
+
+        let mut successor_counts = vec![0; node_count];
+        let mut predecessor_counts = vec![0; node_count];
+        for edge in &view.edges {
+            if let (Some(out), Some(in_)) = (
+                successor_counts.get_mut(edge.src as usize),
+                predecessor_counts.get_mut(edge.dst as usize),
+            ) {
+                *out += 1;
+                *in_ += 1;
+            }
+        }
+
+        let successor_offsets = Self::offsets(&successor_counts);
+        let predecessor_offsets = Self::offsets(&predecessor_counts);
+        let mut successors = vec![0; *successor_offsets.last().unwrap_or(&0)];
+        let mut predecessors = vec![0; *predecessor_offsets.last().unwrap_or(&0)];
+        let mut successor_cursors = successor_offsets[..node_count].to_vec();
+        let mut predecessor_cursors = predecessor_offsets[..node_count].to_vec();
+        for edge in &view.edges {
+            let (Some(successor_cursor), Some(predecessor_cursor)) = (
+                successor_cursors.get_mut(edge.src as usize),
+                predecessor_cursors.get_mut(edge.dst as usize),
+            ) else {
+                continue;
+            };
+            successors[*successor_cursor] = edge.dst;
+            *successor_cursor += 1;
+            predecessors[*predecessor_cursor] = edge.src;
+            *predecessor_cursor += 1;
+        }
+        Self {
+            successor_offsets,
+            successors,
+            predecessor_offsets,
+            predecessors,
+        }
+    }
+
+    fn offsets(counts: &[usize]) -> Vec<usize> {
+        let mut offsets = Vec::with_capacity(counts.len() + 1);
+        offsets.push(0);
+        for count in counts {
+            offsets.push(offsets.last().copied().unwrap_or(0) + count);
+        }
+        offsets
+    }
+
+    fn contains(&self, node: u32) -> bool {
+        (node as usize) + 1 < self.successor_offsets.len()
+    }
+
+    fn neighbors(&self, node: u32, reverse: bool) -> Option<&[u32]> {
+        let index = node as usize;
+        let (offsets, neighbors) = if reverse {
+            (&self.predecessor_offsets, &self.predecessors)
+        } else {
+            (&self.successor_offsets, &self.successors)
+        };
+        Some(&neighbors[*offsets.get(index)?..*offsets.get(index + 1)?])
+    }
+}
+
+impl PyNativeGraph {
+    fn new(
+        view: cindergraph::syntax::graph_export::GraphView,
+        unit: &AnalysisUnit,
+        function_id: u32,
+        representation: &str,
+        graph_kind: &str,
+    ) -> Self {
+        let adjacency = CompactAdjacency::new(&view);
+        Self {
+            view,
+            adjacency,
+            source_id: unit.source_id().name(),
+            function_id,
+            representation: representation.to_owned(),
+            graph_kind: graph_kind.to_owned(),
+            input_dialect: unit.options().dialect.name().to_owned(),
+            external_call_policy: unit.options().external_calls.name().to_owned(),
+        }
+    }
+
+    fn require_node(&self, id: u32) -> PyResult<()> {
+        if self.adjacency.contains(id) {
+            Ok(())
+        } else {
+            Err(pyo3::exceptions::PyKeyError::new_err(id))
+        }
+    }
+
+    fn closure(&self, start: u32, reverse: bool) -> PyResult<Vec<u32>> {
+        self.require_node(start)?;
+        let mut seen = vec![false; self.view.nodes.len()];
+        let mut pending = vec![start];
+        while let Some(node) = pending.pop() {
+            for &next in self
+                .adjacency
+                .neighbors(node, reverse)
+                .unwrap_or_default()
+                .iter()
+                .rev()
+            {
+                if next != start && !seen[next as usize] {
+                    seen[next as usize] = true;
+                    pending.push(next);
+                }
+            }
+        }
+        Ok(seen
+            .into_iter()
+            .enumerate()
+            .filter_map(|(node, reached)| reached.then_some(node as u32))
+            .collect())
+    }
+}
+
+#[pymethods]
+impl PyNativeGraph {
+    #[getter]
+    fn name(&self) -> &str {
+        &self.view.name
+    }
+
+    #[getter]
+    fn source_id(&self) -> &str {
+        &self.source_id
+    }
+
+    #[getter]
+    fn function_id(&self) -> u32 {
+        self.function_id
+    }
+
+    #[getter]
+    fn representation(&self) -> &str {
+        &self.representation
+    }
+
+    #[getter]
+    fn graph_kind(&self) -> &str {
+        &self.graph_kind
+    }
+
+    #[getter]
+    fn input_dialect(&self) -> &str {
+        &self.input_dialect
+    }
+
+    #[getter]
+    fn external_call_policy(&self) -> &str {
+        &self.external_call_policy
+    }
+
+    #[getter]
+    fn analysis_revision(&self) -> u32 {
+        cindergraph::csource::semantic::ANALYSIS_REVISION
+    }
+
+    #[getter]
+    fn directed(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn node_count(&self) -> usize {
+        self.view.nodes.len()
+    }
+
+    #[getter]
+    fn edge_count(&self) -> usize {
+        self.view.edges.len()
+    }
+
+    fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for node in &self.view.nodes {
+            let item = PyDict::new(py);
+            item.set_item("id", node.id)?;
+            item.set_item("label", &node.label)?;
+            item.set_item(
+                "attributes",
+                node.attrs.iter().cloned().collect::<BTreeMap<_, _>>(),
+            )?;
+            out.append(item)?;
+        }
+        Ok(out)
+    }
+
+    fn edges<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for edge in &self.view.edges {
+            let item = PyDict::new(py);
+            item.set_item("source", edge.src)?;
+            item.set_item("target", edge.dst)?;
+            item.set_item("label", &edge.label)?;
+            item.set_item(
+                "attributes",
+                edge.attrs.iter().cloned().collect::<BTreeMap<_, _>>(),
+            )?;
+            out.append(item)?;
+        }
+        Ok(out)
+    }
+
+    fn edge_list(&self) -> Vec<(u32, u32)> {
+        self.view
+            .edges
+            .iter()
+            .map(|edge| (edge.src, edge.dst))
+            .collect()
+    }
+
+    fn successors(&self, node: u32) -> PyResult<Vec<u32>> {
+        self.require_node(node)?;
+        Ok(self
+            .adjacency
+            .neighbors(node, false)
+            .unwrap_or_default()
+            .to_vec())
+    }
+
+    fn predecessors(&self, node: u32) -> PyResult<Vec<u32>> {
+        self.require_node(node)?;
+        Ok(self
+            .adjacency
+            .neighbors(node, true)
+            .unwrap_or_default()
+            .to_vec())
+    }
+
+    fn out_degree(&self, node: u32) -> PyResult<usize> {
+        Ok(self.successors(node)?.len())
+    }
+
+    fn in_degree(&self, node: u32) -> PyResult<usize> {
+        Ok(self.predecessors(node)?.len())
+    }
+
+    fn descendants(&self, node: u32) -> PyResult<Vec<u32>> {
+        self.closure(node, false)
+    }
+
+    fn ancestors(&self, node: u32) -> PyResult<Vec<u32>> {
+        self.closure(node, true)
+    }
+}
+
+fn native_graphs_unit(
+    unit: &AnalysisUnit,
+    repr: &str,
+) -> PyResult<(
+    Vec<cindergraph::syntax::graph_export::GraphView>,
+    &'static str,
+    &'static str,
+)> {
+    use cindergraph::csource::export::{export_unit, Repr};
+
+    let repr = Repr::parse(repr).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown repr {repr:?}; expected one of {:?}",
+            Repr::ALL.map(|value| value.name())
+        ))
+    })?;
+    Ok((export_unit(unit, repr), repr.name(), repr.graph_kind()))
+}
+
+fn native_graphs_list<'py>(
+    py: Python<'py>,
+    unit: &AnalysisUnit,
+    repr: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    let (views, representation, graph_kind) = py.detach(|| native_graphs_unit(unit, repr))?;
+    let out = PyList::empty(py);
+    for (function_id, view) in views.into_iter().enumerate() {
+        out.append(Py::new(
+            py,
+            PyNativeGraph::new(view, unit, function_id as u32, representation, graph_kind),
+        )?)?;
+    }
+    Ok(out)
+}
+
+/// Return Rust-backed graph views without serializing or importing NetworkX.
+#[pyfunction]
+#[pyo3(name = "native_graphs", signature = (text, *, repr="cfg"))]
+fn native_graphs_py<'py>(py: Python<'py>, text: &str, repr: &str) -> PyResult<Bound<'py, PyList>> {
+    let unit = py.detach(|| AnalysisUnit::new(text));
+    native_graphs_list(py, &unit, repr)
 }
 
 /// The `repr` and `format` names [`export_graphs_py`] accepts, as two lists.
@@ -538,13 +942,25 @@ pub fn export_choices_py(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 #[pyfunction]
 #[pyo3(name = "data_flow")]
 pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use cindergraph::csource::dataflow::analyze;
+    let unit = py.detach(|| {
+        let unit = AnalysisUnit::new(text);
+        let _ = unit.dataflows();
+        unit
+    });
+    data_flow_dict(py, &unit)
+}
 
-    let flows = py.detach(|| analyze(text).into_parts().0);
+fn data_flow_dict<'py>(py: Python<'py>, unit: &AnalysisUnit) -> PyResult<Bound<'py, PyList>> {
+    let flows = unit.dataflows();
     let out = PyList::empty(py);
-    for flow in &flows {
+    for flow in flows {
         let entry = PyDict::new(py);
         entry.set_item("name", flow.name.clone())?;
+        entry.set_item("source_id", flow.source_id.name())?;
+        entry.set_item("input_dialect", unit.options().dialect.name())?;
+        entry.set_item("external_call_policy", unit.options().external_calls.name())?;
+        entry.set_item("function_id", flow.function_id.0)?;
+        entry.set_item("analysis_revision", flow.analysis_revision)?;
 
         let definitions = PyList::empty(py);
         for definition in &flow.definitions {
@@ -562,7 +978,157 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
             definitions.append(item)?;
         }
         entry.set_item("definitions", definitions)?;
+        let memory_regions = PyList::empty(py);
+        for region in &flow.memory_regions {
+            use cindergraph::csource::dataflow::MemoryRegionKind;
+            let item = PyDict::new(py);
+            item.set_item("id", region.id.0)?;
+            item.set_item("kind", region.kind.name())?;
+            match &region.kind {
+                MemoryRegionKind::Binding { binding } => {
+                    item.set_item("binding", binding.0)?;
+                    item.set_item("parameter", py.None())?;
+                    item.set_item("base", py.None())?;
+                    item.set_item("member", py.None())?;
+                }
+                MemoryRegionKind::ParameterPointee { parameter, binding } => {
+                    item.set_item("binding", binding.0)?;
+                    item.set_item("parameter", parameter)?;
+                    item.set_item("base", py.None())?;
+                    item.set_item("member", py.None())?;
+                    item.set_item("overlapping_members", py.None())?;
+                }
+                MemoryRegionKind::Field {
+                    base,
+                    member,
+                    overlapping_members,
+                } => {
+                    item.set_item("binding", py.None())?;
+                    item.set_item("parameter", py.None())?;
+                    item.set_item("base", base.0)?;
+                    item.set_item("member", member)?;
+                    item.set_item("overlapping_members", overlapping_members)?;
+                }
+                MemoryRegionKind::Elements { base } => {
+                    item.set_item("binding", py.None())?;
+                    item.set_item("parameter", py.None())?;
+                    item.set_item("base", base.0)?;
+                    item.set_item("member", py.None())?;
+                    item.set_item("overlapping_members", py.None())?;
+                }
+            }
+            if matches!(region.kind, MemoryRegionKind::Binding { .. }) {
+                item.set_item("overlapping_members", py.None())?;
+            }
+            memory_regions.append(item)?;
+        }
+        entry.set_item("memory_regions", memory_regions)?;
+
+        let memory_overlaps = PyList::empty(py);
+        for overlap in &flow.memory_overlaps {
+            let item = PyDict::new(py);
+            item.set_item("left", overlap.left.0)?;
+            item.set_item("right", overlap.right.0)?;
+            item.set_item("kind", overlap.kind.name())?;
+            memory_overlaps.append(item)?;
+        }
+        entry.set_item("memory_overlaps", memory_overlaps)?;
+
+        let call_memory_arguments = PyList::empty(py);
+        for argument in &flow.call_memory_arguments {
+            let item = PyDict::new(py);
+            item.set_item("cfg_node", argument.node)?;
+            item.set_item("argument", argument.argument)?;
+            item.set_item(
+                "targets",
+                argument
+                    .targets
+                    .iter()
+                    .map(|binding| binding.0)
+                    .collect::<Vec<_>>(),
+            )?;
+            item.set_item("parameter_origins", &argument.parameter_origins)?;
+            item.set_item("complete", argument.complete)?;
+            item.set_item("start", argument.call_span.lo)?;
+            item.set_item("end", argument.call_span.hi)?;
+            call_memory_arguments.append(item)?;
+        }
+        entry.set_item("call_memory_arguments", call_memory_arguments)?;
+
+        let memory_accesses = PyList::empty(py);
+        for access in &flow.memory_accesses {
+            let item = PyDict::new(py);
+            item.set_item("region", access.region.0)?;
+            item.set_item("kind", access.kind.name())?;
+            item.set_item("precision", access.precision.name())?;
+            item.set_item("cfg_node", access.node)?;
+            item.set_item("start", access.span.lo)?;
+            item.set_item("end", access.span.hi)?;
+            item.set_item("effect_at", access.effect_at)?;
+            memory_accesses.append(item)?;
+        }
+        entry.set_item("memory_accesses", memory_accesses)?;
+
+        let memory_definitions = PyList::empty(py);
+        for definition in &flow.memory_definitions {
+            let item = PyDict::new(py);
+            item.set_item("region", definition.region.0)?;
+            item.set_item("kind", definition.kind.name())?;
+            item.set_item("precision", definition.precision.name())?;
+            item.set_item("cfg_node", definition.node)?;
+            item.set_item("start", definition.span.lo)?;
+            item.set_item("end", definition.span.hi)?;
+            item.set_item("effect_at", definition.effect_at)?;
+            memory_definitions.append(item)?;
+        }
+        entry.set_item("memory_definitions", memory_definitions)?;
+
+        let memory_uses = PyList::empty(py);
+        for use_ in &flow.memory_uses {
+            let item = PyDict::new(py);
+            item.set_item("region", use_.region.0)?;
+            item.set_item("precision", use_.precision.name())?;
+            item.set_item("cfg_node", use_.node)?;
+            item.set_item("start", use_.span.lo)?;
+            item.set_item("end", use_.span.hi)?;
+            memory_uses.append(item)?;
+        }
+        entry.set_item("memory_uses", memory_uses)?;
+
+        let memory_edges = PyList::empty(py);
+        for edge in &flow.memory_edges {
+            let item = PyDict::new(py);
+            item.set_item("definition", edge.definition)?;
+            item.set_item("use", edge.use_)?;
+            item.set_item("definition_region", edge.definition_region.0)?;
+            item.set_item("use_region", edge.use_region.0)?;
+            item.set_item("overlap", edge.overlap.map(|kind| kind.name()))?;
+            memory_edges.append(item)?;
+        }
+        entry.set_item("memory_edges", memory_edges)?;
+        entry.set_item("effects_complete", flow.effects_complete)?;
         entry.set_item("memory_complete", flow.memory_complete)?;
+        entry.set_item("vla_complete", flow.vla_complete)?;
+        entry.set_item("control_targets_complete", flow.control_targets_complete)?;
+        entry.set_item("recovery_free", flow.recovery_free)?;
+        let issues = PyList::empty(py);
+        for issue in &flow.semantic_issues {
+            let item = PyDict::new(py);
+            item.set_item("kind", issue.kind.name())?;
+            item.set_item(
+                "dimensions",
+                issue
+                    .kind
+                    .dimensions()
+                    .iter()
+                    .map(|dimension| dimension.name())
+                    .collect::<Vec<_>>(),
+            )?;
+            item.set_item("start", issue.span.map(|span| span.lo))?;
+            item.set_item("end", issue.span.map(|span| span.hi))?;
+            issues.append(item)?;
+        }
+        entry.set_item("semantic_issues", issues)?;
 
         let uses = PyList::empty(py);
         for use_ in &flow.uses {
@@ -639,14 +1205,15 @@ pub fn data_flow_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyL
 #[pyfunction]
 #[pyo3(name = "control_dependence")]
 pub fn control_dependence_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use cindergraph::csource::cfg::function_cfgs;
+    use cindergraph::csource::semantic::{AnalysisUnit, ANALYSIS_REVISION};
     use cindergraph::syntax::dominance::ControlDependence;
 
     let built = py.detach(|| {
-        let tree = parse(text).into_parts().0;
-        let cfgs = function_cfgs(&tree, text).into_parts().0;
-        cfgs.iter()
-            .map(|function| {
+        let unit = AnalysisUnit::new(text);
+        unit.functions()
+            .iter()
+            .enumerate()
+            .map(|(index, function)| {
                 let cdg = ControlDependence::of(&function.cfg);
                 let nodes: Vec<(u32, String, u32, Option<u32>)> = (0..function.cfg.node_count()
                     as u32)
@@ -665,15 +1232,26 @@ pub fn control_dependence_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound
                     .map(|edge| (edge.on, edge.node, edge.kind.name()))
                     .collect();
                 let stuck: Vec<u32> = cdg.post_dominators().dead_ends().to_vec();
-                (function.name.clone(), nodes, edges, stuck)
+                (
+                    function.name.clone(),
+                    unit.source_id(),
+                    index as u32,
+                    nodes,
+                    edges,
+                    stuck,
+                )
             })
             .collect::<Vec<_>>()
     });
 
     let out = PyList::empty(py);
-    for (name, nodes, edges, stuck) in built {
+    for (name, source_id, function_id, nodes, edges, stuck) in built {
         let entry = PyDict::new(py);
         entry.set_item("name", name)?;
+        entry.set_item("source_id", source_id.name())?;
+        entry.set_item("function_id", function_id)?;
+        entry.set_item("analysis_revision", ANALYSIS_REVISION)?;
+        entry.set_item("graph_kind", "executable_cfg")?;
         let node_list = PyList::empty(py);
         for (id, kind, depth, ipdom) in nodes {
             let item = PyDict::new(py);
@@ -706,49 +1284,109 @@ pub fn control_dependence_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound
 /// control and data dependence backwards to a fixed point.
 #[pyfunction]
 #[pyo3(name = "backward_slice")]
-#[pyo3(signature = (text, function, node))]
+#[pyo3(signature = (text, function, node, *, source_id=None, function_id=None, graph_kind=None, analysis_revision=None))]
+// The optional identity coordinates deliberately remain separate Python
+// keywords; grouping them into a Rust-only options object would make the
+// binding signature diverge from the documented public API.
+#[allow(clippy::too_many_arguments)]
 pub fn backward_slice_py(
     py: Python<'_>,
     text: &str,
     function: &str,
     node: u32,
+    source_id: Option<&str>,
+    function_id: Option<u32>,
+    graph_kind: Option<&str>,
+    analysis_revision: Option<u32>,
 ) -> PyResult<Vec<u32>> {
-    use cindergraph::csource::cfg::function_cfgs;
-    use cindergraph::csource::dataflow::analyze_function;
+    use cindergraph::csource::semantic::AnalysisUnit;
+
+    let unit = py.detach(|| AnalysisUnit::new(text));
+    py.detach(|| {
+        backward_slice_unit(
+            &unit,
+            function,
+            node,
+            source_id,
+            function_id,
+            graph_kind,
+            analysis_revision,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn backward_slice_unit(
+    unit: &AnalysisUnit,
+    function: &str,
+    node: u32,
+    source_id: Option<&str>,
+    function_id: Option<u32>,
+    graph_kind: Option<&str>,
+    analysis_revision: Option<u32>,
+) -> PyResult<Vec<u32>> {
+    use cindergraph::csource::semantic::ANALYSIS_REVISION;
     use cindergraph::syntax::dominance::{backward_slice, ControlDependence};
 
-    let sliced = py.detach(|| {
-        let tree = parse(text).into_parts().0;
-        let spans = tree.token_spans(text);
-        let cfgs = function_cfgs(&tree, text).into_parts().0;
-        cfgs.iter()
-            .find(|candidate| candidate.name == function)
-            .map(|candidate| {
-                if node as usize >= candidate.cfg.node_count() {
-                    return Err(pyo3::exceptions::PyIndexError::new_err(format!(
-                        "node {node} is outside function {function:?} ({} nodes)",
-                        candidate.cfg.node_count()
-                    )));
-                }
-                let cdg = ControlDependence::of(&candidate.cfg);
-                let flow = analyze_function(&tree, text, &spans, candidate);
-                let data: Vec<(u32, u32)> = flow
-                    .edges
-                    .iter()
-                    .filter_map(|edge| {
-                        Some((
-                            flow.definitions.get(edge.def as usize)?.node,
-                            flow.uses.get(edge.use_ as usize)?.node,
-                        ))
-                    })
-                    .collect();
-                Ok(backward_slice(&cdg, &data, node))
-            })
-    });
-
-    sliced.ok_or_else(|| {
+    let flows = unit.dataflows();
+    if source_id.is_some_and(|expected| expected != unit.source_id().name()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "source_id does not identify the supplied source text",
+        ));
+    }
+    if graph_kind.is_some_and(|kind| kind != "executable_cfg") {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "backward_slice requires graph_kind='executable_cfg'",
+        ));
+    }
+    if analysis_revision.is_some_and(|revision| revision != ANALYSIS_REVISION) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "analysis_revision does not match {ANALYSIS_REVISION}"
+        )));
+    }
+    let mut matches = unit
+        .functions()
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| candidate.name == function);
+    let (index, candidate) = matches.next().ok_or_else(|| {
         pyo3::exceptions::PyKeyError::new_err(format!("no function named {function:?}"))
-    })?
+    })?;
+    if matches.next().is_some() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "ambiguous function name {function:?}: multiple definitions"
+        )));
+    }
+    if function_id.is_some_and(|expected| expected != index as u32) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "function_id does not identify function {function:?}"
+        )));
+    }
+    if node as usize >= candidate.cfg.node_count() {
+        return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+            "node {node} is outside function {function:?} ({} nodes)",
+            candidate.cfg.node_count()
+        )));
+    }
+    let cdg = ControlDependence::of(&candidate.cfg);
+    let flow = &flows[index];
+    let mut data: Vec<(u32, u32)> = flow
+        .edges
+        .iter()
+        .filter_map(|edge| {
+            Some((
+                flow.definitions.get(edge.def as usize)?.node,
+                flow.uses.get(edge.use_ as usize)?.node,
+            ))
+        })
+        .collect();
+    data.extend(flow.memory_edges.iter().filter_map(|edge| {
+        Some((
+            flow.memory_definitions.get(edge.definition as usize)?.node,
+            flow.memory_uses.get(edge.use_ as usize)?.node,
+        ))
+    }));
+    Ok(backward_slice(&cdg, &data, node))
 }
 
 /// What each function does with the values passed to it, across calls.
@@ -761,15 +1399,49 @@ pub fn backward_slice_py(
 #[pyfunction]
 #[pyo3(name = "call_summaries")]
 pub fn call_summaries_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
-    use cindergraph::csource::dataflow::{analyze, summarize, Sink};
+    let unit = py.detach(|| {
+        let unit = AnalysisUnit::new(text);
+        let _ = unit.summaries();
+        unit
+    });
+    call_summaries_dict(py, &unit)
+}
 
-    let summaries = py.detach(|| summarize(&analyze(text).into_parts().0));
+fn call_summaries_dict<'py>(py: Python<'py>, unit: &AnalysisUnit) -> PyResult<Bound<'py, PyList>> {
+    use cindergraph::csource::dataflow::Sink;
+
+    let summaries = unit.summaries();
     let out = PyList::empty(py);
     for summary in summaries.iter() {
         let entry = PyDict::new(py);
         entry.set_item("name", summary.name.clone())?;
+        entry.set_item("source_id", summary.source_id.name())?;
+        entry.set_item("input_dialect", unit.options().dialect.name())?;
+        entry.set_item("external_call_policy", unit.options().external_calls.name())?;
+        entry.set_item("function_id", summary.function_id.map(|id| id.0))?;
+        entry.set_item("analysis_revision", summary.analysis_revision)?;
         entry.set_item("parameters", summary.parameters)?;
         entry.set_item("complete", summary.complete)?;
+        entry.set_item("memory_effects_complete", summary.memory_effects_complete)?;
+        let memory_effects = PyList::empty(py);
+        for effect in &summary.memory_effects {
+            use cindergraph::csource::dataflow::MemoryEffectPath;
+            let item = PyDict::new(py);
+            item.set_item("parameter", effect.parameter)?;
+            item.set_item("kind", effect.kind.name())?;
+            item.set_item("precision", effect.precision.name())?;
+            let path = effect
+                .path
+                .iter()
+                .map(|component| match component {
+                    MemoryEffectPath::Field(member) => format!(".{member}"),
+                    MemoryEffectPath::Elements => "[*]".to_owned(),
+                })
+                .collect::<Vec<_>>();
+            item.set_item("path", path)?;
+            memory_effects.append(item)?;
+        }
+        entry.set_item("memory_effects", memory_effects)?;
         let flows = PyList::empty(py);
         for (index, sink) in &summary.flows {
             let item = PyDict::new(py);
@@ -789,6 +1461,197 @@ pub fn call_summaries_py<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py
         entry.set_item("flows", flows)?;
         out.append(entry)?;
     }
+    Ok(out)
+}
+
+/// Persistent Python owner of one parsed and analyzed source snapshot.
+#[pyclass(
+    name = "AnalysisSession",
+    module = "cindergraph._native.source",
+    frozen
+)]
+struct PyAnalysisSession {
+    unit: AnalysisUnit,
+}
+
+#[pymethods]
+impl PyAnalysisSession {
+    #[new]
+    #[pyo3(signature = (text, *, dialect=None, external_calls=None))]
+    fn new(
+        py: Python<'_>,
+        text: String,
+        dialect: Option<&str>,
+        external_calls: Option<&str>,
+    ) -> PyResult<Self> {
+        let dialect = input_dialect(dialect)?;
+        let external_calls = external_call_policy(external_calls)?;
+        Ok(Self {
+            unit: py.detach(|| {
+                AnalysisUnit::with_options(
+                    text,
+                    AnalysisOptions {
+                        dialect,
+                        external_calls,
+                    },
+                )
+            }),
+        })
+    }
+
+    #[getter]
+    fn source_id(&self) -> String {
+        self.unit.source_id().name()
+    }
+
+    #[getter]
+    fn source(&self) -> &str {
+        self.unit.source()
+    }
+
+    #[getter]
+    fn dialect(&self) -> &str {
+        self.unit.options().dialect.name()
+    }
+
+    #[getter]
+    fn external_calls(&self) -> &str {
+        self.unit.options().external_calls.name()
+    }
+
+    #[getter]
+    fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        diagnostics_list(py, self.unit.diagnostics(), self.unit.source())
+    }
+
+    fn control_flow_graphs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        control_flow_graphs_dict(py, &self.unit)
+    }
+
+    fn data_flow<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        py.detach(|| {
+            let _ = self.unit.dataflows();
+        });
+        data_flow_dict(py, &self.unit)
+    }
+
+    fn call_summaries<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        py.detach(|| {
+            let _ = self.unit.summaries();
+        });
+        call_summaries_dict(py, &self.unit)
+    }
+
+    #[pyo3(signature = (repr, format))]
+    fn export_graphs<'py>(
+        &self,
+        py: Python<'py>,
+        repr: &str,
+        format: &str,
+    ) -> PyResult<Bound<'py, PyList>> {
+        export_graphs_dict(py, &self.unit, repr, format)
+    }
+
+    #[pyo3(signature = (*, repr="cfg"))]
+    fn native_graphs<'py>(&self, py: Python<'py>, repr: &str) -> PyResult<Bound<'py, PyList>> {
+        native_graphs_list(py, &self.unit, repr)
+    }
+
+    #[pyo3(signature = (function, node, *, function_id=None))]
+    fn backward_slice(
+        &self,
+        py: Python<'_>,
+        function: &str,
+        node: u32,
+        function_id: Option<u32>,
+    ) -> PyResult<Vec<u32>> {
+        py.detach(|| backward_slice_unit(&self.unit, function, node, None, function_id, None, None))
+    }
+
+    fn query_reaches<'py>(
+        &self,
+        py: Python<'py>,
+        source: &str,
+        parameter: u32,
+        sink: &str,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let answer = py.detach(|| {
+            cindergraph::csource::dataflow::interproc::reaches_detailed(
+                self.unit.summaries(),
+                source,
+                parameter,
+                sink,
+            )
+        });
+        reachability_dict(py, &self.unit, &answer)
+    }
+
+    fn query_reaches_by_id<'py>(
+        &self,
+        py: Python<'py>,
+        source_function_id: u32,
+        parameter: u32,
+        sink_function_id: u32,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        use cindergraph::csource::semantic::FunctionId;
+
+        let answer = py.detach(|| {
+            cindergraph::csource::dataflow::interproc::reaches_by_id_detailed(
+                self.unit.summaries(),
+                FunctionId(source_function_id),
+                parameter,
+                FunctionId(sink_function_id),
+            )
+        });
+        reachability_dict(py, &self.unit, &answer)
+    }
+}
+
+fn reachability_dict<'py>(
+    py: Python<'py>,
+    unit: &AnalysisUnit,
+    answer: &cindergraph::csource::dataflow::interproc::Reachability,
+) -> PyResult<Bound<'py, PyDict>> {
+    use cindergraph::csource::dataflow::interproc::Flow;
+    use cindergraph::csource::semantic::ANALYSIS_REVISION;
+
+    let out = PyDict::new(py);
+    out.set_item(
+        "claim",
+        match answer.verdict {
+            Flow::Yes => "found_may_path",
+            Flow::No => "no_may_path",
+            Flow::Unknown => "unknown",
+        },
+    )?;
+    out.set_item("verdict", answer.verdict.name())?;
+    out.set_item("source_id", unit.source_id().name())?;
+    out.set_item("input_dialect", unit.options().dialect.name())?;
+    out.set_item("external_call_policy", unit.options().external_calls.name())?;
+    out.set_item("analysis_revision", ANALYSIS_REVISION)?;
+    out.set_item("coverage_complete", answer.verdict == Flow::No)?;
+    let steps = |items: &[cindergraph::csource::dataflow::interproc::ReachabilityStep]| {
+        items
+            .iter()
+            .map(|step| {
+                (
+                    step.function_id.map(|id| id.0),
+                    step.function.clone(),
+                    step.parameter,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    out.set_item("path", steps(&answer.path))?;
+    out.set_item("explored", steps(&answer.explored))?;
+    out.set_item(
+        "uncertainty",
+        answer
+            .uncertainty
+            .iter()
+            .map(|reason| reason.name())
+            .collect::<Vec<_>>(),
+    )?;
     Ok(out)
 }
 
@@ -817,9 +1680,61 @@ pub fn reaches_py(
     Ok(verdict.name().to_string())
 }
 
+/// Structured reachability claim with path or explicit uncertainty evidence.
+#[pyfunction]
+#[pyo3(name = "query_reaches")]
+#[pyo3(signature = (text, source, parameter, sink))]
+pub fn query_reaches_py<'py>(
+    py: Python<'py>,
+    text: &str,
+    source: &str,
+    parameter: u32,
+    sink: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (unit, answer) = py.detach(|| {
+        let unit = AnalysisUnit::new(text);
+        let answer = cindergraph::csource::dataflow::interproc::reaches_detailed(
+            unit.summaries(),
+            source,
+            parameter,
+            sink,
+        );
+        (unit, answer)
+    });
+    reachability_dict(py, &unit, &answer)
+}
+
+/// Identity-first reachability claim for duplicate-safe queries.
+#[pyfunction]
+#[pyo3(name = "query_reaches_by_id")]
+#[pyo3(signature = (text, source_function_id, parameter, sink_function_id))]
+pub fn query_reaches_by_id_py<'py>(
+    py: Python<'py>,
+    text: &str,
+    source_function_id: u32,
+    parameter: u32,
+    sink_function_id: u32,
+) -> PyResult<Bound<'py, PyDict>> {
+    use cindergraph::csource::semantic::FunctionId;
+
+    let (unit, answer) = py.detach(|| {
+        let unit = AnalysisUnit::new(text);
+        let answer = cindergraph::csource::dataflow::interproc::reaches_by_id_detailed(
+            unit.summaries(),
+            FunctionId(source_function_id),
+            parameter,
+            FunctionId(sink_function_id),
+        );
+        (unit, answer)
+    });
+    reachability_dict(py, &unit, &answer)
+}
+
 /// Register the `source` submodule on the extension root.
 pub fn register_source_metrics_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "source")?;
+    sub.add_class::<PyNativeGraph>()?;
+    sub.add_class::<PyAnalysisSession>()?;
     sub.add_function(wrap_pyfunction!(analyze_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(functions_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(control_flow_graphs_py, &sub)?)?;
@@ -827,12 +1742,15 @@ pub fn register_source_metrics_bindings(_py: Python<'_>, m: &Bound<'_, PyModule>
     sub.add_function(wrap_pyfunction!(features_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(normalize_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(export_graphs_py, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(native_graphs_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(export_choices_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(data_flow_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(control_dependence_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(backward_slice_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(call_summaries_py, &sub)?)?;
     sub.add_function(wrap_pyfunction!(reaches_py, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(query_reaches_py, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(query_reaches_by_id_py, &sub)?)?;
     m.add_submodule(&sub)?;
     Ok(())
 }
@@ -871,6 +1789,7 @@ mod tests {
             NodeKind::Cond,
             NodeKind::LoopHeader,
             NodeKind::Switch,
+            NodeKind::IndirectDispatch,
             NodeKind::Case,
             NodeKind::Label,
             NodeKind::Goto,

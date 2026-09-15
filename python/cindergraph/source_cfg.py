@@ -19,6 +19,11 @@ gates is `docs/design/static-c-analysis/parity-plan.md`.
 
 from __future__ import annotations
 
+import logging
+import re
+import shutil
+import subprocess
+import tempfile
 from typing import TYPE_CHECKING, Any
 
 from cindergraph import _native
@@ -32,6 +37,48 @@ __all__ = [
     "graph_from_serialized",
     "parity_cfgs",
 ]
+
+logger = logging.getLogger(__name__)
+_PREPROCESSOR_CONTROL = re.compile(
+    r"^\s*#\s*(?:define|undef|if|ifdef|ifndef|elif|else|endif)\b", re.MULTILINE
+)
+_INCLUDE_DIRECTIVE = re.compile(r"^\s*#\s*include\b[^\n]*(?:\n|$)", re.MULTILINE)
+
+
+def _preprocess_decompiled_c(text: str) -> str:
+    """Expand local directives the DecBench provider contract expands.
+
+    The native parser intentionally has no compiler dependency. This adapter
+    is the DecBench-facing boundary, where Joern likewise receives text after
+    local macro expansion and conditional selection. Includes are removed so
+    a decompiler cannot make the host preprocessor import arbitrary headers;
+    failure is fail-open and returns the original tolerant-parser input.
+    """
+    if _PREPROCESSOR_CONTROL.search(text) is None:
+        return text
+    compiler = shutil.which("gcc") or shutil.which("cc")
+    if compiler is None:
+        logger.warning("cannot preprocess decompiled C: no host C preprocessor")
+        return text
+    safe_text = _INCLUDE_DIRECTIVE.sub("\n", text)
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".c") as source:
+            source.write(safe_text)
+            source.flush()
+            result = subprocess.run(
+                [compiler, "-E", "-P", "-x", "c", source.name],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        logger.warning("cannot preprocess decompiled C: %s", error)
+        return text
+    if result.returncode != 0 or not result.stdout.strip():
+        logger.warning("cannot preprocess decompiled C: %s", result.stderr.strip())
+        return text
+    return result.stdout
 
 
 class SourceCfgNode:
@@ -139,4 +186,7 @@ def cfgs_from_decompiled(text: str) -> dict[str, networkx.DiGraph]:
     Raises:
         ImportError: If `networkx` is not installed in the running environment.
     """
-    return {name: graph_from_serialized(cfg) for name, cfg in parity_cfgs(text).items()}
+    prepared = _preprocess_decompiled_c(text)
+    return {
+        name: graph_from_serialized(cfg) for name, cfg in parity_cfgs(prepared).items()
+    }

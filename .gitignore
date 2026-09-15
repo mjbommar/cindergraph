@@ -3,6 +3,7 @@
 /.pytest_cache/
 /.ruff_cache/
 /.mypy_cache/
+/workspace/
 *.so
 *.pyd
 __pycache__/

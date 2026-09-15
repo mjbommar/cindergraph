@@ -58,29 +58,37 @@
 //! Repeated uses of one spelling share an ID; different globals and local
 //! shadows remain distinct. Unresolved names do not imply a recovered type.
 //!
-//! Because the syntax tree is walked in source order and C requires a
-//! declaration before use, resolving a use against "the innermost binding
-//! opened so far" is the same answer a full symbol table would give, without
-//! building one.
+//! This is a local lexical binding model over recovered declarations, not a
+//! full C symbol table: included declarations, typedef expansion and global
+//! linkage resolution are not provided by this pass.
 //!
-//! # What it does not do, stated rather than implied
+//! # Coverage and limitations
 //!
 //! * **Local points-to sets.** Address-taking and pointer copies identify
 //!   possible local targets. Indirect assignments add weak definitions of
 //!   these targets; they do not kill other possible definitions. This is
 //!   flow-insensitive and can include spurious dependences.
-//! * **Incomplete memory coverage.** Unknown pointees, fields and array
-//!   elements are not fully modeled. `DataFlow::memory_complete` exposes these
-//!   gaps; missing edges must not be interpreted as proven independence.
-//! * **No interprocedural flow.** A call is a use of its arguments. `&x` is
-//!   recorded as a definition of `x` --- the callee may write through it ---
-//!   but what it writes is unknown.
+//! * **Incomplete memory coverage.** Fields and array elements have explicit
+//!   abstract regions, operation-owned accesses, and possible reaching-write
+//!   edges. Known union members overlap explicitly; unknown pointees, byte
+//!   layout and full aggregate aliasing remain unsupported.
+//!   `DataFlow::memory_complete` exposes these gaps, so missing edges are not
+//!   proven independence.
+//! * **Bounded interprocedural summaries.** [`summarize`] propagates parameter
+//!   dependence and formal-pointee read/write effects through known direct
+//!   calls. Complete effects are instantiated on caller regions as weak writes
+//!   or reads; incomplete, indirect, external-unknown, and ambiguous callees
+//!   retain conservative clobbers. Global effects are not yet modeled.
+//!   Address-taking is recorded as a potential local definition, not a proof
+//!   that the pointed-to value is overwritten.
 //! * **No constant folding**, for the same reason
 //!   [`crate::csource::metrics`]'s unreachable count is a lower bound.
 //!
-//! Each is a place a later pass can tighten. None of them makes an edge that
-//! is here wrong about *control* reaching it, because the reaching relation
-//! itself is exact over the graph.
+//! The fixed point is computed over the recovered CFG and extracted events,
+//! not over all C execution semantics. Recovery, alias approximations and
+//! unsupported expressions can introduce or omit dependencies. In particular,
+//! VLA-size provenance is incomplete and is not fully reflected in summary
+//! completeness. A complete summary is not a general C soundness certificate.
 //!
 //! # How the defect counts were calibrated
 //!
@@ -110,19 +118,37 @@
 pub mod events;
 pub mod interproc;
 mod memory;
+mod memory_solve;
 pub mod model;
 mod provenance;
+mod regions;
 pub mod solve;
 pub mod types;
+
+use crate::csource::semantic::declarations::{
+    resolve_function, FunctionResolution, TranslationUnitSymbols,
+};
+use crate::csource::semantic::types::{resolve_types, FunctionTypes};
 
 #[cfg(test)]
 mod tests;
 
-pub use interproc::{summarize, Flow, Sink, Summaries, Summary};
-pub use model::{Binding, CType, CallRecord, DataFlow, DefKind, Definition, FlowEdge, Use};
+pub use interproc::{
+    reaches_by_id_detailed, reaches_detailed, summarize, summarize_with_policy, ExternalCallPolicy,
+    Flow, MemoryEffectPath, ParameterMemoryEffect, ParameterMemoryEffectKind, Reachability,
+    ReachabilityStep, ReachabilityUncertainty, Sink, Summaries, Summary,
+};
+pub use model::{
+    Binding, CType, CallMemoryArgument, CallRecord, CoverageDimension, DataFlow, DefKind,
+    Definition, FlowEdge, MemoryAccess, MemoryAccessKind, MemoryAccessPrecision, MemoryDefinition,
+    MemoryDefinitionKind, MemoryFlowEdge, MemoryOverlapKind, MemoryRegion, MemoryRegionId,
+    MemoryRegionKind, MemoryRegionOverlap, MemoryUse, SemanticIssue, SemanticIssueKind, Use,
+};
 
-use crate::csource::cfg::{function_cfgs, FunctionCfg};
-use crate::csource::parse::{parse, Tree};
+use crate::csource::cfg::FunctionCfg;
+use crate::csource::eval::EvaluationPlan;
+use crate::csource::parse::Tree;
+use crate::csource::semantic::{AnalysisUnit, FunctionId, SourceUnitId, ANALYSIS_REVISION};
 use crate::syntax::diag::Parsed;
 use crate::syntax::ids::Span;
 
@@ -132,29 +158,179 @@ use crate::syntax::ids::Span;
 /// functions and the diagnostics saying so, and a function the parser only
 /// partly recovered is analyzed over the graph it did build.
 pub fn analyze(text: &str) -> Parsed<Vec<DataFlow>> {
-    let (tree, mut diagnostics) = parse(text).into_parts();
-    let (cfgs, cfg_diags) = function_cfgs(&tree, text).into_parts();
-    for diagnostic in cfg_diags.iter() {
-        diagnostics.push(diagnostic.clone());
-    }
-    let spans = tree.token_spans(text);
-    let flows = cfgs
+    let unit = AnalysisUnit::new(text);
+    let flows = analyze_unit(&unit);
+    Parsed::new(flows, unit.diagnostics().clone())
+}
+
+/// Analyze every function while preserving one owning source/parse/CFG unit.
+pub fn analyze_unit(unit: &AnalysisUnit) -> Vec<DataFlow> {
+    let recovery_spans = unit
+        .diagnostics()
         .iter()
-        .map(|function| analyze_function(&tree, text, &spans, function))
-        .collect();
-    Parsed::new(flows, diagnostics)
+        .map(|diagnostic| diagnostic.span)
+        .collect::<Vec<_>>();
+    let mut flows = unit
+        .functions()
+        .iter()
+        .zip(unit.resolutions())
+        .zip(unit.types())
+        .zip(unit.evaluations())
+        .enumerate()
+        .map(
+            |(index, (((function, resolution), structural_types), evaluation))| {
+                let mut flow = analyze_function_with_context(FunctionAnalysisInput {
+                    tree: unit.tree(),
+                    text: unit.source(),
+                    token_spans: unit.token_spans(),
+                    function,
+                    resolution,
+                    structural_types,
+                    evaluation,
+                    symbols: unit.symbols(),
+                    source_id: unit.source_id(),
+                    function_id: FunctionId(index as u32),
+                });
+                // Recovery can change declaration boundaries and name resolution,
+                // so span overlap alone cannot safely localize its effects.
+                flow.replace_recovery_issues(
+                    (!recovery_spans.is_empty())
+                        .then_some(model::SemanticIssueKind::RecoveredSyntax),
+                    &recovery_spans,
+                );
+                flow
+            },
+        )
+        .collect::<Vec<_>>();
+    let summaries = summarize_with_policy(&flows, unit.options().external_calls);
+    memory::refine_known_calls(&mut flows, unit.functions(), &summaries);
+    flows
 }
 
 /// Analyze one function whose graph is already built.
+///
+/// Diagnostic context is absent here, so `recovery_free` stays false. Use
+/// [`analyze`] to retain the translation unit's recovery status.
 pub fn analyze_function(
     tree: &Tree,
     text: &str,
     token_spans: &[Span],
     function: &FunctionCfg,
 ) -> DataFlow {
-    let events = events::collect_events(tree, text, token_spans, function);
+    let typedefs = TranslationUnitSymbols::collect(tree, text, token_spans);
+    let resolution = resolve_function(
+        tree,
+        text,
+        token_spans,
+        function.node,
+        function.span,
+        function.name_span,
+        &typedefs,
+    );
+    let structural_types = resolve_types(
+        tree,
+        text,
+        token_spans,
+        function.node,
+        &resolution,
+        &typedefs,
+        function.span.lo,
+    );
+    let evaluation = EvaluationPlan::build(
+        tree,
+        text,
+        token_spans,
+        function,
+        &resolution,
+        &structural_types,
+    );
+    analyze_function_with_context(FunctionAnalysisInput {
+        tree,
+        text,
+        token_spans,
+        function,
+        resolution: &resolution,
+        structural_types: &structural_types,
+        evaluation: &evaluation,
+        symbols: &typedefs,
+        source_id: SourceUnitId::of(text),
+        function_id: FunctionId::UNKNOWN,
+    })
+}
+
+struct FunctionAnalysisInput<'a> {
+    tree: &'a Tree,
+    text: &'a str,
+    token_spans: &'a [Span],
+    function: &'a FunctionCfg,
+    resolution: &'a FunctionResolution,
+    structural_types: &'a FunctionTypes,
+    evaluation: &'a EvaluationPlan,
+    symbols: &'a TranslationUnitSymbols,
+    source_id: SourceUnitId,
+    function_id: FunctionId,
+}
+
+fn analyze_function_with_context(input: FunctionAnalysisInput<'_>) -> DataFlow {
+    let FunctionAnalysisInput {
+        tree,
+        text,
+        token_spans,
+        function,
+        resolution,
+        structural_types,
+        evaluation,
+        symbols,
+        source_id,
+        function_id,
+    } = input;
+    let events = events::collect_events(
+        tree,
+        text,
+        token_spans,
+        function,
+        events::SemanticContext {
+            resolution,
+            types: structural_types,
+            evaluation,
+            symbols,
+        },
+    );
+    let bound_captures = events.bound_captures;
+    let binding_by_place = events.binding_by_place;
     let mut flow = DataFlow {
+        source_id,
+        function_id,
+        analysis_revision: ANALYSIS_REVISION,
+        node_spans: function
+            .cfg
+            .nodes()
+            .iter()
+            .map(|node| node.span())
+            .collect(),
+        discarded_values: tree
+            .arena()
+            .preorder(function.node)
+            .filter(|node| {
+                tree.arena().tag(*node)
+                    == Some(crate::csource::parse::tag::NodeTag::CommaExpr.as_u16())
+            })
+            .flat_map(|node| {
+                let children: Vec<_> = tree.arena().children_iter(node).collect();
+                let owner = tree.arena().span(node, token_spans);
+                children
+                    .iter()
+                    .take(children.len().saturating_sub(1))
+                    .filter_map(|child| Some((owner?, tree.arena().span(*child, token_spans)?)))
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+        recovery_free: false,
+        effects_complete: true,
         memory_complete: true,
+        vla_complete: true,
+        control_targets_complete: true,
+        semantic_issues: events.semantic_issues,
         unresolved_bindings: events.unresolved,
         return_spans: tree
             .arena()
@@ -184,11 +360,78 @@ pub fn analyze_function(
         types: events.types,
         names: events.names,
         calls: events.calls,
+        call_memory_arguments: Vec::new(),
+        memory_regions: Vec::new(),
+        memory_overlaps: Vec::new(),
+        memory_accesses: Vec::new(),
+        memory_definitions: Vec::new(),
+        memory_uses: Vec::new(),
+        memory_edges: Vec::new(),
         edges: Vec::new(),
         unresolved_uses: Vec::new(),
         dead_stores: Vec::new(),
     };
-    memory::project_writes(tree, text, token_spans, function, &mut flow);
+    for dispatch in function.cfg.indirect_dispatches() {
+        if dispatch.precision == crate::syntax::cfg::TargetPrecision::Conservative {
+            flow.record_issue(
+                model::SemanticIssueKind::UnresolvedControlTarget,
+                function.cfg.node(dispatch.node).map(|node| node.span()),
+            );
+        }
+    }
+    memory::project_writes(
+        memory::ProjectionContext {
+            tree,
+            text,
+            spans: token_spans,
+            function,
+            evaluation,
+            binding_by_place: &binding_by_place,
+            unevaluated: &events.unevaluated,
+        },
+        &mut flow,
+    );
+    memory_solve::solve(&mut flow, &function.cfg);
     solve::solve(&mut flow, &function.cfg);
+    project_bound_captures(&mut flow, bound_captures);
+    flow.refresh_semantic_issues(Some(model::SemanticIssueKind::RecoveryContextUnavailable));
     flow
+}
+
+fn project_bound_captures(flow: &mut DataFlow, captures: Vec<events::BoundCapture>) {
+    for capture in captures {
+        let source_uses = flow
+            .uses
+            .iter()
+            .enumerate()
+            .filter(|(_, use_)| {
+                use_.binding == capture.use_.binding
+                    && capture.source_expression.lo <= use_.span.lo
+                    && use_.span.hi <= capture.source_expression.hi
+            })
+            .map(|(index, _)| index as u32)
+            .collect::<Vec<_>>();
+        let reaching = flow
+            .edges
+            .iter()
+            .filter(|edge| source_uses.contains(&edge.use_))
+            .map(|edge| edge.def)
+            .collect::<std::collections::BTreeSet<_>>();
+        if reaching.is_empty() {
+            // The structural slot conservatively retains identifiers that a
+            // constant/type operator may leave unevaluated. Event lowering
+            // emits issues for opaque evaluated bounds; absence of a reaching
+            // source use here therefore means there is no captured value edge.
+            continue;
+        }
+        let use_index = flow.uses.len() as u32;
+        let name = capture.use_.name.clone();
+        flow.uses.push(capture.use_);
+        flow.edges
+            .extend(reaching.into_iter().map(|def| model::FlowEdge {
+                def,
+                use_: use_index,
+                name: name.clone(),
+            }));
+    }
 }

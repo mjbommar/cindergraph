@@ -1,17 +1,12 @@
-//! `SB-5` --- diagnostics, and the "parsing never fails" contract.
-//!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 4 and 7.
+//! Diagnostics paired with partial parser output.
 //!
 //! Every parser entry point in this substrate returns its product alongside a
-//! [`Diagnostics`] list, never a `Result` (`REQ-SYN-2`). [`Parsed<T>`] is the
+//! [`Diagnostics`] list rather than a `Result`. [`Parsed<T>`] is the
 //! type that carries both halves of that contract in one value, so that
 //! reaching for `Result` is simply not the ergonomic option: the product is
 //! always available, and diagnostics are additional information rather than
-//! an alternative outcome. This mirrors rust-analyzer's stated invariant
-//! ("Parsing never fails, the parser produces `(T, Vec<Error>)` rather than
-//! `Result<T, Error>`") for exactly the reason given in section 4 of the
-//! design doc: a `Result`-returning parser cannot report a per-function
-//! failure, and one bad byte must never void a whole file's output.
+//! an alternative outcome. This supports best-effort analysis without hiding
+//! parse damage from callers.
 
 use std::fmt;
 

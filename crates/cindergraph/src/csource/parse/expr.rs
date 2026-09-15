@@ -1,8 +1,5 @@
 //! `F-5` --- the expression grammar: precedence climbing on an explicit stack.
 //!
-//! Spec: `docs/design/static-c-analysis/roadmap.md` stage S1 (`F-5`), and
-//! `REQ-CFG-6`, which this module deliberately does **not** implement.
-//!
 //! # `&&`, `||` and `?:` are expressions here, and only here
 //!
 //! `REQ-CFG-6` says the short-circuit operators are control flow: `a && b`
@@ -16,7 +13,7 @@
 //!
 //! # Why the precedence ladder is climbed with a bit mask
 //!
-//! The event stream has no `precede` (`substrate.md` section 2.2), so the
+//! The event stream has no `precede`, so the
 //! `Open` for a binary node must be emitted before its first operand --- before
 //! the operator that says the node exists has been seen. The machine therefore
 //! opens a *speculative* node per precedence level, and abandons the ones no
@@ -24,7 +21,7 @@
 //! skips, so the cost is an event, not a node.
 //!
 //! Opening all ten binary levels for every operand would pay that cost ten
-//! times for `x`. [`Parser::scan_levels`] runs one bounded forward scan per
+//! times for `x`. `Parser::scan_levels` runs one bounded forward scan per
 //! region and says which levels the region can contain, so the usual operand
 //! opens one speculative node or none. The scan is allowed to over-approximate
 //! and is not allowed to under-approximate; that asymmetry is its whole

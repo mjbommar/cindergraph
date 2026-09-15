@@ -1,23 +1,15 @@
-//! `F-5`..`F-7` --- the C parser: expressions, statements and declarations.
-//!
-//! Spec: `docs/design/static-c-analysis/roadmap.md` stage S1, and
-//! `docs/design/static-c-analysis/requirements.md` `REQ-IN-3` (the GNU
-//! surface), `REQ-IN-4` (ill-formed input must not abort the file),
-//! `REQ-GEN-4`/`REQ-SYN-3` (no native recursion), `REQ-GEN-5` (the AST is
-//! lowerable) and `REQ-SYN-2` (parsing never fails).
+//! Recovery-oriented C expressions, statements and declarations.
 //!
 //! # The shape: one explicit task stack, no native recursion
 //!
 //! A recursive-descent C parser is the archetypal stack-overflow victim, and
 //! decompiler output has attacker-controlled nesting depth: nested casts,
 //! parenthesised spines, long `||` chains. An abort is the *worst* available
-//! failure, because a process that dies cannot report a per-function result,
-//! and per-function failure is exactly the whole-file voiding mode this
-//! programme exists to remove (`REQ-ROB-2`).
+//! failure, because a process that dies cannot report a per-function result.
 //!
 //! So there is no `parse_expr` calling `parse_unary` calling `parse_primary`.
-//! There is one loop over a [`Vec<Task>`](Task): every step pops a task, may
-//! consume tokens, and may push the tasks that must run next --- **in reverse
+//! There is one loop over a `Vec<Task>`: every step pops a task, may
+//! consume tokens, and may push the tasks that must run next—in reverse
 //! order**, since the stack is LIFO. Nesting costs heap, and the only bound is
 //! [`MAX_TASKS`], which produces a diagnostic rather than a signal. The tests
 //! drive it 20,000 parentheses deep.
@@ -27,27 +19,27 @@
 //! * [`expr`] --- precedence climbing over C's ladder, with the flat-node
 //!   representation [`tag`] explains. `&&`, `||` and `?:` are parsed as
 //!   ordinary expressions here; their control-flow meaning is the CFG layer's
-//!   job (`REQ-CFG-6`), not the parser's.
+//!   job, not the parser's.
 //! * [`stmt`] --- every statement form plus GNU statement expressions.
-//! * [`decl`] --- declarations, kept only as far as `REQ-GEN-5` needs: the
-//!   specifier run, the declarator with its name, and the initializer, which is
-//!   the part that contributes control flow.
+//! * [`decl`] --- declarations represented by their specifier run, declarator,
+//!   name and initializer; this is sufficient for downstream CFG and dataflow
+//!   construction but not a full C type system.
 //! * [`look`] --- the bounded lookahead the other three ask questions of.
 //!
 //! # What "error" means here, and why some recoveries are warnings
 //!
-//! `REQ-SYN-2` makes parsing total, so the interesting distinction is not
-//! success versus failure but *how much was lost*:
+//! Recovery-oriented parsing makes the interesting distinction *how much was
+//! lost*, rather than whether a single success value exists:
 //!
 //! * a **warning** is a recovery that lost nothing --- a missing `;` between
 //!   two statements, say, where the construct is complete and the tree is
 //!   exactly the tree the `;` would have produced;
 //! * an **error** is a construct the parser could not model, and it always
 //!   comes with a [`NodeTag::Error`] node holding the tokens that were
-//!   discarded (`REQ-CFG-11`: an unparsed region keeps its node).
+//!   discarded; an unparsed region keeps its node.
 //!
 //! The distinction is load-bearing for the corpus gate: the in-repo `.c` files
-//! are **not** preprocessed (`REQ-IN-2` assumes they are), so they contain
+//! are **not** preprocessed, so they contain
 //! X-macro call statements such as `AS_CASE(NOP, 0, 1)` with no `;`. That is a
 //! lossless recovery, not a modelling failure, and calling it an error would be
 //! reporting the absent preprocessor as a parser defect.
@@ -150,10 +142,47 @@ enum Task {
         marker: Marker,
         phase: u8,
     },
+    /// Resume a declaration's specifier run. Record bodies suspend this task
+    /// while their member declarations use the same grammar.
+    DeclSpecifiers {
+        declaration: Marker,
+        specifiers: Marker,
+        kind: DeclarationKind,
+        saw_type: bool,
+    },
+    /// Parse the next member of a struct/union body, or close it at `}`.
+    StructMembers { marker: Marker, last: u32 },
     /// Parse the next declarator of a declaration.
-    Declarators { marker: Marker, index: u32 },
+    Declarators {
+        marker: Marker,
+        index: u32,
+        kind: DeclarationKind,
+    },
+    /// Resume the structural part of one declarator.
+    ///
+    /// Array bounds suspend this task while the ordinary expression parser
+    /// owns the tokens between `[` and `]`. `grouped` is the explicit stack
+    /// for parenthesised declarators, preserving the parser's no-recursion
+    /// invariant.
+    DeclaratorBody {
+        found_name: bool,
+        depth: u32,
+        grouped: Vec<Marker>,
+    },
+    /// Finish a declarator after its structural body has completed.
+    DeclaratorDone {
+        declaration: Marker,
+        declarator: Marker,
+        index: u32,
+        before: u32,
+        kind: DeclarationKind,
+    },
     /// Decide what follows a declarator: another one, or the end.
-    DeclTail { marker: Marker, index: u32 },
+    DeclTail {
+        marker: Marker,
+        index: u32,
+        kind: DeclarationKind,
+    },
     /// Parse the next element of a braced initializer, or close it at `}`.
     InitList { marker: Marker, last: u32 },
     /// Consume the `,` between two initializer elements. `start` is where the
@@ -162,11 +191,20 @@ enum Task {
     InitMore { marker: Marker, start: u32 },
 }
 
+/// Grammar context for a declaration. Record members share declarator parsing
+/// with ordinary declarations but cannot become function definitions or carry
+/// ordinary initializers, and their closing `;` resumes a struct body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeclarationKind {
+    Ordinary,
+    Member,
+}
+
 /// Which multi-phase construct a [`Task::Cont`] is resuming.
 ///
 /// One enum rather than one `Task` variant per construct: the phases differ but
 /// the state is always the same triple (which construct, which node, how far
-/// in), so a shared variant keeps [`Task`] small and keeps the resumption
+/// in), so a shared variant keeps `Task` small and keeps the resumption
 /// points in one readable match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Cont {
@@ -392,6 +430,7 @@ impl<'a> Parser<'a> {
             | Task::Close(marker)
             | Task::EatClose { marker, .. }
             | Task::Cont { marker, .. }
+            | Task::StructMembers { marker, .. }
             | Task::Declarators { marker, .. }
             | Task::DeclTail { marker, .. }
             | Task::InitList { marker, .. }
@@ -402,6 +441,27 @@ impl<'a> Parser<'a> {
             | Task::Unary { .. }
             | Task::ArgsMore
             | Task::Eat { .. } => {}
+            Task::DeclSpecifiers {
+                declaration,
+                specifiers,
+                ..
+            } => {
+                self.events.forget(specifiers);
+                self.events.forget(declaration);
+            }
+            Task::DeclaratorBody { grouped, .. } => {
+                for marker in grouped {
+                    self.events.forget(marker);
+                }
+            }
+            Task::DeclaratorDone {
+                declaration,
+                declarator,
+                ..
+            } => {
+                self.events.forget(declarator);
+                self.events.forget(declaration);
+            }
         }
     }
 
@@ -434,8 +494,35 @@ impl<'a> Parser<'a> {
                 marker,
                 phase,
             } => self.cont(what, marker, phase),
-            Task::Declarators { marker, index } => self.declarators(marker, index),
-            Task::DeclTail { marker, index } => self.decl_tail(marker, index),
+            Task::DeclSpecifiers {
+                declaration,
+                specifiers,
+                kind,
+                saw_type,
+            } => self.decl_specifiers(declaration, specifiers, kind, saw_type),
+            Task::StructMembers { marker, last } => self.struct_member(marker, last),
+            Task::Declarators {
+                marker,
+                index,
+                kind,
+            } => self.declarators(marker, index, kind),
+            Task::DeclaratorBody {
+                found_name,
+                depth,
+                grouped,
+            } => self.declarator_body(found_name, depth, grouped),
+            Task::DeclaratorDone {
+                declaration,
+                declarator,
+                index,
+                before,
+                kind,
+            } => self.declarator_done(declaration, declarator, index, before, kind),
+            Task::DeclTail {
+                marker,
+                index,
+                kind,
+            } => self.decl_tail(marker, index, kind),
             Task::InitList { marker, last } => self.init_list(marker, last),
             Task::InitMore { marker, start } => self.init_more(marker, start),
         }
@@ -928,11 +1015,11 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files: Vec<PathBuf> = Vec::new();
         for relative in ["tests/decompiler_fixtures/src", "tests/decbench_corpus/src"] {
-            files.extend(c_files(&root.join(relative)));
-        }
-        if files.is_empty() {
-            println!("SKIP: no in-repo C corpus under {}", root.display());
-            return;
+            files.extend(
+                crate::test_corpus::sources(&root.join(relative))
+                    .into_iter()
+                    .map(|(path, _)| path),
+            );
         }
         let (mut lines, mut functions, mut warnings) = (0usize, 0usize, 0usize);
         let (mut failures, mut empty) = (Vec::new(), Vec::new());

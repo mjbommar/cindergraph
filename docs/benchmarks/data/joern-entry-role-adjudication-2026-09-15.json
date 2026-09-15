@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:10:05Z",
+  "scope": "local CFG entry-role adjudication; no upstream interaction",
+  "provenance": {
+    "cindergraph_git_head": "edf2777abc99e1c3113b4f1d51fe021f31432538",
+    "cindergraph_worktree_dirty": true
+  },
+  "population": {
+    "translation_units": 2,
+    "functions": 4,
+    "sha256": "ae3052a74134c130ff56526aef201f4b1b47af3a9c70a4ef41cb79378e3d4a1c"
+  },
+  "summary": {
+    "functions": 4,
+    "topology_isomorphic_ignoring_roles": 4,
+    "cindergraph_unique_zero_indegree_entry": 4,
+    "joern_unique_zero_indegree_entry": 0
+  },
+  "functions": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_absent_probe",
+      "topology_isomorphic_ignoring_roles": true,
+      "cindergraph_entry_count": 1,
+      "cindergraph_entry_indegrees": [
+        0
+      ],
+      "joern_entry_count": 2,
+      "joern_entry_indegrees": [
+        2,
+        0
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_dispatch",
+      "topology_isomorphic_ignoring_roles": true,
+      "cindergraph_entry_count": 1,
+      "cindergraph_entry_indegrees": [
+        0
+      ],
+      "joern_entry_count": 2,
+      "joern_entry_indegrees": [
+        1,
+        0
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_fold",
+      "topology_isomorphic_ignoring_roles": true,
+      "cindergraph_entry_count": 1,
+      "cindergraph_entry_indegrees": [
+        0
+      ],
+      "joern_entry_count": 2,
+      "joern_entry_indegrees": [
+        1,
+        0
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/159_ifunc_resolver.c",
+      "function": "ifn159_resolve",
+      "topology_isomorphic_ignoring_roles": true,
+      "cindergraph_entry_count": 1,
+      "cindergraph_entry_indegrees": [
+        0
+      ],
+      "joern_entry_count": 3,
+      "joern_entry_indegrees": [
+        1,
+        1,
+        0
+      ]
+    }
+  ]
+}

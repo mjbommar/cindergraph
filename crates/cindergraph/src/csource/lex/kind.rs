@@ -1,9 +1,5 @@
 //! `F-4` --- the C token kind space, and the keyword table that fills it.
 //!
-//! Spec: `docs/design/static-c-analysis/roadmap.md` stage S1, and
-//! `docs/design/static-c-analysis/requirements.md` `REQ-IN-3` (the GNU C
-//! surface) and `REQ-IN-4` (an illegal token is still a token).
-//!
 //! # Why an enum and not a `u16` constant block
 //!
 //! [`crate::syntax::token::Tokens`] stores an opaque `u16` tag per token and

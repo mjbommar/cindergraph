@@ -38,7 +38,7 @@
 //!
 //! # No native recursion
 //!
-//! The walk is an explicit stack of [`Frame`]s (`REQ-SYN-3`) with a visit
+//! The walk is an explicit stack of `Frame`s (`REQ-SYN-3`) with a visit
 //! budget, so a pathologically deep expression --- which decompiler output
 //! produces routinely --- costs bounded work rather than a stack overflow that
 //! takes the process down with no diagnostic.

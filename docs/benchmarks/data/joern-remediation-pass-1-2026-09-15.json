@@ -1,0 +1,5294 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T09:57:50Z",
+  "scope": "local source-C CFG extraction used by DecBench GED; no upstream interaction",
+  "provenance": {
+    "cindergraph_git_head": "edf2777abc99e1c3113b4f1d51fe021f31432538",
+    "cindergraph_worktree_dirty": true,
+    "cindergraph_status_sha256": "9bd9ccda8990bf039fb52caea4c68cf7535235506410ee4684cd867bca373f86",
+    "cindergraph_source_sha256": "c4419a458eac2b7f15ae91668fde3705dc338fb0a5a63818817d5b4c7db04ebb",
+    "decbench_git_head": "f76dae075d4d82004fb21132b3f15e43b680e179",
+    "python": "3.12.13 (main, Mar 20 2026, 00:33:26) [Clang 22.1.1 ]",
+    "platform": "Linux-7.0.0-27-generic-x86_64-with-glibc2.43",
+    "pyjoern": "4.0.150.4",
+    "decbench": "1.1",
+    "cfgutils": "1.16.0",
+    "networkx": "3.6.1"
+  },
+  "population": {
+    "files": 53,
+    "sha256": "25cdf6743d52590f510deb083ff869747b321c9de1e32ebce207a10488124d5d",
+    "roots": [
+      "crates/cindergraph/tests/decompiler_fixtures/src",
+      "tests/decbench_corpus/src"
+    ]
+  },
+  "summary": {
+    "cindergraph_function_instances": 205,
+    "joern_function_instances": 303,
+    "shared_function_instances": 205,
+    "only_cindergraph_instances": 0,
+    "only_joern_instances": 98,
+    "shared_vj_ged_zero": 167,
+    "shared_vj_ged_nonzero": 38,
+    "shared_role_preserving_isomorphic": 165,
+    "shared_not_role_preserving_isomorphic": 38,
+    "shared_isomorphism_timeouts": 2,
+    "cindergraph_failures": 0,
+    "joern_failures": 0,
+    "cindergraph_timing": {
+      "count": 53,
+      "total_seconds": 0.20830376539379358,
+      "median_seconds": 0.001773579977452755,
+      "p95_seconds": 0.004089783877134323,
+      "min_seconds": 0.0007245857268571854,
+      "max_seconds": 0.07431362383067608
+    },
+    "joern_timing": {
+      "count": 53,
+      "total_seconds": 276.94573916494846,
+      "median_seconds": 5.152731108479202,
+      "p95_seconds": 5.353519611060619,
+      "min_seconds": 4.9805974354967475,
+      "max_seconds": 7.931719227693975
+    }
+  },
+  "files": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/03_loop_shapes.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.003948605619370937,
+      "joern_error": null,
+      "joern_seconds": 5.100147315301001,
+      "cindergraph_functions": [
+        "cond_reload_and_transform",
+        "cond_side_effect",
+        "dowhile_atleastonce",
+        "dowhile_recompute",
+        "for_countdown",
+        "for_stride2",
+        "for_sum",
+        "loop_break",
+        "loop_continue",
+        "loop_early_return",
+        "loop_return_on_neg",
+        "mutate_prefix",
+        "mutate_reverse",
+        "nested_carry",
+        "nested_pairs",
+        "step_index",
+        "two_latches",
+        "while_prefix",
+        "while_reload_header"
+      ],
+      "joern_functions": [
+        "N",
+        "cond_reload_and_transform",
+        "cond_side_effect",
+        "dowhile_atleastonce",
+        "dowhile_recompute",
+        "for_countdown",
+        "for_stride2",
+        "for_sum",
+        "loop_break",
+        "loop_continue",
+        "loop_early_return",
+        "loop_return_on_neg",
+        "mutate_prefix",
+        "mutate_reverse",
+        "nested_carry",
+        "nested_pairs",
+        "step_index",
+        "two_latches",
+        "while_prefix",
+        "while_reload_header"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "N"
+      ],
+      "shared_functions": [
+        "cond_reload_and_transform",
+        "cond_side_effect",
+        "dowhile_atleastonce",
+        "dowhile_recompute",
+        "for_countdown",
+        "for_stride2",
+        "for_sum",
+        "loop_break",
+        "loop_continue",
+        "loop_early_return",
+        "loop_return_on_neg",
+        "mutate_prefix",
+        "mutate_reverse",
+        "nested_carry",
+        "nested_pairs",
+        "step_index",
+        "two_latches",
+        "while_prefix",
+        "while_reload_header"
+      ],
+      "functions": [
+        {
+          "name": "cond_reload_and_transform",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "cond_side_effect",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "dowhile_atleastonce",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "dowhile_recompute",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "for_countdown",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "for_stride2",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "for_sum",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "loop_break",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "loop_continue",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "loop_early_return",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "loop_return_on_neg",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mutate_prefix",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mutate_reverse",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "nested_carry",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "nested_pairs",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "step_index",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "two_latches",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "while_prefix",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "while_reload_header",
+          "cindergraph": {
+            "nodes": 9,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 9,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/100_struct_layout.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001443355344235897,
+      "joern_error": null,
+      "joern_seconds": 4.9947676584124565,
+      "cindergraph_functions": [
+        "layout_offsets",
+        "layout_size_delta",
+        "struct_assignment_copies"
+      ],
+      "joern_functions": [
+        "layout_offsets",
+        "layout_size_delta",
+        "struct_assignment_copies"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "layout_offsets",
+        "layout_size_delta",
+        "struct_assignment_copies"
+      ],
+      "functions": [
+        {
+          "name": "layout_offsets",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 14.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "layout_size_delta",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "struct_assignment_copies",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/103_computed_goto.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0010969219729304314,
+      "joern_error": null,
+      "joern_seconds": 5.058837794698775,
+      "cindergraph_functions": [
+        "threaded_interpreter"
+      ],
+      "joern_functions": [
+        "TOKEN_MAX",
+        "threaded_interpreter"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "TOKEN_MAX"
+      ],
+      "shared_functions": [
+        "threaded_interpreter"
+      ],
+      "functions": [
+        {
+          "name": "threaded_interpreter",
+          "cindergraph": {
+            "nodes": 16,
+            "edges": 22,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 15,
+            "edges": 21,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 9.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/104_statement_expression.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0007245857268571854,
+      "joern_error": null,
+      "joern_seconds": 5.125233745202422,
+      "cindergraph_functions": [
+        "single_evaluation",
+        "statement_expression_max"
+      ],
+      "joern_functions": [
+        "COUNTED_SQUARE",
+        "SAFE_MAX",
+        "single_evaluation",
+        "statement_expression_max"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "COUNTED_SQUARE",
+        "SAFE_MAX"
+      ],
+      "shared_functions": [
+        "single_evaluation",
+        "statement_expression_max"
+      ],
+      "functions": [
+        {
+          "name": "single_evaluation",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 16.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "statement_expression_max",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 10.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/119_branch_hints.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0014980677515268326,
+      "joern_error": null,
+      "joern_seconds": 5.074556619860232,
+      "cindergraph_functions": [
+        "hinted_validation",
+        "unhinted_validation"
+      ],
+      "joern_functions": [
+        "LIKELY",
+        "UNLIKELY",
+        "hinted_validation",
+        "unhinted_validation"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "LIKELY",
+        "UNLIKELY"
+      ],
+      "shared_functions": [
+        "hinted_validation",
+        "unhinted_validation"
+      ],
+      "functions": [
+        {
+          "name": "hinted_validation",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 17,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 24.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "unhinted_validation",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/125_loop_shapes.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0012749582529067993,
+      "joern_error": null,
+      "joern_seconds": 5.081936125643551,
+      "cindergraph_functions": [
+        "decrementing_loop",
+        "do_while_always_once",
+        "infinite_with_internal_exit",
+        "while_zero_trips"
+      ],
+      "joern_functions": [
+        "decrementing_loop",
+        "do_while_always_once",
+        "infinite_with_internal_exit",
+        "while_zero_trips"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "decrementing_loop",
+        "do_while_always_once",
+        "infinite_with_internal_exit",
+        "while_zero_trips"
+      ],
+      "functions": [
+        {
+          "name": "decrementing_loop",
+          "cindergraph": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "do_while_always_once",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "infinite_with_internal_exit",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "while_zero_trips",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/126_x_macros.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0013352986425161362,
+      "joern_error": null,
+      "joern_seconds": 5.152731108479202,
+      "cindergraph_functions": [
+        "apply_opcode",
+        "opcode_weight",
+        "total_weight"
+      ],
+      "joern_functions": [
+        "AS_CASE",
+        "OPCODE_LIST",
+        "apply_opcode",
+        "opcode_weight",
+        "total_weight"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "AS_CASE",
+        "OPCODE_LIST"
+      ],
+      "shared_functions": [
+        "apply_opcode",
+        "opcode_weight",
+        "total_weight"
+      ],
+      "functions": [
+        {
+          "name": "apply_opcode",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 11,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 28.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "opcode_weight",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 5,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 5,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "total_weight",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 10.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/131_obfuscated_composite.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0014381157234311104,
+      "joern_error": null,
+      "joern_seconds": 5.169580098241568,
+      "cindergraph_functions": [
+        "fold",
+        "nested_conditional_matrix",
+        "obfuscated_pipeline",
+        "twist"
+      ],
+      "joern_functions": [
+        "PICK",
+        "fold",
+        "nested_conditional_matrix",
+        "obfuscated_pipeline",
+        "twist"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "PICK"
+      ],
+      "shared_functions": [
+        "fold",
+        "nested_conditional_matrix",
+        "obfuscated_pipeline",
+        "twist"
+      ],
+      "functions": [
+        {
+          "name": "fold",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "nested_conditional_matrix",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "obfuscated_pipeline",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 16,
+            "edges": 21,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "twist",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/141_atomics.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0019099563360214233,
+      "joern_error": null,
+      "joern_seconds": 5.016181781888008,
+      "cindergraph_functions": [
+        "atomic_compare_exchange_loop",
+        "atomic_exchange_and_or",
+        "atomic_flag_round_trip",
+        "atomic_increment"
+      ],
+      "joern_functions": [
+        "atomic_compare_exchange_loop",
+        "atomic_exchange_and_or",
+        "atomic_flag_round_trip",
+        "atomic_increment"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "atomic_compare_exchange_loop",
+        "atomic_exchange_and_or",
+        "atomic_flag_round_trip",
+        "atomic_increment"
+      ],
+      "functions": [
+        {
+          "name": "atomic_compare_exchange_loop",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "atomic_exchange_and_or",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "atomic_flag_round_trip",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "atomic_increment",
+          "cindergraph": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/144_inline_asm.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0013617658987641335,
+      "joern_error": null,
+      "joern_seconds": 5.0428040735423565,
+      "cindergraph_functions": [
+        "asm_add_via_constraints",
+        "asm_memory_barrier",
+        "builtin_bit_intrinsics",
+        "builtin_overflow_checked"
+      ],
+      "joern_functions": [
+        "asm_add_via_constraints",
+        "asm_memory_barrier",
+        "builtin_bit_intrinsics",
+        "builtin_overflow_checked"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "asm_add_via_constraints",
+        "asm_memory_barrier",
+        "builtin_bit_intrinsics",
+        "builtin_overflow_checked"
+      ],
+      "functions": [
+        {
+          "name": "asm_add_via_constraints",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 5.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "asm_memory_barrier",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "builtin_bit_intrinsics",
+          "cindergraph": {
+            "nodes": 9,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 9,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "builtin_overflow_checked",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0031866803765296936,
+      "joern_error": null,
+      "joern_seconds": 5.0989997666329145,
+      "cindergraph_functions": [
+        "flattened_accumulate",
+        "flattened_classify",
+        "flattened_gcd",
+        "flattened_search"
+      ],
+      "joern_functions": [
+        "FLAT145_MAX_ELEMS",
+        "FLAT145_MAX_STEPS",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_BODY",
+        "FLAT145_S_DONE",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST",
+        "flattened_accumulate",
+        "flattened_classify",
+        "flattened_gcd",
+        "flattened_search"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "FLAT145_MAX_ELEMS",
+        "FLAT145_MAX_STEPS",
+        "FLAT145_S_ARM_A",
+        "FLAT145_S_ARM_B",
+        "FLAT145_S_BODY",
+        "FLAT145_S_DONE",
+        "FLAT145_S_ENTRY",
+        "FLAT145_S_NEXT",
+        "FLAT145_S_TEST"
+      ],
+      "shared_functions": [
+        "flattened_accumulate",
+        "flattened_classify",
+        "flattened_gcd",
+        "flattened_search"
+      ],
+      "functions": [
+        {
+          "name": "flattened_accumulate",
+          "cindergraph": {
+            "nodes": 20,
+            "edges": 29,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 26,
+            "edges": 37,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 22.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "flattened_classify",
+          "cindergraph": {
+            "nodes": 16,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 22,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 22.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "flattened_gcd",
+          "cindergraph": {
+            "nodes": 11,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 19,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 11.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "flattened_search",
+          "cindergraph": {
+            "nodes": 19,
+            "edges": 27,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 25,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 22.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/150_obfuscation_composite.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.004089783877134323,
+      "joern_error": null,
+      "joern_seconds": 5.106825763359666,
+      "cindergraph_functions": [
+        "comp150_add",
+        "comp150_nonce",
+        "comp150_op_fold",
+        "comp150_op_mix",
+        "comp150_op_scatter",
+        "comp150_op_seal",
+        "comp150_sub",
+        "comp150_xor",
+        "obfuscated_digest",
+        "obfuscated_predicate_chain",
+        "obfuscated_transform"
+      ],
+      "joern_functions": [
+        "COMP150_MAX_BYTES",
+        "COMP150_MAX_ELEMS",
+        "COMP150_MAX_ROUNDS",
+        "COMP150_MAX_STEPS",
+        "COMP150_OPS",
+        "COMP150_S_DONE",
+        "COMP150_S_ENTRY",
+        "COMP150_S_GUARD",
+        "COMP150_S_MIX",
+        "COMP150_S_STEP",
+        "COMP150_S_STORE",
+        "COMP150_S_TEST",
+        "comp150_add",
+        "comp150_nonce",
+        "comp150_op_fold",
+        "comp150_op_mix",
+        "comp150_op_scatter",
+        "comp150_op_seal",
+        "comp150_sub",
+        "comp150_xor",
+        "obfuscated_digest",
+        "obfuscated_predicate_chain",
+        "obfuscated_transform"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "COMP150_MAX_BYTES",
+        "COMP150_MAX_ELEMS",
+        "COMP150_MAX_ROUNDS",
+        "COMP150_MAX_STEPS",
+        "COMP150_OPS",
+        "COMP150_S_DONE",
+        "COMP150_S_ENTRY",
+        "COMP150_S_GUARD",
+        "COMP150_S_MIX",
+        "COMP150_S_STEP",
+        "COMP150_S_STORE",
+        "COMP150_S_TEST"
+      ],
+      "shared_functions": [
+        "comp150_add",
+        "comp150_nonce",
+        "comp150_op_fold",
+        "comp150_op_mix",
+        "comp150_op_scatter",
+        "comp150_op_seal",
+        "comp150_sub",
+        "comp150_xor",
+        "obfuscated_digest",
+        "obfuscated_predicate_chain",
+        "obfuscated_transform"
+      ],
+      "functions": [
+        {
+          "name": "comp150_add",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_nonce",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_op_fold",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_op_mix",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_op_scatter",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_op_seal",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_sub",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "comp150_xor",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "obfuscated_digest",
+          "cindergraph": {
+            "nodes": 24,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 27,
+            "edges": 36,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 11.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "obfuscated_predicate_chain",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "obfuscated_transform",
+          "cindergraph": {
+            "nodes": 23,
+            "edges": 33,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 26,
+            "edges": 37,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 11.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/151_wide_branch_ladder.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.07431362383067608,
+      "joern_error": null,
+      "joern_seconds": 7.931719227693975,
+      "cindergraph_functions": [
+        "big151_branch_ladder",
+        "big151_flat_cascade"
+      ],
+      "joern_functions": [
+        "BIG151_ARMS",
+        "BIG151_CASCADE_SEED",
+        "BIG151_SLOTS",
+        "big151_branch_ladder",
+        "big151_flat_cascade"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "BIG151_ARMS",
+        "BIG151_CASCADE_SEED",
+        "BIG151_SLOTS"
+      ],
+      "shared_functions": [
+        "big151_branch_ladder",
+        "big151_flat_cascade"
+      ],
+      "functions": [
+        {
+          "name": "big151_branch_ladder",
+          "cindergraph": {
+            "nodes": 959,
+            "edges": 1461,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 959,
+            "edges": 1461,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": null
+        },
+        {
+          "name": "big151_flat_cascade",
+          "cindergraph": {
+            "nodes": 601,
+            "edges": 800,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 601,
+            "edges": 800,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/154_wide_switch.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.03585257939994335,
+      "joern_error": null,
+      "joern_seconds": 6.484545385465026,
+      "cindergraph_functions": [
+        "wide154_dense_effects",
+        "wide154_dense_switch",
+        "wide154_sparse_switch"
+      ],
+      "joern_functions": [
+        "WIDE154_DENSE_SPAN",
+        "WIDE154_EFFECT_SPAN",
+        "WIDE154_SLOTS",
+        "WIDE154_SPARSE_SPAN",
+        "WIDE154_SPARSE_STRIDE",
+        "wide154_dense_effects",
+        "wide154_dense_switch",
+        "wide154_sparse_switch"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "WIDE154_DENSE_SPAN",
+        "WIDE154_EFFECT_SPAN",
+        "WIDE154_SLOTS",
+        "WIDE154_SPARSE_SPAN",
+        "WIDE154_SPARSE_STRIDE"
+      ],
+      "shared_functions": [
+        "wide154_dense_effects",
+        "wide154_dense_switch",
+        "wide154_sparse_switch"
+      ],
+      "functions": [
+        {
+          "name": "wide154_dense_effects",
+          "cindergraph": {
+            "nodes": 591,
+            "edges": 966,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 591,
+            "edges": 966,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": null
+        },
+        {
+          "name": "wide154_dense_switch",
+          "cindergraph": {
+            "nodes": 258,
+            "edges": 257,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 258,
+            "edges": 257,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "wide154_sparse_switch",
+          "cindergraph": {
+            "nodes": 202,
+            "edges": 201,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 202,
+            "edges": 201,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0014419248327612877,
+      "joern_error": null,
+      "joern_seconds": 5.087825549766421,
+      "cindergraph_functions": [
+        "weak_absent_probe",
+        "weak_defined_probe",
+        "weak_dispatch",
+        "weak_fold",
+        "weak_scale"
+      ],
+      "joern_functions": [
+        "weak_absent_probe",
+        "weak_defined_probe",
+        "weak_dispatch",
+        "weak_fold",
+        "weak_scale",
+        "wk158_absent_scale"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "wk158_absent_scale"
+      ],
+      "shared_functions": [
+        "weak_absent_probe",
+        "weak_defined_probe",
+        "weak_dispatch",
+        "weak_fold",
+        "weak_scale"
+      ],
+      "functions": [
+        {
+          "name": "weak_absent_probe",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 2,
+            "exit_nodes": 1
+          },
+          "vj_ged": 10.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "weak_defined_probe",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "weak_dispatch",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 2,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "weak_fold",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 2,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "weak_scale",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/159_ifunc_resolver.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0015288284048438072,
+      "joern_error": null,
+      "joern_seconds": 5.1843251734972,
+      "cindergraph_functions": [
+        "ifn159_impl_add",
+        "ifn159_impl_shift",
+        "ifn159_resolve",
+        "ifunc_call_double",
+        "ifunc_fold",
+        "ifunc_lazy_double",
+        "ifunc_matches_reference",
+        "ifunc_paths_agree"
+      ],
+      "joern_functions": [
+        "ifn159_impl_add",
+        "ifn159_impl_shift",
+        "ifn159_resolve",
+        "ifunc_call_double",
+        "ifunc_double",
+        "ifunc_fold",
+        "ifunc_lazy_double",
+        "ifunc_matches_reference",
+        "ifunc_paths_agree"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "ifunc_double"
+      ],
+      "shared_functions": [
+        "ifn159_impl_add",
+        "ifn159_impl_shift",
+        "ifn159_resolve",
+        "ifunc_call_double",
+        "ifunc_fold",
+        "ifunc_lazy_double",
+        "ifunc_matches_reference",
+        "ifunc_paths_agree"
+      ],
+      "functions": [
+        {
+          "name": "ifn159_impl_add",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifn159_impl_shift",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifn159_resolve",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 3,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "ifunc_call_double",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifunc_fold",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifunc_lazy_double",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifunc_matches_reference",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ifunc_paths_agree",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/15_binary_search_tree.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0020339172333478928,
+      "joern_error": null,
+      "joern_seconds": 5.2276028878986835,
+      "cindergraph_functions": [
+        "bst_inorder_checksum",
+        "bst_search"
+      ],
+      "joern_functions": [
+        "bst_inorder_checksum",
+        "bst_search"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "bst_inorder_checksum",
+        "bst_search"
+      ],
+      "functions": [
+        {
+          "name": "bst_inorder_checksum",
+          "cindergraph": {
+            "nodes": 22,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 22,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bst_search",
+          "cindergraph": {
+            "nodes": 19,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 19,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/161_packed_struct_layout.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.002678973600268364,
+      "joern_error": null,
+      "joern_seconds": 5.176987502723932,
+      "cindergraph_functions": [
+        "pk161_clamp",
+        "pk161_encode",
+        "pk161_layout_delta",
+        "pk161_member_offset",
+        "pk161_read_field",
+        "pk161_roundtrip"
+      ],
+      "joern_functions": [
+        "PK161_MAX_BUF",
+        "PK161_WIRE_BYTES",
+        "pk161_clamp",
+        "pk161_encode",
+        "pk161_layout_delta",
+        "pk161_member_offset",
+        "pk161_read_field",
+        "pk161_roundtrip"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "PK161_MAX_BUF",
+        "PK161_WIRE_BYTES"
+      ],
+      "shared_functions": [
+        "pk161_clamp",
+        "pk161_encode",
+        "pk161_layout_delta",
+        "pk161_member_offset",
+        "pk161_read_field",
+        "pk161_roundtrip"
+      ],
+      "functions": [
+        {
+          "name": "pk161_clamp",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "pk161_encode",
+          "cindergraph": {
+            "nodes": 8,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 8,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "pk161_layout_delta",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "pk161_member_offset",
+          "cindergraph": {
+            "nodes": 9,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 26.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "pk161_read_field",
+          "cindergraph": {
+            "nodes": 12,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "pk161_roundtrip",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/164_nested_tlv_walker.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0034026596695184708,
+      "joern_error": null,
+      "joern_seconds": 5.264270669780672,
+      "cindergraph_functions": [
+        "tlv164_clamp",
+        "tlv164_encode_nested",
+        "tlv164_find_type",
+        "tlv164_leaf_sum",
+        "tlv164_max_depth",
+        "tlv164_node_count",
+        "tlv164_seek",
+        "tlv164_walk"
+      ],
+      "joern_functions": [
+        "TLV164_CONTAINER",
+        "TLV164_HDR_BYTES",
+        "TLV164_HIT_BASE",
+        "TLV164_MAX_BUF",
+        "TLV164_MAX_DEPTH",
+        "tlv164_clamp",
+        "tlv164_encode_nested",
+        "tlv164_find_type",
+        "tlv164_leaf_sum",
+        "tlv164_max_depth",
+        "tlv164_node_count",
+        "tlv164_seek",
+        "tlv164_walk"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "TLV164_CONTAINER",
+        "TLV164_HDR_BYTES",
+        "TLV164_HIT_BASE",
+        "TLV164_MAX_BUF",
+        "TLV164_MAX_DEPTH"
+      ],
+      "shared_functions": [
+        "tlv164_clamp",
+        "tlv164_encode_nested",
+        "tlv164_find_type",
+        "tlv164_leaf_sum",
+        "tlv164_max_depth",
+        "tlv164_node_count",
+        "tlv164_seek",
+        "tlv164_walk"
+      ],
+      "functions": [
+        {
+          "name": "tlv164_clamp",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_encode_nested",
+          "cindergraph": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_find_type",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_leaf_sum",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 5,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 5,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_max_depth",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_node_count",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "tlv164_seek",
+          "cindergraph": {
+            "nodes": 16,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 17,
+            "edges": 19,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 3.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "tlv164_walk",
+          "cindergraph": {
+            "nodes": 20,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 20,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/165_bitstream_reader.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0043208785355091095,
+      "joern_error": null,
+      "joern_seconds": 5.265720209106803,
+      "cindergraph_functions": [
+        "bit165_clamp",
+        "bit165_cross_check",
+        "bit165_fits",
+        "bit165_poke",
+        "bit165_pull_bitwise",
+        "bit165_pull_windowed",
+        "bit165_read_bits",
+        "bit165_read_sequence",
+        "bit165_roundtrip",
+        "bit165_write_frame"
+      ],
+      "joern_functions": [
+        "BIT165_BAD",
+        "BIT165_FRAME_BYTES",
+        "BIT165_MAX_BUF",
+        "BIT165_MAX_WIDTH",
+        "BIT165_SYNC",
+        "bit165_clamp",
+        "bit165_cross_check",
+        "bit165_fits",
+        "bit165_poke",
+        "bit165_pull_bitwise",
+        "bit165_pull_windowed",
+        "bit165_read_bits",
+        "bit165_read_sequence",
+        "bit165_roundtrip",
+        "bit165_write_frame"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "BIT165_BAD",
+        "BIT165_FRAME_BYTES",
+        "BIT165_MAX_BUF",
+        "BIT165_MAX_WIDTH",
+        "BIT165_SYNC"
+      ],
+      "shared_functions": [
+        "bit165_clamp",
+        "bit165_cross_check",
+        "bit165_fits",
+        "bit165_poke",
+        "bit165_pull_bitwise",
+        "bit165_pull_windowed",
+        "bit165_read_bits",
+        "bit165_read_sequence",
+        "bit165_roundtrip",
+        "bit165_write_frame"
+      ],
+      "functions": [
+        {
+          "name": "bit165_clamp",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_cross_check",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_fits",
+          "cindergraph": {
+            "nodes": 9,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 9,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_poke",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_pull_bitwise",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_pull_windowed",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_read_bits",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_read_sequence",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 17,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 17,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_roundtrip",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bit165_write_frame",
+          "cindergraph": {
+            "nodes": 11,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 11,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/174_float_compare_classify.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0020576175302267075,
+      "joern_error": null,
+      "joern_seconds": 5.137367496266961,
+      "cindergraph_functions": [
+        "absolute_binary32",
+        "classify_binary32",
+        "fp174_bits_to_float",
+        "fp174_float_bits",
+        "negate_binary32",
+        "ordered_compare_binary32",
+        "sign_bit_of_binary32",
+        "unordered_compare_flags",
+        "zero_sign_from_product"
+      ],
+      "joern_functions": [
+        "FP174_CLASS_INFINITE",
+        "FP174_CLASS_NAN",
+        "FP174_CLASS_NORMAL",
+        "FP174_CLASS_SUBNORMAL",
+        "FP174_CLASS_ZERO",
+        "FP174_EXPONENT_MASK",
+        "FP174_MANTISSA_MASK",
+        "FP174_QUIET_NAN_BITS",
+        "FP174_SIGN_MASK",
+        "absolute_binary32",
+        "classify_binary32",
+        "fp174_bits_to_float",
+        "fp174_float_bits",
+        "negate_binary32",
+        "ordered_compare_binary32",
+        "sign_bit_of_binary32",
+        "unordered_compare_flags",
+        "zero_sign_from_product"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "FP174_CLASS_INFINITE",
+        "FP174_CLASS_NAN",
+        "FP174_CLASS_NORMAL",
+        "FP174_CLASS_SUBNORMAL",
+        "FP174_CLASS_ZERO",
+        "FP174_EXPONENT_MASK",
+        "FP174_MANTISSA_MASK",
+        "FP174_QUIET_NAN_BITS",
+        "FP174_SIGN_MASK"
+      ],
+      "shared_functions": [
+        "absolute_binary32",
+        "classify_binary32",
+        "fp174_bits_to_float",
+        "fp174_float_bits",
+        "negate_binary32",
+        "ordered_compare_binary32",
+        "sign_bit_of_binary32",
+        "unordered_compare_flags",
+        "zero_sign_from_product"
+      ],
+      "functions": [
+        {
+          "name": "absolute_binary32",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "classify_binary32",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 11,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 22.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "fp174_bits_to_float",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "fp174_float_bits",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "negate_binary32",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ordered_compare_binary32",
+          "cindergraph": {
+            "nodes": 7,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 7,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "sign_bit_of_binary32",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "unordered_compare_flags",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "zero_sign_from_product",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/183_sentinel_list_search.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001957107335329056,
+      "joern_error": null,
+      "joern_seconds": 5.078005937859416,
+      "cindergraph_functions": [
+        "find_before_either_sentinel",
+        "find_by_key",
+        "find_byte_before_nul",
+        "find_terminated_by_sentinel",
+        "length_to_nul"
+      ],
+      "joern_functions": [
+        "LIST183_LIMIT",
+        "find_before_either_sentinel",
+        "find_by_key",
+        "find_byte_before_nul",
+        "find_terminated_by_sentinel",
+        "length_to_nul"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "LIST183_LIMIT"
+      ],
+      "shared_functions": [
+        "find_before_either_sentinel",
+        "find_by_key",
+        "find_byte_before_nul",
+        "find_terminated_by_sentinel",
+        "length_to_nul"
+      ],
+      "functions": [
+        {
+          "name": "find_before_either_sentinel",
+          "cindergraph": {
+            "nodes": 15,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 15,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "find_by_key",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "find_byte_before_nul",
+          "cindergraph": {
+            "nodes": 8,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 8,
+            "edges": 8,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "find_terminated_by_sentinel",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "length_to_nul",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/18_binary_heap.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0015330584719777107,
+      "joern_error": null,
+      "joern_seconds": 5.118306016549468,
+      "cindergraph_functions": [
+        "heap_pop",
+        "heap_push"
+      ],
+      "joern_functions": [
+        "heap_pop",
+        "heap_push"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "heap_pop",
+        "heap_push"
+      ],
+      "functions": [
+        {
+          "name": "heap_pop",
+          "cindergraph": {
+            "nodes": 15,
+            "edges": 20,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 15,
+            "edges": 20,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "heap_push",
+          "cindergraph": {
+            "nodes": 15,
+            "edges": 20,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 15,
+            "edges": 20,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/192_pointer_chased_list.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0017752591520547867,
+      "joern_error": null,
+      "joern_seconds": 5.016933220438659,
+      "cindergraph_functions": [
+        "l192_chase_keys",
+        "l192_find_key",
+        "l192_scan_index_control",
+        "l192_stamp_chain",
+        "l192_sum_until_key"
+      ],
+      "joern_functions": [
+        "L192_MAX",
+        "l192_chase_keys",
+        "l192_find_key",
+        "l192_scan_index_control",
+        "l192_stamp_chain",
+        "l192_sum_until_key"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "L192_MAX"
+      ],
+      "shared_functions": [
+        "l192_chase_keys",
+        "l192_find_key",
+        "l192_scan_index_control",
+        "l192_stamp_chain",
+        "l192_sum_until_key"
+      ],
+      "functions": [
+        {
+          "name": "l192_chase_keys",
+          "cindergraph": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 11,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "l192_find_key",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "l192_scan_index_control",
+          "cindergraph": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "l192_stamp_chain",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "l192_sum_until_key",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/193_mapped_constant_roles.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001773579977452755,
+      "joern_error": null,
+      "joern_seconds": 5.153028503060341,
+      "cindergraph_functions": [
+        "mc193_name_bytes",
+        "mc193_name_length",
+        "mc193_names_differ",
+        "mc193_offset_matches",
+        "mc193_offset_sum",
+        "mc193_scaled_constant"
+      ],
+      "joern_functions": [
+        "MC193_SLOT_FIRST",
+        "MC193_SLOT_LAST",
+        "MC193_SLOT_LENGTH",
+        "mc193_name_bytes",
+        "mc193_name_length",
+        "mc193_names_differ",
+        "mc193_offset_matches",
+        "mc193_offset_sum",
+        "mc193_scaled_constant"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "MC193_SLOT_FIRST",
+        "MC193_SLOT_LAST",
+        "MC193_SLOT_LENGTH"
+      ],
+      "shared_functions": [
+        "mc193_name_bytes",
+        "mc193_name_length",
+        "mc193_names_differ",
+        "mc193_offset_matches",
+        "mc193_offset_sum",
+        "mc193_scaled_constant"
+      ],
+      "functions": [
+        {
+          "name": "mc193_name_bytes",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mc193_name_length",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mc193_names_differ",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mc193_offset_matches",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mc193_offset_sum",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mc193_scaled_constant",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/19_disjoint_set.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0022639259696006775,
+      "joern_error": null,
+      "joern_seconds": 4.9853304689750075,
+      "cindergraph_functions": [
+        "dsu_find",
+        "dsu_union",
+        "find_root"
+      ],
+      "joern_functions": [
+        "dsu_find",
+        "dsu_union",
+        "find_root"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "dsu_find",
+        "dsu_union",
+        "find_root"
+      ],
+      "functions": [
+        {
+          "name": "dsu_find",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 17,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 17,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "dsu_union",
+          "cindergraph": {
+            "nodes": 21,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 21,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "find_root",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/208_flag_register_roundtrip.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0012145256623625755,
+      "joern_error": null,
+      "joern_seconds": 5.130166271701455,
+      "cindergraph_functions": [
+        "accumulate_across_barrier",
+        "control_without_barrier",
+        "flags_do_not_leak",
+        "save_flags",
+        "single_argument_survives"
+      ],
+      "joern_functions": [
+        "accumulate_across_barrier",
+        "control_without_barrier",
+        "flags_do_not_leak",
+        "save_flags",
+        "single_argument_survives"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "accumulate_across_barrier",
+        "control_without_barrier",
+        "flags_do_not_leak",
+        "save_flags",
+        "single_argument_survives"
+      ],
+      "functions": [
+        {
+          "name": "accumulate_across_barrier",
+          "cindergraph": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 8,
+            "edges": 9,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "control_without_barrier",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "flags_do_not_leak",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "save_flags",
+          "cindergraph": {
+            "nodes": 5,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 6.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "single_argument_survives",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.002965289168059826,
+      "joern_error": null,
+      "joern_seconds": 5.329534980468452,
+      "cindergraph_functions": [
+        "complex_add_conj",
+        "complex_array_sum",
+        "complex_float_multiply",
+        "complex_multiply",
+        "complex_through_call",
+        "scale_complex",
+        "struct_pair_control"
+      ],
+      "joern_functions": [
+        "__imag__",
+        "__real__",
+        "complex_add_conj",
+        "complex_array_sum",
+        "complex_float_multiply",
+        "complex_multiply",
+        "complex_through_call",
+        "scale_complex",
+        "struct_pair_control"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "__imag__",
+        "__real__"
+      ],
+      "shared_functions": [
+        "complex_add_conj",
+        "complex_array_sum",
+        "complex_float_multiply",
+        "complex_multiply",
+        "complex_through_call",
+        "scale_complex",
+        "struct_pair_control"
+      ],
+      "functions": [
+        {
+          "name": "complex_add_conj",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 18.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "complex_array_sum",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 16.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "complex_float_multiply",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 18.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "complex_multiply",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 18.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "complex_through_call",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 5,
+            "edges": 6,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 18.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "scale_complex",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "struct_pair_control",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/24_merge_sort.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0016200384125113487,
+      "joern_error": null,
+      "joern_seconds": 5.012000182643533,
+      "cindergraph_functions": [
+        "merge_sort_i32"
+      ],
+      "joern_functions": [
+        "merge_sort_i32"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "merge_sort_i32"
+      ],
+      "functions": [
+        {
+          "name": "merge_sort_i32",
+          "cindergraph": {
+            "nodes": 34,
+            "edges": 46,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 34,
+            "edges": 46,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/25_kmp_search.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0017439452931284904,
+      "joern_error": null,
+      "joern_seconds": 5.21841087937355,
+      "cindergraph_functions": [
+        "kmp_search"
+      ],
+      "joern_functions": [
+        "kmp_search"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "kmp_search"
+      ],
+      "functions": [
+        {
+          "name": "kmp_search",
+          "cindergraph": {
+            "nodes": 35,
+            "edges": 47,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 35,
+            "edges": 47,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/31_edit_distance.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0034587541595101357,
+      "joern_error": null,
+      "joern_seconds": 5.353519611060619,
+      "cindergraph_functions": [
+        "edit_distance",
+        "hamming_distance"
+      ],
+      "joern_functions": [
+        "ED_MAX",
+        "ED_STRIDE",
+        "edit_distance",
+        "hamming_distance"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "ED_MAX",
+        "ED_STRIDE"
+      ],
+      "shared_functions": [
+        "edit_distance",
+        "hamming_distance"
+      ],
+      "functions": [
+        {
+          "name": "edit_distance",
+          "cindergraph": {
+            "nodes": 29,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 45,
+            "edges": 63,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 64.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "hamming_distance",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/32_longest_common_subsequence.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0026266518980264664,
+      "joern_error": null,
+      "joern_seconds": 5.174237499944866,
+      "cindergraph_functions": [
+        "lcs_length",
+        "lcs_recover"
+      ],
+      "joern_functions": [
+        "LCS_MAX",
+        "LCS_STRIDE",
+        "lcs_length",
+        "lcs_recover"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "LCS_MAX",
+        "LCS_STRIDE"
+      ],
+      "shared_functions": [
+        "lcs_length",
+        "lcs_recover"
+      ],
+      "functions": [
+        {
+          "name": "lcs_length",
+          "cindergraph": {
+            "nodes": 26,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 44,
+            "edges": 62,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 72.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "lcs_recover",
+          "cindergraph": {
+            "nodes": 42,
+            "edges": 58,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 62,
+            "edges": 88,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 80.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/35_matrix_chain.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0014073196798563004,
+      "joern_error": null,
+      "joern_seconds": 5.176968589425087,
+      "cindergraph_functions": [
+        "matrix_chain_cost"
+      ],
+      "joern_functions": [
+        "CHAIN_INFINITE",
+        "CHAIN_MAX",
+        "CHAIN_STRIDE",
+        "matrix_chain_cost"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "CHAIN_INFINITE",
+        "CHAIN_MAX",
+        "CHAIN_STRIDE"
+      ],
+      "shared_functions": [
+        "matrix_chain_cost"
+      ],
+      "functions": [
+        {
+          "name": "matrix_chain_cost",
+          "cindergraph": {
+            "nodes": 31,
+            "edges": 40,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 47,
+            "edges": 64,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 64.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/38_insertion_shell_sort.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0013805273920297623,
+      "joern_error": null,
+      "joern_seconds": 5.0088808704167604,
+      "cindergraph_functions": [
+        "insertion_sort_i32",
+        "shell_sort_i32"
+      ],
+      "joern_functions": [
+        "SORT_MAX",
+        "insertion_sort_i32",
+        "shell_sort_i32"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "SORT_MAX"
+      ],
+      "shared_functions": [
+        "insertion_sort_i32",
+        "shell_sort_i32"
+      ],
+      "functions": [
+        {
+          "name": "insertion_sort_i32",
+          "cindergraph": {
+            "nodes": 15,
+            "edges": 19,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 15,
+            "edges": 19,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "shell_sort_i32",
+          "cindergraph": {
+            "nodes": 24,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 24,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/39_counting_radix_sort.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0018327971920371056,
+      "joern_error": null,
+      "joern_seconds": 5.081048370338976,
+      "cindergraph_functions": [
+        "counting_sort_u8",
+        "radix_sort_u32"
+      ],
+      "joern_functions": [
+        "RADIX_BUCKETS",
+        "RADIX_MAX",
+        "counting_sort_u8",
+        "radix_sort_u32"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "RADIX_BUCKETS",
+        "RADIX_MAX"
+      ],
+      "shared_functions": [
+        "counting_sort_u8",
+        "radix_sort_u32"
+      ],
+      "functions": [
+        {
+          "name": "counting_sort_u8",
+          "cindergraph": {
+            "nodes": 21,
+            "edges": 27,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 21,
+            "edges": 27,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "radix_sort_u32",
+          "cindergraph": {
+            "nodes": 25,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 25,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/40_quickselect.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001470024697482586,
+      "joern_error": null,
+      "joern_seconds": 4.996600031852722,
+      "cindergraph_functions": [
+        "median_of_three",
+        "quickselect_kth"
+      ],
+      "joern_functions": [
+        "QSEL_MAX",
+        "median_of_three",
+        "quickselect_kth"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "QSEL_MAX"
+      ],
+      "shared_functions": [
+        "median_of_three",
+        "quickselect_kth"
+      ],
+      "functions": [
+        {
+          "name": "median_of_three",
+          "cindergraph": {
+            "nodes": 17,
+            "edges": 22,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 17,
+            "edges": 22,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "quickselect_kth",
+          "cindergraph": {
+            "nodes": 26,
+            "edges": 34,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 26,
+            "edges": 34,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/44_run_length.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001602240838110447,
+      "joern_error": null,
+      "joern_seconds": 5.210292914882302,
+      "cindergraph_functions": [
+        "rle_decode",
+        "rle_encode"
+      ],
+      "joern_functions": [
+        "RLE_MAX",
+        "rle_decode",
+        "rle_encode"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "RLE_MAX"
+      ],
+      "shared_functions": [
+        "rle_decode",
+        "rle_encode"
+      ],
+      "functions": [
+        {
+          "name": "rle_decode",
+          "cindergraph": {
+            "nodes": 23,
+            "edges": 30,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 23,
+            "edges": 30,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "rle_encode",
+          "cindergraph": {
+            "nodes": 24,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 24,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/45_string_algorithms.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.002115512266755104,
+      "joern_error": null,
+      "joern_seconds": 5.176414581015706,
+      "cindergraph_functions": [
+        "format_decimal",
+        "is_palindrome",
+        "parse_decimal"
+      ],
+      "joern_functions": [
+        "STR_MAX",
+        "format_decimal",
+        "is_palindrome",
+        "parse_decimal"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "STR_MAX"
+      ],
+      "shared_functions": [
+        "format_decimal",
+        "is_palindrome",
+        "parse_decimal"
+      ],
+      "functions": [
+        {
+          "name": "format_decimal",
+          "cindergraph": {
+            "nodes": 23,
+            "edges": 29,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 23,
+            "edges": 29,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "is_palindrome",
+          "cindergraph": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 14,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "parse_decimal",
+          "cindergraph": {
+            "nodes": 26,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 27,
+            "edges": 36,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 5.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/47_huffman.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0021893195807933807,
+      "joern_error": null,
+      "joern_seconds": 5.279792094603181,
+      "cindergraph_functions": [
+        "huffman_code_lengths",
+        "kraft_sum_q16"
+      ],
+      "joern_functions": [
+        "HUFF_NODES",
+        "HUFF_SYMBOLS",
+        "huffman_code_lengths",
+        "kraft_sum_q16"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "HUFF_NODES",
+        "HUFF_SYMBOLS"
+      ],
+      "shared_functions": [
+        "huffman_code_lengths",
+        "kraft_sum_q16"
+      ],
+      "functions": [
+        {
+          "name": "huffman_code_lengths",
+          "cindergraph": {
+            "nodes": 45,
+            "edges": 62,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 57,
+            "edges": 80,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 48.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "kraft_sum_q16",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/53_pseudorandom.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0011187363415956497,
+      "joern_error": null,
+      "joern_seconds": 5.111616232432425,
+      "cindergraph_functions": [
+        "bounded_sample",
+        "lcg64_next_high",
+        "xorshift32"
+      ],
+      "joern_functions": [
+        "PRNG_MAX",
+        "bounded_sample",
+        "lcg64_next_high",
+        "xorshift32"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "PRNG_MAX"
+      ],
+      "shared_functions": [
+        "bounded_sample",
+        "lcg64_next_high",
+        "xorshift32"
+      ],
+      "functions": [
+        {
+          "name": "bounded_sample",
+          "cindergraph": {
+            "nodes": 16,
+            "edges": 22,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 16,
+            "edges": 22,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "lcg64_next_high",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "xorshift32",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 3,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/55_modular_arithmetic.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.002410474233329296,
+      "joern_error": null,
+      "joern_seconds": 5.201119779609144,
+      "cindergraph_functions": [
+        "extended_gcd",
+        "gcd_i32",
+        "mod_pow"
+      ],
+      "joern_functions": [
+        "extended_gcd",
+        "gcd_i32",
+        "mod_pow"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "extended_gcd",
+        "gcd_i32",
+        "mod_pow"
+      ],
+      "functions": [
+        {
+          "name": "extended_gcd",
+          "cindergraph": {
+            "nodes": 18,
+            "edges": 24,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 18,
+            "edges": 24,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "gcd_i32",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "mod_pow",
+          "cindergraph": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 12,
+            "edges": 15,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/56_sieve.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0016237711533904076,
+      "joern_error": null,
+      "joern_seconds": 5.361265144310892,
+      "cindergraph_functions": [
+        "factorize",
+        "sieve_primes"
+      ],
+      "joern_functions": [
+        "FACTOR_MAX",
+        "SIEVE_MAX",
+        "factorize",
+        "sieve_primes"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "FACTOR_MAX",
+        "SIEVE_MAX"
+      ],
+      "shared_functions": [
+        "factorize",
+        "sieve_primes"
+      ],
+      "functions": [
+        {
+          "name": "factorize",
+          "cindergraph": {
+            "nodes": 23,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 23,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "sieve_primes",
+          "cindergraph": {
+            "nodes": 26,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 26,
+            "edges": 35,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/57_bignum.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.002046717330813408,
+      "joern_error": null,
+      "joern_seconds": 5.234607582911849,
+      "cindergraph_functions": [
+        "bignum_add",
+        "bignum_mul_small"
+      ],
+      "joern_functions": [
+        "LIMB_BASE",
+        "LIMB_MAX",
+        "bignum_add",
+        "bignum_mul_small"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "LIMB_BASE",
+        "LIMB_MAX"
+      ],
+      "shared_functions": [
+        "bignum_add",
+        "bignum_mul_small"
+      ],
+      "functions": [
+        {
+          "name": "bignum_add",
+          "cindergraph": {
+            "nodes": 32,
+            "edges": 44,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 32,
+            "edges": 44,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "bignum_mul_small",
+          "cindergraph": {
+            "nodes": 25,
+            "edges": 33,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 25,
+            "edges": 33,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/58_rational.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0019070953130722046,
+      "joern_error": null,
+      "joern_seconds": 5.198262304998934,
+      "cindergraph_functions": [
+        "rational_add",
+        "rational_compare",
+        "rational_gcd"
+      ],
+      "joern_functions": [
+        "rational_add",
+        "rational_compare",
+        "rational_gcd"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "rational_add",
+        "rational_compare",
+        "rational_gcd"
+      ],
+      "functions": [
+        {
+          "name": "rational_add",
+          "cindergraph": {
+            "nodes": 27,
+            "edges": 38,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 27,
+            "edges": 38,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "rational_compare",
+          "cindergraph": {
+            "nodes": 29,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 29,
+            "edges": 39,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "rational_gcd",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/69_molar_mass.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0018551535904407501,
+      "joern_error": null,
+      "joern_seconds": 5.2276190826669335,
+      "cindergraph_functions": [
+        "element_mass_centi",
+        "molar_mass_centi"
+      ],
+      "joern_functions": [
+        "FORMULA_MAX",
+        "element_mass_centi",
+        "molar_mass_centi"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "FORMULA_MAX"
+      ],
+      "shared_functions": [
+        "element_mass_centi",
+        "molar_mass_centi"
+      ],
+      "functions": [
+        {
+          "name": "element_mass_centi",
+          "cindergraph": {
+            "nodes": 33,
+            "edges": 40,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 33,
+            "edges": 40,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "molar_mass_centi",
+          "cindergraph": {
+            "nodes": 31,
+            "edges": 41,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 31,
+            "edges": 41,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/70_reaction_balance.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.001609637401998043,
+      "joern_error": null,
+      "joern_seconds": 5.2970117926597595,
+      "cindergraph_functions": [
+        "balance_gcd",
+        "balance_reaction"
+      ],
+      "joern_functions": [
+        "BALANCE_ELEMENTS",
+        "BALANCE_LIMIT",
+        "balance_gcd",
+        "balance_reaction"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "BALANCE_ELEMENTS",
+        "BALANCE_LIMIT"
+      ],
+      "shared_functions": [
+        "balance_gcd",
+        "balance_reaction"
+      ],
+      "functions": [
+        {
+          "name": "balance_gcd",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "balance_reaction",
+          "cindergraph": {
+            "nodes": 34,
+            "edges": 45,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 34,
+            "edges": 45,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/72_loan_amortization.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0015173545107245445,
+      "joern_error": null,
+      "joern_seconds": 5.138096589595079,
+      "cindergraph_functions": [
+        "amortization_schedule",
+        "loan_mul_q16",
+        "remaining_balance"
+      ],
+      "joern_functions": [
+        "LOAN_PERIODS_MAX",
+        "amortization_schedule",
+        "loan_mul_q16",
+        "remaining_balance"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "LOAN_PERIODS_MAX"
+      ],
+      "shared_functions": [
+        "amortization_schedule",
+        "loan_mul_q16",
+        "remaining_balance"
+      ],
+      "functions": [
+        {
+          "name": "amortization_schedule",
+          "cindergraph": {
+            "nodes": 24,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 24,
+            "edges": 32,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "loan_mul_q16",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "remaining_balance",
+          "cindergraph": {
+            "nodes": 20,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 20,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/74_moving_statistics.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0018286770209670067,
+      "joern_error": null,
+      "joern_seconds": 5.097080839797854,
+      "cindergraph_functions": [
+        "exponential_moving_average",
+        "population_variance",
+        "simple_moving_average",
+        "stat_mul_q16"
+      ],
+      "joern_functions": [
+        "SERIES_MAX",
+        "exponential_moving_average",
+        "population_variance",
+        "simple_moving_average",
+        "stat_mul_q16"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "SERIES_MAX"
+      ],
+      "shared_functions": [
+        "exponential_moving_average",
+        "population_variance",
+        "simple_moving_average",
+        "stat_mul_q16"
+      ],
+      "functions": [
+        {
+          "name": "exponential_moving_average",
+          "cindergraph": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 14,
+            "edges": 18,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "population_variance",
+          "cindergraph": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "simple_moving_average",
+          "cindergraph": {
+            "nodes": 23,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 23,
+            "edges": 31,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "stat_mul_q16",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/75_order_book.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0013599870726466179,
+      "joern_error": null,
+      "joern_seconds": 5.187595451250672,
+      "cindergraph_functions": [
+        "match_order"
+      ],
+      "joern_functions": [
+        "BOOK_MAX",
+        "match_order"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "BOOK_MAX"
+      ],
+      "shared_functions": [
+        "match_order"
+      ],
+      "functions": [
+        {
+          "name": "match_order",
+          "cindergraph": {
+            "nodes": 35,
+            "edges": 49,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 35,
+            "edges": 49,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/78_ring_buffer.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0010925577953457832,
+      "joern_error": null,
+      "joern_seconds": 5.106721598654985,
+      "cindergraph_functions": [
+        "ring_occupancy",
+        "ring_pop",
+        "ring_push"
+      ],
+      "joern_functions": [
+        "RING_CAPACITY",
+        "RING_MASK",
+        "ring_occupancy",
+        "ring_pop",
+        "ring_push"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "RING_CAPACITY",
+        "RING_MASK"
+      ],
+      "shared_functions": [
+        "ring_occupancy",
+        "ring_pop",
+        "ring_push"
+      ],
+      "functions": [
+        {
+          "name": "ring_occupancy",
+          "cindergraph": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 3,
+            "edges": 2,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "ring_pop",
+          "cindergraph": {
+            "nodes": 11,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 13,
+            "edges": 16,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "ring_push",
+          "cindergraph": {
+            "nodes": 9,
+            "edges": 10,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 11,
+            "edges": 13,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/79_segment_tree.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0017777606844902039,
+      "joern_error": null,
+      "joern_seconds": 5.3266974948346615,
+      "cindergraph_functions": [
+        "segment_build",
+        "segment_range_sum",
+        "segment_update"
+      ],
+      "joern_functions": [
+        "SEG_LEAVES",
+        "SEG_NODES",
+        "segment_build",
+        "segment_range_sum",
+        "segment_update"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [
+        "SEG_LEAVES",
+        "SEG_NODES"
+      ],
+      "shared_functions": [
+        "segment_build",
+        "segment_range_sum",
+        "segment_update"
+      ],
+      "functions": [
+        {
+          "name": "segment_build",
+          "cindergraph": {
+            "nodes": 18,
+            "edges": 23,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 20,
+            "edges": 26,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 8.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "segment_range_sum",
+          "cindergraph": {
+            "nodes": 16,
+            "edges": 21,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 16,
+            "edges": 21,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "segment_update",
+          "cindergraph": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "joern": {
+            "nodes": 10,
+            "edges": 12,
+            "entry_nodes": 1,
+            "exit_nodes": 0
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/94_alignment.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0009678099304437637,
+      "joern_error": null,
+      "joern_seconds": 5.195010857656598,
+      "cindergraph_functions": [
+        "alignment_of_padded",
+        "offset_of_payload",
+        "padded_roundtrip",
+        "size_difference"
+      ],
+      "joern_functions": [
+        "alignment_of_padded",
+        "offset_of_payload",
+        "padded_roundtrip",
+        "size_difference"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "alignment_of_padded",
+        "offset_of_payload",
+        "padded_roundtrip",
+        "size_difference"
+      ],
+      "functions": [
+        {
+          "name": "alignment_of_padded",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "offset_of_payload",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 13.0,
+          "role_preserving_isomorphic": false
+        },
+        {
+          "name": "padded_roundtrip",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "size_difference",
+          "cindergraph": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 1,
+            "edges": 0,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    },
+    {
+      "path": "tests/decbench_corpus/src/strops.c",
+      "cindergraph_error": null,
+      "cindergraph_seconds": 0.0013190573081374168,
+      "joern_error": null,
+      "joern_seconds": 4.9805974354967475,
+      "cindergraph_functions": [
+        "hash_djb2",
+        "str_cmp",
+        "str_len"
+      ],
+      "joern_functions": [
+        "hash_djb2",
+        "str_cmp",
+        "str_len"
+      ],
+      "only_cindergraph": [],
+      "only_joern": [],
+      "shared_functions": [
+        "hash_djb2",
+        "str_cmp",
+        "str_len"
+      ],
+      "functions": [
+        {
+          "name": "hash_djb2",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "str_cmp",
+          "cindergraph": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 6,
+            "edges": 7,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        },
+        {
+          "name": "str_len",
+          "cindergraph": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "joern": {
+            "nodes": 4,
+            "edges": 4,
+            "entry_nodes": 1,
+            "exit_nodes": 1
+          },
+          "vj_ged": 0.0,
+          "role_preserving_isomorphic": true
+        }
+      ]
+    }
+  ]
+}

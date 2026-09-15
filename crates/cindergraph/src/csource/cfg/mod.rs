@@ -1,9 +1,4 @@
-//! `S2` --- the C AST to control-flow-event bridge: one CFG per function
-//! definition.
-//!
-//! Spec: `docs/design/static-c-analysis/requirements.md` `REQ-CFG-3` through
-//! `REQ-CFG-7` and `REQ-CFG-11`, judged against `REQ-GEN-1`. Layering:
-//! `docs/design/static-c-analysis/architecture.md` section 1.
+//! The C syntax-tree to control-flow-event bridge: one CFG per function.
 //!
 //! # What this is, and what it is deliberately not
 //!
@@ -14,28 +9,24 @@
 //! the walk between them: it reads C constructs and emits the events that
 //! describe them, and it knows nothing about graphs.
 //!
-//! What comes out is the **general** CFG --- "the graph a person would draw:
-//! real successors, real join points, real loop back edges". It is *not* the
-//! parity graph. `architecture.md` section 1 calls that split the
-//! load-bearing decision of the whole design, because the parity layer is built
-//! on top of this one and three things break at once if its quirks leak
-//! downward: the lowering to LLIR inherits a graph shaped by a JVM program's
-//! expression granularity, the equivalence checker reasons over a graph whose
-//! exits were deleted for metric arithmetic, and the general asset becomes good
-//! for one metric and nothing else. Nothing in this file knows the parity layer
-//! exists.
+//! What comes out is the **general** CFG: real successors, join points and loop
+//! back edges. It is not the parity graph. The parity layer is a projection on
+//! top of this graph; its comparison-specific expression granularity,
+//! contraction and exit choices must not leak into metrics, dependence or
+//! ordinary graph export. Nothing in this module depends on that projection.
 //!
 //! # The mapping
 //!
 //! | construct | events |
 //! |---|---|
-//! | expression statement, declaration *with* an initializer, `asm`, an unparsed region | [`Flow::Stmt`] |
-//! | declaration with no initializer, `;`, a `_Static_assert`, a directive | nothing (`REQ-CFG-3`) |
+//! | expression statement, declaration with an initializer or runtime-bound candidate, `asm`, an unparsed region | [`Flow::Stmt`] |
+//! | non-executable declaration, `;`, a `_Static_assert`, a directive | nothing |
 //! | `if` / `else` | [`Flow::Branch`] + `Then` / `Else` / `EndScope` |
-//! | `while`, `for`, `do`-`while` | [`Flow::LoopHeader`] with the matching [`LoopKind`], plus [`Flow::LoopStep`] for a `for`'s update |
+//! | `while`, `for`, `do`-`while` | [`Flow::LoopHeader`] with the matching [`crate::syntax::cfg::LoopKind`], plus [`Flow::LoopStep`] for a `for`'s update |
 //! | `switch`, `case`, `default` | [`Flow::Switch`] + [`Flow::Case`], fall-through as an edge |
+//! | GNU computed `goto` | one [`Flow::IndirectDispatch`] with the statically known label-address target set |
 //! | `break`, `continue`, `goto`, a label, `return` | their own variants |
-//! | `&&`, `||`, `?:` | a fork apiece --- [`expr`], and `REQ-CFG-6` |
+//! | `&&`, `||`, `?:` | a fork apiece, emitted by `expr` |
 //!
 //! The last row is the one that matters. The parser leaves all three as
 //! ordinary expression nodes on purpose, so turning them into control flow is
@@ -45,24 +36,23 @@
 //!
 //! # Three rules the implementation is shaped by
 //!
-//! * **No native recursion** (`REQ-GEN-4`, `REQ-SYN-3`). There is one loop over
+//! * **No native recursion.** There is one loop over
 //!   a `Vec<Task>`, exactly as the parser next door has one loop over its own
 //!   task stack, so a body nested thousands of levels deep costs heap and not
 //!   stack. Nothing here calls itself, and no type here is recursive, so
 //!   `Debug` and `Drop` cannot recurse either.
-//! * **Never fails** (`REQ-SYN-2`, `REQ-ROB-2`). Every entry point returns
-//!   [`Parsed<Cfg>`]. A [`NodeTag::Error`] node from a recovered parse becomes a
-//!   straight-line node (`REQ-CFG-11`), a malformed construct becomes a
-//!   diagnostic, and no input --- including a tree whose children are missing
-//!   entirely --- panics.
-//! * **Determinism** (`REQ-SYN-5`, `REQ-OUT-3`). Events are emitted in source
+//! * **Recovery is represented.** Entry points return [`Parsed<Cfg>`]. A
+//!   [`NodeTag::Error`] node from a recovered parse becomes a straight-line
+//!   node and malformed constructs add diagnostics. Adversarial tests exercise
+//!   missing children and deeply nested input without relying on native stack.
+//! * **Determinism.** Events are emitted in source
 //!   order, node ids are dense in emission order, and the only ordered
 //!   containers whose iteration reaches the output are sorted.
 //!
-//! # The one `REQ-GEN-1` failure that is the program's, not the graph's
+//! # Intentional divergence cycles
 //!
-//! `REQ-GEN-1`'s second invariant --- every path reaches the function end or a
-//! diverging construct --- is false of a program with an inescapable loop, and
+//! The useful structural invariant that every non-diverging path reaches the
+//! function end is false of a program with an inescapable loop, and
 //! decompiler output has them: `spin: g(); goto spin;` reaches the function end
 //! on no path at all. `while (1) {}` escapes the same verdict only because the
 //! builder gives every loop header a second edge out of the construct;
@@ -82,13 +72,15 @@
 //!
 //! # Why this is a directory
 //!
-//! Three files, one reason to change apiece: `mod.rs` (here) owns the public
-//! surface and the task machine, [`stmt`] owns the statement grammar's mapping,
-//! [`expr`] owns `REQ-CFG-6`, and [`reach`] owns the pre-pass that answers
-//! "can control get here" before a node is placed. The [`Emitter`] type is
-//! declared here so all three can read its fields, which is the same
+//! Five files, one reason to change apiece: `mod.rs` (here) owns the public
+//! surface and task machine, `stmt` owns the statement grammar's mapping,
+//! `expr` owns expression control flow, `dispatch` resolves computed targets,
+//! and `reach` owns the pre-pass that answers "can control get here" before a
+//! node is placed. The `Emitter` type is
+//! declared here so all four consumers can read its fields, which is the same
 //! arrangement [`crate::syntax::cfg`] uses for [`Cfg`].
 
+mod dispatch;
 mod expr;
 mod reach;
 mod stmt;
@@ -174,8 +166,8 @@ pub fn function_cfgs(tree: &Tree, text: &str) -> Parsed<Vec<FunctionCfg>> {
 /// the general graph wants; the only caller of [`Coverage::Syntactic`] is
 /// [`crate::csource::parity`], which is reproducing a tool whose CFG
 /// construction is syntax-directed. The option is threaded rather than made a
-/// second emitter for the reason `architecture.md` section 1 gives: the parity
-/// layer must not have its own copy of the statement grammar, because an
+/// second emitter because the parity layer must not have its own copy of the
+/// statement grammar: an
 /// unreachable region still contains `goto`s into live code and `break`s bound
 /// to enclosing live constructs, and only the emitter's own control-context
 /// stack resolves those. A graph built with [`Coverage::Syntactic`] does not
@@ -218,7 +210,7 @@ fn build_one(
 ///
 /// Tasks are `Copy` and hold no owned data, so pushing and popping one is free
 /// and the stack can grow without a move constructor's worth of work.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Task {
     /// Map one statement node to events.
     Stmt(NodeId),
@@ -395,7 +387,7 @@ impl<'a> Emitter<'a> {
     /// sequence forwards and this is the single place that reverses it.
     fn push_all(&mut self, tasks: &[Task]) {
         for task in tasks.iter().rev() {
-            self.tasks.push(*task);
+            self.tasks.push(task.clone());
         }
     }
 
@@ -420,6 +412,7 @@ impl<'a> Emitter<'a> {
             }
             Flow::Return(_)
             | Flow::Goto { .. }
+            | Flow::IndirectDispatch { .. }
             | Flow::Break { .. }
             | Flow::Continue { .. }
             | Flow::Diverge(_) => self.live = false,
@@ -579,6 +572,39 @@ mod tests {
     }
 
     #[test]
+    fn a_runtime_bound_is_an_executable_declaration_without_an_initializer() {
+        let cfg = graph("void f(int n) { n = 1; int values[n]; return; }");
+        assert_eq!(kind_count(&cfg, NodeKind::Stmt), 2);
+        let statement_spans = cfg
+            .nodes()
+            .iter()
+            .filter(|node| node.kind() == NodeKind::Stmt)
+            .map(|node| node.span())
+            .collect::<Vec<_>>();
+        assert!(statement_spans[0].lo < statement_spans[1].lo);
+    }
+
+    #[test]
+    fn conditional_runtime_bound_owns_real_cfg_arms() {
+        let cfg = graph("void f(int c, int n, int m) { int values[c ? n + 1 : m + 1]; return; }");
+        assert_eq!(kind_count(&cfg, NodeKind::Cond), 1);
+        let (branch_index, _branch) = cfg
+            .nodes()
+            .iter()
+            .enumerate()
+            .find(|(_, node)| node.kind() == NodeKind::Cond)
+            .expect("bound condition");
+        let edge_kinds = cfg
+            .successor_edges(NodeId::new(branch_index as u32))
+            .iter()
+            .map(|edge| edge.kind)
+            .collect::<Vec<_>>();
+        assert_eq!(edge_kinds, [EdgeKind::True, EdgeKind::False]);
+        // One node per value arm, the declaration join, and `return`.
+        assert_eq!(kind_count(&cfg, NodeKind::Stmt), 4);
+    }
+
+    #[test]
     fn straight_line_statements_chain_in_source_order() {
         let cfg = graph("void f(void) { g(); h(); i(); }");
         assert_eq!(kind_count(&cfg, NodeKind::Stmt), 3);
@@ -707,8 +733,206 @@ mod tests {
              one: return 1; two: return 2; }",
         );
         assert_eq!(kind_count(&cfg, NodeKind::Label), 2);
-        assert_eq!(kind_count(&cfg, NodeKind::Goto), 2, "one per candidate");
+        assert_eq!(kind_count(&cfg, NodeKind::IndirectDispatch), 1);
+        assert_eq!(kind_count(&cfg, NodeKind::Cond), 0, "no synthetic tests");
+        assert_eq!(kind_count(&cfg, NodeKind::Goto), 0, "no synthetic gotos");
+        let dispatch = cfg
+            .nodes()
+            .iter()
+            .position(|node| node.kind() == NodeKind::IndirectDispatch)
+            .map(|index| NodeId::new(index as u32))
+            .expect("one indirect dispatch");
+        let targets: Vec<NodeId> = cfg.successors(dispatch).collect();
+        assert_eq!(targets.len(), 2, "one edge per address-taken label");
+        assert!(targets.iter().all(|target| {
+            cfg.node(*target)
+                .is_some_and(|node| node.kind() == NodeKind::Label)
+        }));
         assert_eq!(kind_count(&cfg, NodeKind::Diverge), 0);
+        let info = cfg
+            .indirect_dispatch(dispatch)
+            .expect("resolution metadata");
+        assert_eq!(info.precision, crate::syntax::cfg::TargetPrecision::Exact);
+        assert!(info.may_be_invalid, "the index is not yet range-proven");
+        assert_eq!(
+            info.reasons,
+            [crate::syntax::cfg::DispatchUncertainty::IndexMayBeOutOfBounds]
+        );
+    }
+
+    #[test]
+    fn disjoint_immutable_tables_resolve_each_dispatch_independently() {
+        let cfg = graph(concat!(
+            "int f(int a, int b) { ",
+            "static void *x[] = {&&x0, &&x1}; ",
+            "static void *y[] = {&&y0, &&y1}; ",
+            "if (a) goto *x[b]; else goto *y[b]; ",
+            "x0:return 0; x1:return 1; y0:return 2; y1:return 3; }",
+        ));
+        let dispatches = cfg.indirect_dispatches();
+        assert_eq!(dispatches.len(), 2);
+        assert!(dispatches
+            .iter()
+            .all(|info| info.precision == crate::syntax::cfg::TargetPrecision::Exact));
+        let first = cfg.successors(dispatches[0].node).collect::<Vec<_>>();
+        let second = cfg.successors(dispatches[1].node).collect::<Vec<_>>();
+        assert_eq!(first.len(), 2);
+        assert_eq!(second.len(), 2);
+        assert!(first.iter().all(|target| !second.contains(target)));
+    }
+
+    #[test]
+    fn an_in_bounds_constant_table_index_resolves_one_valid_target() {
+        let cfg = graph(concat!(
+            "int f(void) { static void *t[] = {&&a, &&b}; goto *t[1]; ",
+            "a:return 1; b:return 2; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(info.precision, crate::syntax::cfg::TargetPrecision::Exact);
+        assert!(!info.may_be_invalid);
+        assert!(info.reasons.is_empty());
+        assert_eq!(cfg.out_degree(info.node), 1);
+        assert_eq!(kind_count(&cfg, NodeKind::Label), 1);
+    }
+
+    #[test]
+    fn a_mutated_label_table_falls_back_to_every_address_taken_label() {
+        let cfg = graph(concat!(
+            "int f(int n) { static void *t[] = {&&a, &&b}; ",
+            "t[0] = &&c; goto *t[n]; ",
+            "a:return 1; b:return 2; c:return 3; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.precision,
+            crate::syntax::cfg::TargetPrecision::Conservative
+        );
+        assert_eq!(
+            info.reasons,
+            [crate::syntax::cfg::DispatchUncertainty::UnresolvedValue]
+        );
+        assert_eq!(cfg.out_degree(info.node), 3);
+    }
+
+    #[test]
+    fn a_direct_label_value_is_an_exact_dispatch() {
+        let cfg = graph("int f(void) { goto *&&done; done: return 1; }");
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(info.precision, crate::syntax::cfg::TargetPrecision::Exact);
+        assert!(!info.may_be_invalid);
+        assert!(info.reasons.is_empty());
+        assert_eq!(cfg.out_degree(info.node), 1);
+    }
+
+    #[test]
+    fn immutable_scalar_copies_and_conditionals_resolve_exactly() {
+        let cfg = graph(concat!(
+            "int f(int choose) { void *p = choose ? &&a : &&b; void *q = p; ",
+            "goto *q; a:return 1; b:return 2; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(info.precision, crate::syntax::cfg::TargetPrecision::Exact);
+        assert!(!info.may_be_invalid);
+        assert!(info.reasons.is_empty());
+        assert_eq!(cfg.out_degree(info.node), 2);
+    }
+
+    #[test]
+    fn one_immutable_scalar_can_feed_multiple_exact_dispatches() {
+        let cfg = graph(concat!(
+            "int f(int choose) { void *p = choose ? &&a : &&b; ",
+            "if (choose) goto *p; goto *p; a:return 1; b:return 2; }",
+        ));
+        assert_eq!(cfg.indirect_dispatches().len(), 2);
+        assert!(cfg.indirect_dispatches().iter().all(|info| {
+            info.precision == crate::syntax::cfg::TargetPrecision::Exact
+                && cfg.out_degree(info.node) == 2
+        }));
+    }
+
+    #[test]
+    fn a_direct_conditional_of_label_values_is_exact() {
+        let cfg = graph("int f(int c) { goto *(c ? &&a : &&b); a:return 1; b:return 2; }");
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(info.precision, crate::syntax::cfg::TargetPrecision::Exact);
+        assert_eq!(cfg.out_degree(info.node), 2);
+    }
+
+    #[test]
+    fn an_extra_scalar_use_or_mutation_forces_the_safe_fallback() {
+        let cfg = graph(concat!(
+            "int f(int choose) { void *p = choose ? &&a : &&b; void *other=&&c; ",
+            "consume(p); goto *p; a:return 1; b:return 2; c:return 3; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.precision,
+            crate::syntax::cfg::TargetPrecision::Conservative
+        );
+        assert_eq!(cfg.out_degree(info.node), 3);
+    }
+
+    #[test]
+    fn scalar_reassignments_form_a_narrow_conservative_may_set() {
+        let cfg = graph(concat!(
+            "int f(int choose) { void *p=&&a; if(choose) p=&&b; void *q=&&c; ",
+            "goto *p; a:return 1; b:return 2; c:return q != 0; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.precision,
+            crate::syntax::cfg::TargetPrecision::Conservative
+        );
+        assert_eq!(
+            info.reasons,
+            [crate::syntax::cfg::DispatchUncertainty::FlowInsensitiveJoin]
+        );
+        assert!(!info.may_be_invalid);
+        assert_eq!(cfg.out_degree(info.node), 2);
+        assert_eq!(kind_count(&cfg, NodeKind::Label), 2);
+    }
+
+    #[test]
+    fn an_unsupported_scalar_assignment_keeps_the_function_wide_fallback() {
+        let cfg = graph(concat!(
+            "int f(int choose, void *unknown) { void *p=&&a; if(choose) p=unknown; ",
+            "void *q=&&b; goto *p; a:return 1; b:return q != 0; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.reasons,
+            [crate::syntax::cfg::DispatchUncertainty::UnresolvedValue]
+        );
+        assert!(info.may_be_invalid);
+        assert_eq!(cfg.out_degree(info.node), 2);
+    }
+
+    #[test]
+    fn a_label_nested_in_unknown_arithmetic_does_not_claim_exact_resolution() {
+        let cfg = graph(concat!(
+            "int f(int n) { void *other = &&b; goto *(&&a + n); ",
+            "a:return 1; b:return 2; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.precision,
+            crate::syntax::cfg::TargetPrecision::Conservative
+        );
+        assert_eq!(cfg.out_degree(info.node), 2);
+    }
+
+    #[test]
+    fn a_table_with_an_unknown_initializer_element_falls_back() {
+        let cfg = graph(concat!(
+            "int f(int n, void *p) { static void *t[] = {&&a, p}; ",
+            "void *other = &&b; goto *t[n]; a:return 1; b:return 2; }",
+        ));
+        let info = &cfg.indirect_dispatches()[0];
+        assert_eq!(
+            info.precision,
+            crate::syntax::cfg::TargetPrecision::Conservative
+        );
+        assert_eq!(cfg.out_degree(info.node), 2);
     }
 
     #[test]
@@ -1143,11 +1367,11 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files: Vec<PathBuf> = Vec::new();
         for relative in ["tests/decompiler_fixtures/src", "tests/decbench_corpus/src"] {
-            files.extend(c_files(&root.join(relative)));
-        }
-        if files.is_empty() {
-            println!("SKIP: no in-repo C corpus under {}", root.display());
-            return;
+            files.extend(
+                crate::test_corpus::sources(&root.join(relative))
+                    .into_iter()
+                    .map(|(path, _)| path),
+            );
         }
         let census = census(&files);
         census.report("in-repo corpus");

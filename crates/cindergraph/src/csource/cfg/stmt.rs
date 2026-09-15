@@ -1,10 +1,6 @@
 //! `REQ-CFG-3` through `REQ-CFG-5`, `REQ-CFG-7` and `REQ-CFG-11` --- one C
 //! statement mapped to the events that describe it.
 //!
-//! Spec: `docs/design/static-c-analysis/requirements.md`, the CFG construction
-//! section. The event vocabulary is
-//! `docs/design/source-front-ends/substrate.md` section 5.
-//!
 //! # The one construct the vocabulary does not describe directly
 //!
 //! A loop header is two things at once: the node every back edge returns to,
@@ -89,11 +85,11 @@ impl Emitter<'_> {
                     terminal: Terminal::Stmt(span),
                 }]);
             }
-            // `REQ-CFG-3`: a declaration is a node only when it initializes
-            // something. The whole declaration is walked, not just the
-            // initializer, so a `?:` in an array bound is still found.
+            // `REQ-CFG-3`: an initializer or a potentially runtime array
+            // bound makes a declaration executable. The whole declaration is
+            // walked so control inside either expression is preserved.
             NodeTag::Decl => {
-                if self.reach.init_in(node) {
+                if self.reach.init_in(node) || self.declaration_has_runtime_bound_candidate(node) {
                     self.push_all(&[Task::Expr {
                         node,
                         terminal: Terminal::Stmt(span),
@@ -152,6 +148,31 @@ impl Emitter<'_> {
                 }
             }
         }
+    }
+
+    fn declaration_has_runtime_bound_candidate(&self, declaration: NodeId) -> bool {
+        self.tree.arena().preorder(declaration).any(|node| {
+            if tag_of(self.tree, node) != Some(NodeTag::ArraySuffix) {
+                return false;
+            }
+            let Some((first, end)) = self.tree.arena().token_extent(node) else {
+                return false;
+            };
+            if end <= first + 2 {
+                return false;
+            }
+            let inner = ((first + 1)..end.saturating_sub(1))
+                .map(|index| {
+                    self.tree
+                        .tokens()
+                        .text(crate::syntax::ids::TokenId::new(index), self.text)
+                        .trim()
+                })
+                .collect::<String>();
+            !inner.is_empty()
+                && inner != "*"
+                && !inner.chars().all(|character| character.is_ascii_digit())
+        })
     }
 
     /// Whether an unreachable `node` still has to be emitted.
@@ -376,29 +397,41 @@ impl Emitter<'_> {
     ///
     /// `REQ-CFG-7` says a computed `goto` "must not silently produce an
     /// edge-free node, since that changes the degree sequence", and that the
-    /// divergence must be recorded rather than guessed at. The target set is
-    /// not actually a guess: C only lets a program name a label through GNU
-    /// `&&label`, so the labels whose address this function takes are a sound
-    /// over-approximation of where the jump can land, and
-    /// [`super::reach::Reach::address_taken`] collects them.
+    /// divergence must be recorded rather than guessed at.
+    /// [`super::dispatch`] resolves direct label values and immutable indexed
+    /// label tables exactly. When that proof does not apply, C can name a label
+    /// only through GNU `&&label`, so the function's address-taken labels remain
+    /// the sound over-approximation collected by
+    /// [`super::reach::Reach::address_taken`].
     ///
-    /// The event vocabulary has no n-way transfer, so the set is emitted as a
-    /// chain of two-way tests each of whose true arm is one `goto` --- "the
-    /// target is this one, or one of the rest". A function that takes no label
-    /// address has nothing to over-approximate *to*, and there the abstention
-    /// is all that is left: [`Flow::Diverge`] is a node with no successor,
-    /// which is what "control leaves here and this layer cannot say where"
-    /// means to [`crate::syntax::cfg::Cfg::validate`].
+    /// One [`Flow::IndirectDispatch`] owns the complete target set. A function
+    /// that takes no label address has nothing to over-approximate *to*, and
+    /// there the abstention is all that is left: [`Flow::Diverge`] is a node
+    /// with no successor, which is what "control leaves here and this layer
+    /// cannot say where" means to [`crate::syntax::cfg::Cfg::validate`].
     fn goto_stmt(&mut self, node: NodeId, span: Span) {
         if let Some(name) = goto_label(self.tree, self.text, self.spans, node) {
             let label = self.labels.intern(&name);
             self.push_all(&[Task::Emit(Flow::Goto { label, span })]);
             return;
         }
-        let targets: Vec<super::Symbol> = self
-            .reach
-            .address_taken()
-            .to_vec()
+        let fallback = self.reach.address_taken();
+        let resolved = self.reach.indirect_dispatch(node);
+        let (target_names, precision, may_be_invalid, reasons) = match resolved {
+            Some(resolution) => (
+                resolution.labels.clone(),
+                resolution.precision,
+                resolution.may_be_invalid,
+                resolution.reasons.clone(),
+            ),
+            None => (
+                fallback.to_vec(),
+                crate::syntax::cfg::TargetPrecision::Conservative,
+                true,
+                vec![crate::syntax::cfg::DispatchUncertainty::UnresolvedValue],
+            ),
+        };
+        let targets: Vec<super::Symbol> = target_names
             .iter()
             .map(|name| self.labels.intern(name))
             .collect();
@@ -413,23 +446,13 @@ impl Emitter<'_> {
             self.push_all(&tasks);
             return;
         }
-        let last = targets.len() - 1;
-        for (index, label) in targets.iter().enumerate() {
-            if index < last {
-                tasks.push(Task::Emit(Flow::Branch { cond: span }));
-                tasks.push(Task::Emit(Flow::Then));
-            }
-            tasks.push(Task::Emit(Flow::Goto {
-                label: *label,
-                span,
-            }));
-            if index < last {
-                tasks.push(Task::Emit(Flow::Else));
-            }
-        }
-        for _ in 0..last {
-            tasks.push(Task::Emit(Flow::EndScope));
-        }
+        tasks.push(Task::Emit(Flow::IndirectDispatch {
+            targets,
+            precision,
+            may_be_invalid,
+            reasons,
+            span,
+        }));
         self.push_all(&tasks);
     }
 

@@ -245,12 +245,109 @@ def test_the_general_cfg_is_not_the_joern_parity_cfg():
     kinds = {node["kind"] for node in cfg["nodes"]}
     assert "entry" in kinds and "exit" in kinds and "cond" in kinds
     assert all("kind" in edge and "back" in edge for edge in cfg["edges"])
+    assert cfg["indirect_dispatches"] == []
 
     parity = cindergraph.source_cfg.parity_cfgs(code)
     assert "f" in parity
     assert "entry" in parity["f"] and isinstance(parity["f"]["entry"], list), (
         "the parity layer expresses entry as a flag list, not as a node"
     )
+
+
+@pytest.mark.core
+def test_computed_goto_exposes_exact_table_targets_and_bounds_uncertainty():
+    code = """
+int f(int opcode) {
+    static void *targets[] = {&&add, &&sub};
+    goto *targets[opcode];
+add: return 1;
+sub: return 2;
+}
+"""
+    cfg = cindergraph.source.control_flow_graphs(code)[0]["cfg"]
+    dispatch = cfg["indirect_dispatches"]
+    assert len(dispatch) == 1
+    assert dispatch[0]["precision"] == "exact"
+    assert dispatch[0]["may_be_invalid"] is True
+    assert dispatch[0]["reasons"] == ["index_may_be_out_of_bounds"]
+    assert len(dispatch[0]["targets"]) == 2
+    node = next(node for node in cfg["nodes"] if node["id"] == dispatch[0]["node"])
+    assert node["kind"] == "indirect_dispatch"
+
+    flow = cindergraph.source.data_flow(code)[0]
+    assert flow["control_targets_complete"] is True
+    assert not any(
+        issue["kind"] == "unresolved_control_target"
+        for issue in flow["semantic_issues"]
+    )
+
+
+@pytest.mark.core
+def test_unresolved_computed_goto_qualifies_control_target_coverage():
+    code = (
+        "int f(int n) { void *p = &&a; if(n) p=&&b; goto *p; a:return 1; b:return 2; }"
+    )
+    flow = cindergraph.source.data_flow(code)[0]
+    assert flow["control_targets_complete"] is False
+    issue = next(
+        issue
+        for issue in flow["semantic_issues"]
+        if issue["kind"] == "unresolved_control_target"
+    )
+    assert issue["dimensions"] == ["control_targets"]
+    assert issue["start"] is not None and issue["end"] is not None
+
+
+@pytest.mark.core
+def test_immutable_label_pointer_copies_keep_dispatch_coverage_exact():
+    code = """
+int f(int choose) {
+    void *p = choose ? &&a : &&b;
+    void *q = p;
+    goto *q;
+a: return 1;
+b: return 2;
+}
+"""
+    cfg = cindergraph.source.control_flow_graphs(code)[0]["cfg"]
+    assert cfg["indirect_dispatches"][0]["precision"] == "exact"
+    assert len(cfg["indirect_dispatches"][0]["targets"]) == 2
+    flow = cindergraph.source.data_flow(code)[0]
+    assert flow["control_targets_complete"] is True
+
+
+@pytest.mark.core
+def test_constant_dispatch_table_index_selects_one_reachable_label():
+    code = "int f(void) { static void *t[]={&&a,&&b}; goto *t[1]; a:return 1; b:return 2; }"
+    cfg = cindergraph.source.control_flow_graphs(code)[0]["cfg"]
+    dispatch = cfg["indirect_dispatches"][0]
+    assert dispatch["precision"] == "exact"
+    assert dispatch["may_be_invalid"] is False
+    assert len(dispatch["targets"]) == 1
+    assert sum(node["kind"] == "label" for node in cfg["nodes"]) == 1
+
+
+@pytest.mark.core
+def test_scalar_reassignment_exports_a_narrow_conservative_target_set():
+    code = """
+int f(int choose) {
+    void *p=&&a;
+    if (choose) p=&&b;
+    void *q=&&c;
+    goto *p;
+a: return 1;
+b: return 2;
+c: return q != 0;
+}
+"""
+    cfg = cindergraph.source.control_flow_graphs(code)[0]["cfg"]
+    dispatch = cfg["indirect_dispatches"][0]
+    assert dispatch["precision"] == "conservative"
+    assert dispatch["reasons"] == ["flow_insensitive_join"]
+    assert dispatch["may_be_invalid"] is False
+    assert len(dispatch["targets"]) == 2
+    flow = cindergraph.source.data_flow(code)[0]
+    assert flow["control_targets_complete"] is False
 
 
 @pytest.mark.core

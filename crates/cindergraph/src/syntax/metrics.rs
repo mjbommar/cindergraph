@@ -3,10 +3,8 @@
 //! Everything here is a property of a graph: node and edge counts, McCabe's
 //! cyclomatic number, reachability, and the back-edge census. None of it knows
 //! what a statement is, so it sits beside [`crate::syntax::ged`] rather than in
-//! a language module, for the reason `docs/design/static-c-analysis/`
-//! `architecture.md` section 1 gives for `ged`: a metric that reads only
-//! degrees and adjacency is neither C-specific nor bound to one front end, and
-//! it is the piece most likely to be wanted elsewhere.
+//! a language module: a metric that reads only degrees and adjacency is neither
+//! C-specific nor bound to one front end, and is likely to be useful elsewhere.
 //!
 //! # What "cyclomatic" means here, exactly
 //!

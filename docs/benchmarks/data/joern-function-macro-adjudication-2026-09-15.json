@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:15:54Z",
+  "scope": "local function-like macro preprocessing adjudication",
+  "population_sha256": "0c22e3f779f6b2483f2068017da4525bd52b5ea893be68b0bc8a729bd71908d2",
+  "summary": {
+    "functions": 5,
+    "cindergraph_proven_correct": 4,
+    "cindergraph_preprocessing_gaps": 1
+  },
+  "functions": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/104_statement_expression.c",
+      "function": "statement_expression_max",
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 10.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "cindergraph_proven_correct": true,
+      "cindergraph_preprocessing_gap": false
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/104_statement_expression.c",
+      "function": "single_evaluation",
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 16.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "cindergraph_proven_correct": true,
+      "cindergraph_preprocessing_gap": false
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/126_x_macros.c",
+      "function": "total_weight",
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 10.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "cindergraph_proven_correct": true,
+      "cindergraph_preprocessing_gap": false
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/126_x_macros.c",
+      "function": "apply_opcode",
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 13.0,
+        "role_isomorphic": false
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 15.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "cindergraph_proven_correct": false,
+      "cindergraph_preprocessing_gap": true
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/131_obfuscated_composite.c",
+      "function": "obfuscated_pipeline",
+      "cindergraph_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "joern_raw_vs_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 8.0,
+        "role_isomorphic": false
+      },
+      "providers_on_preprocessed": {
+        "both_recovered": true,
+        "vj_ged": 0.0,
+        "role_isomorphic": true
+      },
+      "cindergraph_proven_correct": true,
+      "cindergraph_preprocessing_gap": false
+    }
+  ]
+}

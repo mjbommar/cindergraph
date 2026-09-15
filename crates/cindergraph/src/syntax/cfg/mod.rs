@@ -1,81 +1,38 @@
-//! `SB-9` --- the language-blind control-flow graph builder.
+//! Language-neutral control-flow graphs and their builder.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 5 and 7.
+//! Control constructs are represented as [`Flow`] events. The builder resolves
+//! loops, switches, labels, jumps, and fall-through without depending on a
+//! particular token vocabulary or syntax-tree representation.
 //!
-//! # Why this is its own module
+//! The general CFG contains real successors, join points, loop back edges, and
+//! explicit entry and function-end nodes. Comparison-specific expression
+//! granularity, contraction, and entry/exit flags live in the parity layer so
+//! they do not leak into metrics, dependence analysis, or ordinary graph export.
 //!
-//! Control flow is where the C family agrees with itself. A `while`, a
-//! `switch`, a labelled `break` and a `goto` mean the same thing in C, in C++
-//! and (bar the `goto`) in Rust, so the machinery that resolves them --- a
-//! control-context stack, a label fixup list, chain coalescing --- is written
-//! once here and reused unchanged by the second front end. What varies between
-//! languages is the *grammar that emits the events*, not the events, so this
-//! module consumes [`Flow`] and nothing else: no token, no node tag, no keyword
-//! (`REQ-SYN-8`, checked by `python/tests/test_src_dependency_boundaries.py`).
+//! [`Cfg::from_parts`] supports alternate projections, while
+//! [`Cfg::chain_partition`], [`Cfg::in_degree`], and [`Cfg::out_degree`] expose
+//! the structural information needed by downstream analyses.
 //!
-//! # The graph this builds, and the one it deliberately does not
+//! # Invariants
 //!
-//! This builder produces the graph a person would draw: real successors, real
-//! join points, real loop back edges, an entry node and a function-end node
-//! that are *nodes*. It does not reproduce the quirks of the external tool
-//! Glaurung matches for one similarity metric --- expression-granular nodes, a
-//! shared function-end node deleted only when it stayed a singleton, entry and
-//! exit expressed as flags derived from degrees. Those are another program's
-//! artifacts, and `docs/design/static-c-analysis/architecture.md` section 1
-//! records what breaks if they leak downward: the lowering to LLIR inherits a
-//! graph shaped by a JVM program's expression granularity, and the general
-//! asset becomes good for one metric and nothing else.
+//! * Recoverable input errors become [`crate::syntax::diag::Diagnostic`] values.
+//! * Construction and graph traversals use explicit stacks rather than native recursion.
+//! * Dense node identifiers and stable edge ordering make output deterministic.
+//! * Every node carries at least one source span.
 //!
-//! The parity layer is therefore built *on top* of this one, and the API is
-//! shaped to make that cheap: [`Cfg::from_parts`] lets it assemble whatever
-//! node set its metric wants, [`Cfg::chain_partition`] hands it the same
-//! `O(V+E)` coalescing this module uses, and [`Cfg::in_degree`] /
-//! [`Cfg::out_degree`] hand it exactly the degree sequence
-//! [`crate::syntax::ged`] scores. Nothing in this file needs to know that layer
-//! exists.
+//! The implementation separates the following concerns:
 //!
-//! # The four module rules, as they land here
-//!
-//! * **No panics** (`REQ-SYN-2`). A `break` outside a loop, an unbalanced
-//!   scope, a `goto` to a label that is never defined --- each is a
-//!   [`Diagnostic`], and the builder still returns a graph.
-//! * **No native recursion** (`REQ-SYN-3`). Construction, reachability, the
-//!   cycle scan and coalescing all use explicit stacks, and no type here is
-//!   recursive, so `Debug` and `Drop` cannot recurse either.
-//! * **Determinism** (`REQ-SYN-5`). Node ids are dense in construction order,
-//!   edges are grouped by source with a stable sort that preserves creation
-//!   order within a source, and the only map whose iteration reaches output is
-//!   a [`BTreeMap`].
-//! * **Spans are total** (`REQ-SYN-7`). Every node carries at least one span,
-//!   which is why several [`Flow`] variants carry a span the sketch in section
-//!   5 of the design doc left implicit.
-//!
-//! # Why this is a directory, not one file
-//!
-//! `docs/design/source-front-ends/substrate.md` section 7 records that this
-//! component arrived as one 1,534-line file covering four separable concerns:
-//! the event vocabulary, the builder's control-context stack and label
-//! backpatching, maximal-chain coalescing, and the `REQ-GEN-1` structural
-//! invariants. Each is now its own file, one reason to change apiece:
-//!
-//! * [`flow`] --- the [`Flow`] event vocabulary, [`NodeKind`], [`EdgeKind`],
+//! * `flow` --- the [`Flow`] event vocabulary, [`NodeKind`], [`EdgeKind`],
 //!   [`CfgNode`] and [`CfgEdge`]: the data every submodule and every future
 //!   front end shares.
 //! * `mod.rs` (here) --- the [`Cfg`] graph type itself: construction from
 //!   parts, adjacency, and the plain accessors.
-//! * [`build`] --- [`CfgBuilder`]: the control-context stack, label
+//! * `build` --- [`CfgBuilder`]: the control-context stack, label
 //!   backpatching, and the `Flow` state machine.
-//! * [`coalesce`] --- maximal-chain contraction: [`Cfg::chain_partition`],
+//! * `coalesce` --- maximal-chain contraction: [`Cfg::chain_partition`],
 //!   [`Cfg::coalesced`] and [`ChainPartition`].
-//! * [`validate`] --- the `REQ-GEN-1` structural invariants: [`Cfg::validate`]
+//! * `validate` --- structural invariants: [`Cfg::validate`]
 //!   and the reachability walks it is built from.
-//!
-//! Splitting the file changes no public path: everything reachable as
-//! `syntax::cfg::Foo` before is reachable the same way now, via the `pub use`
-//! below. Rust's privacy rules do the rest --- a private field of [`Cfg`],
-//! defined in this module, stays visible to every submodule beneath it, so
-//! [`build`], [`coalesce`] and [`validate`] read `self.nodes`, `self.edges`
-//! and the rest exactly as the single-file version did.
 
 mod build;
 mod coalesce;
@@ -84,7 +41,10 @@ mod validate;
 
 pub use build::CfgBuilder;
 pub use coalesce::ChainPartition;
-pub use flow::{CfgEdge, CfgNode, EdgeKind, Flow, LoopKind, NodeKind, MAX_NODES};
+pub use flow::{
+    CfgEdge, CfgNode, DispatchUncertainty, EdgeKind, Flow, IndirectDispatchInfo, LoopKind,
+    NodeKind, TargetPrecision, MAX_NODES,
+};
 
 use crate::syntax::ids::NodeId;
 
@@ -110,6 +70,7 @@ pub struct Cfg {
     entry: NodeId,
     exit: NodeId,
     continue_targets: Vec<NodeId>,
+    indirect_dispatches: Vec<IndirectDispatchInfo>,
 }
 
 impl Cfg {
@@ -128,7 +89,7 @@ impl Cfg {
         entry: NodeId,
         exit: NodeId,
     ) -> Self {
-        Self::assemble(nodes, edges, entry, exit, Vec::new())
+        Self::assemble(nodes, edges, entry, exit, Vec::new(), Vec::new())
     }
 
     fn assemble(
@@ -137,6 +98,7 @@ impl Cfg {
         entry: NodeId,
         exit: NodeId,
         mut continue_targets: Vec<NodeId>,
+        mut indirect_dispatches: Vec<IndirectDispatchInfo>,
     ) -> Self {
         let count = nodes.len();
         let clamp = |id: NodeId| {
@@ -180,6 +142,18 @@ impl Cfg {
         continue_targets.retain(|id| id.index() < count);
         continue_targets.sort_unstable();
         continue_targets.dedup();
+        indirect_dispatches.retain(|info| {
+            info.node.index() < count
+                && nodes
+                    .get(info.node.index())
+                    .is_some_and(|node| node.kind() == NodeKind::IndirectDispatch)
+        });
+        for info in &mut indirect_dispatches {
+            info.reasons.sort_unstable();
+            info.reasons.dedup();
+        }
+        indirect_dispatches.sort_by_key(|info| info.node);
+        indirect_dispatches.dedup_by_key(|info| info.node);
 
         Self {
             nodes,
@@ -190,6 +164,7 @@ impl Cfg {
             entry: clamp(entry),
             exit: clamp(exit),
             continue_targets,
+            indirect_dispatches,
         }
     }
 
@@ -275,6 +250,19 @@ impl Cfg {
     pub fn continue_targets(&self) -> &[NodeId] {
         &self.continue_targets
     }
+
+    /// Sparse metadata for every first-class indirect dispatch, in node order.
+    pub fn indirect_dispatches(&self) -> &[IndirectDispatchInfo] {
+        &self.indirect_dispatches
+    }
+
+    /// Resolution metadata for `id`, if it is an indirect dispatch node.
+    pub fn indirect_dispatch(&self, id: NodeId) -> Option<&IndirectDispatchInfo> {
+        self.indirect_dispatches
+            .binary_search_by_key(&id, |info| info.node)
+            .ok()
+            .and_then(|index| self.indirect_dispatches.get(index))
+    }
 }
 
 #[cfg(test)]
@@ -300,6 +288,10 @@ mod tests {
         let cfg = Cfg::from_parts(nodes, edges, NodeId::new(0), NodeId::new(4));
         assert_eq!(cfg.edge_count(), 0);
         assert_eq!(cfg.exit(), NodeId::new(0), "an out-of-range id is clamped");
+        assert!(
+            cfg.indirect_dispatches().is_empty(),
+            "a structural projection must not invent source resolution metadata"
+        );
     }
 
     #[test]

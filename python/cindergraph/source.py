@@ -35,9 +35,11 @@ Halstead's operator split -- are written out there rather than left implied.
 from __future__ import annotations
 
 import statistics
+from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from cindergraph import _native
 
@@ -47,6 +49,10 @@ __all__ = [
     "EXPORT_REPRS",
     "Diagnostic",
     "FunctionMetrics",
+    "AnalysisSession",
+    "NativeGraph",
+    "ReachabilityResult",
+    "ReachabilityStep",
     "SourceReport",
     "analyze",
     "analyze_path",
@@ -62,6 +68,9 @@ __all__ = [
     "features",
     "functions",
     "normalize",
+    "native_graphs",
+    "query_reaches",
+    "query_reaches_by_id",
     "reaches",
 ]
 
@@ -122,6 +131,314 @@ _RANKABLE = (
     "halstead_difficulty",
     "halstead_effort",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ReachabilityStep:
+    """One formal parameter carrying a value on a may-path."""
+
+    function_id: int | None
+    function: str
+    parameter: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReachabilityResult:
+    """Evidence-bearing interprocedural reachability claim."""
+
+    claim: Literal["found_may_path", "no_may_path", "unknown"]
+    verdict: Literal["yes", "no", "unknown"]
+    source_id: str
+    input_dialect: Literal["ordinary", "preprocessed", "decompiled"]
+    external_call_policy: Literal["unknown", "taint_return", "assume_pure_no_flow"]
+    analysis_revision: int
+    coverage_complete: bool
+    path: tuple[ReachabilityStep, ...]
+    explored: tuple[ReachabilityStep, ...]
+    uncertainty: tuple[str, ...]
+
+
+def _reachability_result(raw: Mapping[str, Any]) -> ReachabilityResult:
+    """Convert the native wire mapping into the typed public result."""
+
+    def step(item: Sequence[Any]) -> ReachabilityStep:
+        return ReachabilityStep(
+            function_id=item[0], function=item[1], parameter=item[2]
+        )
+
+    return ReachabilityResult(
+        claim=raw["claim"],
+        verdict=raw["verdict"],
+        source_id=raw["source_id"],
+        input_dialect=raw["input_dialect"],
+        external_call_policy=raw["external_call_policy"],
+        analysis_revision=raw["analysis_revision"],
+        coverage_complete=raw["coverage_complete"],
+        path=tuple(step(item) for item in raw["path"]),
+        explored=tuple(step(item) for item in raw["explored"]),
+        uncertainty=tuple(raw["uncertainty"]),
+    )
+
+
+class AnalysisSession:
+    """One persistent parsed source snapshot for related graph queries.
+
+    Use a session when asking for more than one graph family from the same
+    source. Parsing happens once, and data-flow and summary results are cached
+    by the native analysis unit. Returned dictionaries are fresh views, so a
+    caller may modify them without corrupting the cached analysis.
+
+    Args:
+        code: C source text to analyze.
+    """
+
+    __slots__ = ("_native_session",)
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        dialect: Literal["ordinary", "preprocessed", "decompiled"] | None = None,
+        external_calls: Literal[
+            "unknown", "taint_return", "assume_pure_no_flow"
+        ] = "unknown",
+    ) -> None:
+        """Create a persistent native analysis unit for ``code``."""
+        self._native_session = _native.source.AnalysisSession(
+            code, dialect=dialect, external_calls=external_calls
+        )
+
+    @property
+    def source_id(self) -> str:
+        """Stable identity of this exact source snapshot."""
+        return self._native_session.source_id
+
+    @property
+    def source(self) -> str:
+        """Exact normalized source whose bytes all result spans address."""
+        return self._native_session.source
+
+    @property
+    def dialect(self) -> Literal["ordinary", "preprocessed", "decompiled"]:
+        """Input preparation policy used to build this snapshot."""
+        return self._native_session.dialect
+
+    @property
+    def external_calls(
+        self,
+    ) -> Literal["unknown", "taint_return", "assume_pure_no_flow"]:
+        """Assumption used for named callees without a body."""
+        return self._native_session.external_calls
+
+    @property
+    def diagnostics(self) -> tuple[Diagnostic, ...]:
+        """Parser and CFG recovery diagnostics for the owned snapshot."""
+        return tuple(Diagnostic(item) for item in self._native_session.diagnostics)
+
+    def control_flow_graphs(self) -> list[dict[str, Any]]:
+        """Return control-flow graphs for every recovered definition."""
+        return self._native_session.control_flow_graphs()
+
+    def data_flow(self) -> list[dict[str, Any]]:
+        """Return cached data-flow analyses for every recovered definition."""
+        return self._native_session.data_flow()
+
+    def call_summaries(self) -> list[dict[str, Any]]:
+        """Return cached interprocedural summaries for this source snapshot."""
+        return self._native_session.call_summaries()
+
+    def export_graphs(
+        self, *, repr: str = "cfg", format: str = "dot"
+    ) -> list[tuple[str, str]]:
+        """Serialize graphs without rebuilding this session's analysis.
+
+        Args:
+            repr: ``"ast"``, ``"cfg"``, ``"ddg"``, ``"cdg"`` or ``"pdg"``.
+            format: ``"dot"``, ``"graphml"``, ``"json"``, ``"mermaid"`` or
+                ``"text"``.
+        """
+        return self._native_session.export_graphs(repr, format)
+
+    def native_graphs(self, *, repr: str = "cfg") -> list[NativeGraph]:
+        """Return read-only Rust-backed graphs without serialization."""
+        return [
+            NativeGraph(graph)
+            for graph in self._native_session.native_graphs(repr=repr)
+        ]
+
+    def backward_slice(
+        self, function: str, node: int, *, function_id: int | None = None
+    ) -> list[int]:
+        """Slice one owned CFG node over cached control and data dependence.
+
+        Args:
+            function: Recovered function name; duplicate names are rejected.
+            node: Node ID in that function's executable CFG.
+            function_id: Optional identity check from a session result.
+        """
+        return self._native_session.backward_slice(
+            function, node, function_id=function_id
+        )
+
+    def query_reaches(
+        self, source: str, parameter: int, sink: str
+    ) -> ReachabilityResult:
+        """Return a typed reachability claim from this session's summaries."""
+        return _reachability_result(
+            self._native_session.query_reaches(source, parameter, sink)
+        )
+
+    def query_reaches_by_id(
+        self, source_function_id: int, parameter: int, sink_function_id: int
+    ) -> ReachabilityResult:
+        """Query exact source/sink identities, including duplicate names."""
+        return _reachability_result(
+            self._native_session.query_reaches_by_id(
+                source_function_id, parameter, sink_function_id
+            )
+        )
+
+
+class NativeGraph:
+    """Read-only graph topology owned and traversed by the Rust extension.
+
+    Node and edge dictionaries are materialized only when requested. Topology
+    queries execute against compact native adjacency rather than Python graph
+    objects. Use :meth:`to_networkx` only at an interoperability boundary.
+    """
+
+    __slots__ = ("_native_graph",)
+
+    def __init__(self, native_graph: Any) -> None:
+        """Wrap one extension-owned graph view."""
+        self._native_graph = native_graph
+
+    @property
+    def name(self) -> str:
+        """Recovered function name."""
+        return self._native_graph.name
+
+    @property
+    def source_id(self) -> str:
+        """Identity of the analyzed source snapshot."""
+        return self._native_graph.source_id
+
+    @property
+    def function_id(self) -> int:
+        """Dense function identity within :attr:`source_id`."""
+        return self._native_graph.function_id
+
+    @property
+    def graph_kind(self) -> str:
+        """Stable identity of graph-local node coordinates."""
+        return self._native_graph.graph_kind
+
+    @property
+    def representation(self) -> Literal["ast", "cfg", "ddg", "cdg", "pdg"]:
+        """Canonical requested graph representation."""
+        return self._native_graph.representation
+
+    @property
+    def analysis_revision(self) -> int:
+        """Semantic result-contract revision."""
+        return self._native_graph.analysis_revision
+
+    @property
+    def input_dialect(self) -> Literal["ordinary", "preprocessed", "decompiled"]:
+        """Source preparation policy used for this graph."""
+        return self._native_graph.input_dialect
+
+    @property
+    def external_call_policy(
+        self,
+    ) -> Literal["unknown", "taint_return", "assume_pure_no_flow"]:
+        """External-callee assumption attached to this graph snapshot."""
+        return self._native_graph.external_call_policy
+
+    @property
+    def directed(self) -> bool:
+        """Always true for Cindergraph graph representations."""
+        return self._native_graph.directed
+
+    @property
+    def node_count(self) -> int:
+        """Number of explicitly declared nodes."""
+        return self._native_graph.node_count
+
+    @property
+    def edge_count(self) -> int:
+        """Number of edges, including parallel edges."""
+        return self._native_graph.edge_count
+
+    def nodes(self) -> tuple[dict[str, Any], ...]:
+        """Materialize node IDs, labels, and attributes in stable order."""
+        return tuple(dict(node) for node in self._native_graph.nodes())
+
+    def edges(self) -> tuple[dict[str, Any], ...]:
+        """Materialize directed edges and attributes in stable order."""
+        return tuple(dict(edge) for edge in self._native_graph.edges())
+
+    def edge_list(self) -> tuple[tuple[int, int], ...]:
+        """Return topology alone in one native-to-Python transfer."""
+        return tuple(tuple(edge) for edge in self._native_graph.edge_list())
+
+    def successors(self, node: int) -> tuple[int, ...]:
+        """Immediate successors, preserving native edge order."""
+        return tuple(self._native_graph.successors(node))
+
+    def predecessors(self, node: int) -> tuple[int, ...]:
+        """Immediate predecessors, preserving native edge order."""
+        return tuple(self._native_graph.predecessors(node))
+
+    def out_degree(self, node: int) -> int:
+        """Count edges leaving a declared node."""
+        return self._native_graph.out_degree(node)
+
+    def in_degree(self, node: int) -> int:
+        """Count edges entering a declared node."""
+        return self._native_graph.in_degree(node)
+
+    def descendants(self, node: int) -> tuple[int, ...]:
+        """All reachable nodes after ``node``, sorted by ID."""
+        return tuple(self._native_graph.descendants(node))
+
+    def ancestors(self, node: int) -> tuple[int, ...]:
+        """All nodes that can reach ``node``, sorted by ID."""
+        return tuple(self._native_graph.ancestors(node))
+
+    def to_networkx(self, *, multigraph: bool = False) -> Any:
+        """Materialize an optional NetworkX graph for interoperability.
+
+        Args:
+            multigraph: Preserve parallel edges with ``MultiDiGraph``. The
+                default ``DiGraph`` matches existing compatibility APIs and
+                may collapse edges sharing endpoints.
+
+        Raises:
+            ImportError: NetworkX is not installed.
+        """
+        try:
+            import networkx as nx
+        except ImportError as error:
+            raise ImportError(
+                "Install cindergraph[graphs] to convert a native graph to NetworkX"
+            ) from error
+        graph = (nx.MultiDiGraph if multigraph else nx.DiGraph)(
+            name=self.name,
+            source_id=self.source_id,
+            function_id=self.function_id,
+            graph_kind=self.graph_kind,
+            analysis_revision=self.analysis_revision,
+        )
+        for node in self.nodes():
+            attributes = dict(node["attributes"])
+            attributes["label"] = node["label"]
+            graph.add_node(node["id"], **attributes)
+        for edge in self.edges():
+            attributes = dict(edge["attributes"])
+            attributes["label"] = edge["label"]
+            graph.add_edge(edge["source"], edge["target"], **attributes)
+        return graph
 
 
 #: What :func:`compare` reports by default: the metrics whose movement between
@@ -426,20 +743,21 @@ class SourceReport:
         Args:
             by: Any name in :data:`_RANKABLE` -- ``"cognitive"``,
                 ``"cyclomatic"``, ``"max_nesting"``, ``"lines"``, and the rest.
-            limit: How many to return, or `None` for all of them.
+            limit: Non-negative count to return, or `None` for all of them.
 
         Returns:
             Functions in descending order of `by`, with the name as a
             tie-break so the order is total and reproducible.
 
         Raises:
-            ValueError: If `by` is not a rankable metric. A typo here would
-                otherwise silently return the list in source order.
+            ValueError: If `by` is not a rankable metric or `limit` is negative.
         """
         if by not in _RANKABLE:
             raise ValueError(
                 f"cannot rank by {by!r}; expected one of {', '.join(_RANKABLE)}"
             )
+        if limit is not None and limit < 0:
+            raise ValueError("hotspot limit must be non-negative or None")
         ranked = sorted(self._functions, key=lambda f: (-getattr(f, by), f.name))
         return tuple(ranked if limit is None else ranked[:limit])
 
@@ -498,7 +816,18 @@ class SourceReport:
             Indirect calls contribute no edge, because there is no name to
             record; :attr:`FunctionMetrics.calls` counts them and this does
             not, so the two disagree exactly where a pointer was called.
+
+        Raises:
+            ValueError: Duplicate function definitions cannot be represented
+                by this name-keyed mapping. Inspect `functions` instead.
         """
+        duplicates = sorted(
+            name
+            for name, count in Counter(f.name for f in self._functions).items()
+            if count > 1
+        )
+        if duplicates:
+            raise ValueError(f"duplicate function definitions: {', '.join(duplicates)}")
         return {f.name: tuple(f.callees) for f in self._functions}
 
     def defined_names(self) -> frozenset[str]:
@@ -562,6 +891,10 @@ def data_flow(code: str) -> list[dict[str, Any]]:
         One dict per function, with ``name``, ``definitions``, ``uses``,
         ``edges``, ``unresolved_uses`` and ``dead_stores``. The two defect
         lists hold indices into ``uses`` and ``definitions`` respectively.
+        ``source_id`` identifies the exact input bytes, ``function_id`` is
+        dense within that snapshot, and ``analysis_revision`` identifies the
+        semantic result contract. Graph-local IDs must not be mixed between
+        different source IDs.
 
         A **dead store** is a write no read can see. Hand-written C has almost
         none; a decompiler that invents a temporary and never reads it produces
@@ -578,6 +911,13 @@ def data_flow(code: str) -> list[dict[str, Any]]:
         this reads one translation unit and does not process ``#include``, so a
         typedef from a header is an opaque name. ``uint32_t`` is recorded as
         ``uint32_t`` and nothing claims to know it is four bytes.
+        Pointer and array shape is scoped to each declarator; operators in an
+        initializer or neighbouring declarator do not contribute to it.
+        Parameter commas are balanced across nested signatures, and nested
+        names are not promoted to outer bindings. A lone identifier remains
+        ambiguous when its typedef declaration is unavailable. A preceding
+        file-scope typedef is recognized, but ``size_t`` from an unprocessed
+        header may be interpreted as a parameter name.
 
         ``type_conflicts`` lists bindings whose declaration sites disagree
         about type, which cannot happen in code a C compiler accepted and is
@@ -589,12 +929,73 @@ def data_flow(code: str) -> list[dict[str, Any]]:
         ``bindings``, so the three can be joined.
         A binding with ``is_unresolved=True`` has no recovered declaration;
         its type is ``None``. Different unresolved spellings have distinct IDs.
+        Definition and use tables have stable analysis order, not source order:
+        projected memory events can be appended after ordinary events. Use each
+        event's byte ``start``/``end`` span when source ordering matters, while
+        retaining its table index when joining edges or defect lists.
 
-        ``memory_complete`` is false when memory access exceeds the current
-        local-pointer model, including unknown pointees, fields and array
-        elements. Known local pointees receive ``memory_write`` definitions
-        and projected reads. Their spans describe the pointer expression;
-        their binding and name identify the possible pointed-to object.
+        ``effects_complete`` is false when an opaque value-producing builtin
+        such as ``_Generic``, ``__builtin_choose_expr`` or
+        ``__builtin_va_arg`` may contain reads, writes or calls that this
+        syntax-level event pass cannot reconstruct. A clean negative result is
+        not conclusive in that case, and summary ``complete`` includes this
+        signal. Evaluated inline assembly also fails it because opaque operands
+        and clobbers can read or write locals and arbitrary memory. A
+        ``cleanup(function)`` declaration attribute fails it because the
+        implicit scope-exit call is not yet represented.
+
+        ``semantic_issues`` is the structured coverage ledger behind these
+        compatibility flags. Each entry has a stable ``kind``, the affected
+        analysis ``dimensions``, and an optional byte ``start``/``end`` span.
+        A ``None`` span means the issue qualifies the whole function. Effect
+        memory, and VLA producers attach the unsupported syntax span. Recovery
+        attaches each diagnostic origin while conservatively qualifying the
+        whole function.
+        Parser recovery affects every dimension even though the narrower
+        compatibility flags continue to report their individual passes.
+
+        ``control_targets_complete`` is false when a computed goto needs a
+        conservative target superset. Its semantic issue is attached to the
+        indirect-dispatch span. An exact valid-target set whose evaluation may
+        instead be invalid retains that fact in :func:`control_flow` without
+        claiming that a valid destination is missing.
+
+        ``memory_regions`` gives projected storage an identity separate from
+        scalar bindings. Regions form a parent-linked table of binding roots,
+        named fields, and conservative all-element summaries;
+        ``memory_accesses`` associates operation-owned reads and writes with
+        those IDs and labels each association ``exact`` or ``may_alias``.
+        ``memory_definitions`` and ``memory_uses`` split these events for the
+        region lattice; ``memory_edges`` joins possible reaching writes to
+        reads by their table indices. ``memory_overlaps`` records structural
+        containment and known union-member overlap. Cross-union edges retain
+        distinct definition/use region IDs and name the overlap reason.
+        Accessed fields of by-value aggregate parameters receive
+        ``incoming_parameter`` definitions at entry. Direct aggregate and
+        local-array bases identify storage and are not ordinary scalar uses.
+        Pointer-like call arguments create weak ``call_clobber`` definitions
+        for known local targets and keep memory coverage qualified until
+        callee effects are modeled. Scalar-only calls do not do so; local
+        arrays decay without becoming scalar reads or explicit ``&`` events.
+        ``memory_complete`` therefore remains false when access exceeds the
+        current local-pointer model, including unknown pointees and projected
+        field/element flow. Known local pointees still receive compatibility
+        ``memory_write`` definitions and projected reads.
+
+        ``vla_complete`` is false when a variable-length-array typedef captures
+        a value dependency that cannot yet be propagated through a later use
+        of the typedef name. Direct local and outer-parameter VLA bounds are
+        represented; nested function-pointer signatures stay separate.
+        Ordinary ``sizeof`` and ``_Alignof`` operands inside a bound remain
+        unevaluated, while a VLA type such as ``sizeof(int[n])`` reads ``n``.
+        An array-bound ``_Generic`` fails this signal and reports no
+        association as a definite read because selection needs C type
+        compatibility unavailable to the token-level recovery.
+        Direct assignments and increments in a bound are represented as
+        writes, but arbitrary side-effect ordering is not reconstructed, so
+        these forms also fail this signal.
+        Treat a negative summary as conclusive only when its ``complete``
+        field is true; summary completeness includes this signal.
     """
     return [dict(entry) for entry in _native.source.data_flow(code)]
 
@@ -642,7 +1043,16 @@ def control_dependence(code: str) -> list[dict[str, Any]]:
     return [dict(entry) for entry in _native.source.control_dependence(code)]
 
 
-def backward_slice(code: str, function: str, node: int) -> list[int]:
+def backward_slice(
+    code: str,
+    function: str,
+    node: int,
+    *,
+    source_id: str | None = None,
+    function_id: int | None = None,
+    graph_kind: str | None = None,
+    analysis_revision: int | None = None,
+) -> list[int]:
     """Every CFG node that can affect `node`, over the program-dependence graph.
 
     Walks control and data dependence backwards to a fixed point. This is the
@@ -659,15 +1069,32 @@ def backward_slice(code: str, function: str, node: int) -> list[int]:
         function: The function to slice, by name.
         node: The CFG node id to slice on, as ``control_dependence`` numbers
             them.
+        source_id: Optional identity copied from the graph that supplied
+            ``node``. A mismatch is rejected.
+        function_id: Optional snapshot-local function identity to validate.
+        graph_kind: Optional graph identity; slicing accepts only
+            ``"executable_cfg"``.
+        analysis_revision: Optional semantic contract revision to validate.
 
     Returns:
         The node ids in the slice, sorted, including the seed.
 
     Raises:
         KeyError: If no function of that name was recovered.
+        ValueError: If multiple definitions have the requested function name.
         IndexError: If the node ID is outside the selected function's graph.
     """
-    return list(_native.source.backward_slice(code, function, node))
+    return list(
+        _native.source.backward_slice(
+            code,
+            function,
+            node,
+            source_id=source_id,
+            function_id=function_id,
+            graph_kind=graph_kind,
+            analysis_revision=analysis_revision,
+        )
+    )
 
 
 def call_summaries(code: str) -> list[dict[str, Any]]:
@@ -688,8 +1115,12 @@ def call_summaries(code: str) -> list[dict[str, Any]]:
         code: The source text.
 
     Returns:
-        One dict per function with ``name``, ``parameters``, ``complete`` and
-        ``flows``. Each flow is ``{"parameter": n, "sink": "return" |
+        One dict per function with ``name``, ``source_id``, ``function_id``,
+        ``analysis_revision``, ``parameters``, ``complete`` and ``flows``.
+        Identity fields match :func:`data_flow` for the same snapshot. Duplicate
+        names retain separate function IDs and exact-body summaries, while
+        name-based reachability queries fail closed as ambiguous. Each flow is
+        ``{"parameter": n, "sink": "return" |
         "parameter", "sink_parameter": m | None}``.
 
         ``complete`` is ``False`` when the body held something this analysis
@@ -708,6 +1139,30 @@ def reaches(code: str, source: str, parameter: int, sink: str) -> str:
     unit; callers must not treat it as no.
     """
     return _native.source.reaches(code, source, parameter, sink)
+
+
+def query_reaches(
+    code: str, source: str, parameter: int, sink: str
+) -> ReachabilityResult:
+    """Return a typed may-path, complete negative, or explained unknown.
+
+    Unlike :func:`reaches`, this preserves the path or uncertainty evidence
+    behind the compatibility verdict.
+    """
+    return _reachability_result(
+        _native.source.query_reaches(code, source, parameter, sink)
+    )
+
+
+def query_reaches_by_id(
+    code: str, source_function_id: int, parameter: int, sink_function_id: int
+) -> ReachabilityResult:
+    """Query exact function identities without selecting duplicate names."""
+    return _reachability_result(
+        _native.source.query_reaches_by_id(
+            code, source_function_id, parameter, sink_function_id
+        )
+    )
 
 
 def export_graphs(
@@ -743,6 +1198,28 @@ def export_graphs(
     """
     return [
         (name, body) for name, body in _native.source.export_graphs(code, repr, format)
+    ]
+
+
+def native_graphs(code: str, *, repr: str = "cfg") -> list[NativeGraph]:
+    """Build read-only Rust-backed graphs without serializing topology.
+
+    Use this for traversal or large graph products. Node and edge attributes
+    cross into Python only when :meth:`NativeGraph.nodes` or
+    :meth:`NativeGraph.edges` is requested.
+
+    Args:
+        code: C source text to analyze.
+        repr: ``"ast"``, ``"cfg"``, ``"ddg"``, ``"cdg"`` or ``"pdg"``.
+
+    Returns:
+        One native graph per recovered function, in source order.
+
+    Raises:
+        ValueError: If `repr` is not recognized.
+    """
+    return [
+        NativeGraph(graph) for graph in _native.source.native_graphs(code, repr=repr)
     ]
 
 
@@ -845,9 +1322,13 @@ def control_flow_graphs(code: str) -> Sequence[Mapping[str, Any]]:
         code: The source text.
 
     Returns:
-        One mapping per function with ``name``, ``start``, ``end``,
+        One mapping per function with ``name``, ``source_id``, ``function_id``,
+        ``analysis_revision``, ``graph_kind``, ``start``, ``end``,
         ``short_circuits`` and a ``cfg`` holding ``nodes``, ``edges``,
-        ``entry`` and ``exit``. A list rather than a name-keyed mapping,
+        ``entry``, ``exit`` and ``indirect_dispatches``. Each indirect dispatch
+        reports its node and target IDs, ``exact`` or ``conservative``
+        precision, invalid-transfer risk, and stable uncertainty reasons. A
+        list rather than a name-keyed mapping,
         because two definitions in one file can carry the same name after
         recovery and a mapping would silently drop one.
     """
@@ -922,13 +1403,13 @@ def compare(
 
     Raises:
         ValueError: If a name in `metrics` is not a rankable metric or
-            ``gotos``. A typo would otherwise silently drop a column.
+            ``gotos``, a metric is repeated, or either report has duplicate
+            function names. Ambiguous matching cannot produce valid totals.
 
     Note:
-        Functions are matched by name. A translation unit that defines the same
-        name twice -- which recovery can produce -- keeps only the last of
-        them on each side, and the pairing is then between those two. Check
-        ``added``/``removed`` when the counts do not line up.
+        Functions are matched by unique name. Duplicate definitions must be
+        resolved by the caller before comparison; no body is silently selected.
+        Check ``added``/``removed`` when the counts do not line up.
     """
     allowed = set(_RANKABLE) | {"gotos"}
     unknown = [m for m in metrics if m not in allowed]
@@ -937,6 +1418,20 @@ def compare(
             f"cannot compare on {', '.join(unknown)}; "
             f"expected names from {', '.join(sorted(allowed))}"
         )
+
+    repeated = sorted(name for name, count in Counter(metrics).items() if count > 1)
+    if repeated:
+        raise ValueError(f"duplicate comparison metrics: {', '.join(repeated)}")
+    for side, report in (("before", before), ("after", after)):
+        duplicates = sorted(
+            name
+            for name, count in Counter(f.name for f in report.functions).items()
+            if count > 1
+        )
+        if duplicates:
+            raise ValueError(
+                f"{side} report has duplicate function names: {', '.join(duplicates)}"
+            )
 
     left = {f.name: f for f in before.functions}
     right = {f.name: f for f in after.functions}

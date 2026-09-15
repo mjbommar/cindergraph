@@ -1,9 +1,8 @@
 //! Dominance, post-dominance, and control dependence over a [`Cfg`].
 //!
 //! Pure graph work: nothing here knows what a statement is, so it sits beside
-//! [`crate::syntax::metrics`] and [`crate::syntax::ged`] for the reason
-//! `docs/design/static-c-analysis/architecture.md` section 1 gives --- an
-//! analysis that reads only adjacency is neither C-specific nor bound to one
+//! [`crate::syntax::metrics`] and [`crate::syntax::ged`]: an analysis that
+//! reads only adjacency is neither C-specific nor bound to one
 //! front end, and a second language front end reuses it unchanged.
 //!
 //! # What post-dominance needs that dominance does not
@@ -652,22 +651,12 @@ mod corpus {
     fn the_fixture_corpus_has_a_consistent_post_dominator_tree() {
         let root =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/decompiler_fixtures/src");
-        let Ok(entries) = std::fs::read_dir(&root) else {
-            return;
-        };
         let mut functions = 0usize;
         let mut placed = 0usize;
         let mut control_edges = 0usize;
         let mut stuck = 0usize;
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("c") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
+        for (_path, text) in crate::test_corpus::sources(&root) {
             let (tree, _) = parse(&text).into_parts();
             let (cfgs, _) = function_cfgs(&tree, &text).into_parts();
             for function in &cfgs {

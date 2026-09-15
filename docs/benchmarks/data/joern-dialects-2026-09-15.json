@@ -1,0 +1,537 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T04:11:44Z",
+  "scope": "raw decompiler dialect cases for Cindergraph; DecBench-sanitized cases for Joern",
+  "provenance": {
+    "cindergraph_git_head": "edf2777abc99e1c3113b4f1d51fe021f31432538",
+    "cindergraph_worktree_dirty": true,
+    "cindergraph_status_sha256": "9bd9ccda8990bf039fb52caea4c68cf7535235506410ee4684cd867bca373f86",
+    "cindergraph_source_sha256": "31b6c44973b470ff690106cc1246ac8c27902fa4b6364747f61ba3e3c1d61306",
+    "decbench_git_head": "f76dae075d4d82004fb21132b3f15e43b680e179",
+    "python": "3.12.13 (main, Mar 20 2026, 00:33:26) [Clang 22.1.1 ]",
+    "platform": "Linux-7.0.0-27-generic-x86_64-with-glibc2.43",
+    "pyjoern": "4.0.150.4",
+    "decbench": "1.1"
+  },
+  "population": {
+    "cases": 26,
+    "sha256": "8c9c7190985942b37dc7758495160fa7a2caded5e9b2036c6a3db0ea5549fc86",
+    "root": "tests/fixtures/decompiler_dialects"
+  },
+  "summary": {
+    "cases": 26,
+    "captured_cases": 22,
+    "positive_expected_cases": 25,
+    "cindergraph_expected_recovered": 25,
+    "joern_expected_recovered": 16,
+    "both_expected_recovered": 16,
+    "shared_vj_ged_zero": 15,
+    "shared_vj_ged_nonzero": 1,
+    "joern_failures": 0,
+    "cindergraph_total_seconds": 0.018193615600466728,
+    "joern_total_seconds": 128.52294425480068,
+    "cindergraph_median_seconds": 0.0005282256752252579,
+    "joern_median_seconds": 4.939982628915459
+  },
+  "cases": [
+    {
+      "id": "angr:bi_reverse",
+      "fixture": "angr.c",
+      "provenance": "captured",
+      "source": "gzip / gzip",
+      "expect": "bi_reverse",
+      "gap": null,
+      "cindergraph_functions": [
+        "bi_reverse"
+      ],
+      "joern_functions": [
+        "bi_reverse"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0006605656817555428,
+      "joern_seconds": 5.114421172067523,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "angr:usage",
+      "fixture": "angr.c",
+      "provenance": "captured",
+      "source": "shadow / newgidmap",
+      "expect": "usage",
+      "gap": null,
+      "cindergraph_functions": [
+        "usage"
+      ],
+      "joern_functions": [
+        "usage"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.000414213165640831,
+      "joern_seconds": 4.969818116165698,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "angr:history_def_last",
+      "fixture": "angr.c",
+      "provenance": "captured",
+      "source": "libedit / libedit.so.0.0",
+      "expect": "history_def_last",
+      "gap": null,
+      "cindergraph_functions": [
+        "history_def_last"
+      ],
+      "joern_functions": [
+        "history_def_last"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.000975506380200386,
+      "joern_seconds": 5.049164212308824,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "binja:history_def_last",
+      "fixture": "binja.c",
+      "provenance": "captured",
+      "source": "libedit / libedit.so.0.0",
+      "expect": "history_def_last",
+      "gap": null,
+      "cindergraph_functions": [
+        "history_def_last"
+      ],
+      "joern_functions": [
+        "history_def_last"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0005520936101675034,
+      "joern_seconds": 4.978046417236328,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "binja:usage",
+      "fixture": "binja.c",
+      "provenance": "captured",
+      "source": "shadow / newgidmap",
+      "expect": "usage",
+      "gap": null,
+      "cindergraph_functions": [
+        "usage"
+      ],
+      "joern_functions": [
+        "usage"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0009290445595979691,
+      "joern_seconds": 4.9172865292057395,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "binja:bi_reverse",
+      "fixture": "binja.c",
+      "provenance": "captured",
+      "source": "gzip / gzip",
+      "expect": "bi_reverse",
+      "gap": null,
+      "cindergraph_functions": [
+        "bi_reverse"
+      ],
+      "joern_functions": [
+        "bi_reverse"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0006575724110007286,
+      "joern_seconds": 4.99851281568408,
+      "joern_error": null,
+      "vj_ged": 10.0
+    },
+    {
+      "id": "binja:handler",
+      "fixture": "binja.c",
+      "provenance": "captured",
+      "source": "sysvinit / wall",
+      "expect": "handler",
+      "gap": null,
+      "cindergraph_functions": [
+        "handler"
+      ],
+      "joern_functions": [
+        "handler"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0002828724682331085,
+      "joern_seconds": 4.842224273830652,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "dewolf:history_def_last",
+      "fixture": "dewolf.c",
+      "provenance": "captured",
+      "source": "libedit / libedit.so.0.0",
+      "expect": "history_def_last",
+      "gap": null,
+      "cindergraph_functions": [
+        "history_def_last"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.00047774892300367355,
+      "joern_seconds": 4.9231733260676265,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "dewolf:usage",
+      "fixture": "dewolf.c",
+      "provenance": "captured",
+      "source": "shadow / newgidmap",
+      "expect": "usage",
+      "gap": null,
+      "cindergraph_functions": [
+        "usage"
+      ],
+      "joern_functions": [
+        "__noreturn",
+        "usage"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.002074355259537697,
+      "joern_seconds": 4.865720064379275,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "dewolf:bi_reverse",
+      "fixture": "dewolf.c",
+      "provenance": "captured",
+      "source": "gzip / gzip",
+      "expect": "bi_reverse",
+      "gap": null,
+      "cindergraph_functions": [
+        "bi_reverse"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0005126222968101501,
+      "joern_seconds": 4.8059855150058866,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ghidra:parse_record",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "samples/binaries/platforms/linux/amd64/synthetic/vulnparse-c-gcc-O0",
+      "expect": "parse_record",
+      "gap": null,
+      "cindergraph_functions": [
+        "parse_record"
+      ],
+      "joern_functions": [
+        "parse_record"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0011419570073485374,
+      "joern_seconds": 5.0360450353473425,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "ghidra:_start",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "samples/binaries/platforms/linux/amd64/synthetic/vulnparse-c-gcc-O0",
+      "expect": "_start",
+      "gap": null,
+      "cindergraph_functions": [
+        "_start"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.00042992550879716873,
+      "joern_seconds": 4.871086303144693,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ghidra:switchD_001011b2::caseD_0",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "samples/binaries/platforms/linux/amd64/synthetic/switchy-c-gcc-O2-stripped",
+      "expect": "switchD_001011b2::caseD_0",
+      "gap": null,
+      "cindergraph_functions": [
+        "switchD_001011b2::caseD_0"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0011041248217225075,
+      "joern_seconds": 4.7820626180619,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ghidra:FUN_00108540",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "tests/decompiler_fixtures/build/219_rust_iterator_chains-rustc-O2strip.so",
+      "expect": "FUN_00108540",
+      "gap": null,
+      "cindergraph_functions": [
+        "FUN_00108540"
+      ],
+      "joern_functions": [
+        "FUN_00108540"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0005438290536403656,
+      "joern_seconds": 4.94890155736357,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "ghidra:DllCanUnloadNow",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "samples/binaries/platforms/windows/vendor/realworld/win11-SyncInfrastructureps.dll",
+      "expect": "DllCanUnloadNow",
+      "gap": null,
+      "cindergraph_functions": [
+        "DllCanUnloadNow"
+      ],
+      "joern_functions": [
+        "DllCanUnloadNow"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.00044528301805257797,
+      "joern_seconds": 4.986885183490813,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "ghidra:Base::op",
+      "fixture": "ghidra.c",
+      "provenance": "captured",
+      "source": "tests/decompiler_fixtures/build/10_cpp_runtime_shapes-gcc-O2strip.so",
+      "expect": "Base::op",
+      "gap": null,
+      "cindergraph_functions": [
+        "Base::op"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0003039678558707237,
+      "joern_seconds": 4.821618788875639,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ida:bi_reverse",
+      "fixture": "ida.c",
+      "provenance": "captured",
+      "source": "gzip / gzip",
+      "expect": "bi_reverse",
+      "gap": null,
+      "cindergraph_functions": [
+        "bi_reverse"
+      ],
+      "joern_functions": [
+        "bi_reverse"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0006425213068723679,
+      "joern_seconds": 5.025043003261089,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "ida:history_def_last",
+      "fixture": "ida.c",
+      "provenance": "captured",
+      "source": "libedit / libedit.so.0.0",
+      "expect": "history_def_last",
+      "gap": null,
+      "cindergraph_functions": [
+        "history_def_last"
+      ],
+      "joern_functions": [
+        "history_def_last"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0008335644379258156,
+      "joern_seconds": 5.023648798465729,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "ida:dis_func1",
+      "fixture": "ida.c",
+      "provenance": "captured",
+      "source": "chibios / ch",
+      "expect": "dis_func1",
+      "gap": null,
+      "cindergraph_functions": [
+        "dis_func1"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0002914583310484886,
+      "joern_seconds": 4.899160550907254,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ida:raw_hexrays_fastcall",
+      "fixture": "ida.c",
+      "provenance": "RECONSTRUCTION",
+      "source": "hand-written in the Hex-Rays house style; no IDA install on this machine",
+      "expect": "raw_hexrays_fastcall",
+      "gap": null,
+      "cindergraph_functions": [
+        "raw_hexrays_fastcall"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0004623420536518097,
+      "joern_seconds": 4.928433213382959,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "ida:raw_hexrays_usercall",
+      "fixture": "ida.c",
+      "provenance": "RECONSTRUCTION",
+      "source": "hand-written in the Hex-Rays house style; no IDA install on this machine",
+      "expect": "raw_hexrays_usercall",
+      "gap": null,
+      "cindergraph_functions": [
+        "raw_hexrays_usercall"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.00029517896473407745,
+      "joern_seconds": 4.931063700467348,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "r2dec:bi_reverse",
+      "fixture": "r2dec.c",
+      "provenance": "captured",
+      "source": "gzip / gzip",
+      "expect": "bi_reverse",
+      "gap": null,
+      "cindergraph_functions": [
+        "bi_reverse"
+      ],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0008261529728770256,
+      "joern_seconds": 4.819011143408716,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "r2dec:usage",
+      "fixture": "r2dec.c",
+      "provenance": "captured",
+      "source": "shadow / newgidmap",
+      "expect": "usage",
+      "gap": null,
+      "cindergraph_functions": [
+        "usage"
+      ],
+      "joern_functions": [
+        "usage"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.002289901487529278,
+      "joern_seconds": 5.1189380856230855,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "r2dec:sendAmperage",
+      "fixture": "r2dec.c",
+      "provenance": "captured",
+      "source": "cleanflight / cleanflight_DALRCF405",
+      "expect": "-",
+      "gap": "the cell is not C at all -- it is r2dec's crash message",
+      "cindergraph_functions": [],
+      "joern_functions": [],
+      "cindergraph_expected_recovered": false,
+      "joern_expected_recovered": false,
+      "cindergraph_seconds": 0.0003694901242852211,
+      "joern_seconds": 4.873880020342767,
+      "joern_error": null,
+      "vj_ged": null
+    },
+    {
+      "id": "retdec:function_401000",
+      "fixture": "retdec.c",
+      "provenance": "RECONSTRUCTION",
+      "source": "hand-written; RetDec not installed",
+      "expect": "function_401000",
+      "gap": null,
+      "cindergraph_functions": [
+        "function_401000"
+      ],
+      "joern_functions": [
+        "function_401000"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0003642970696091652,
+      "joern_seconds": 4.983852927573025,
+      "joern_error": null,
+      "vj_ged": 0.0
+    },
+    {
+      "id": "retdec:function_401050",
+      "fixture": "retdec.c",
+      "provenance": "RECONSTRUCTION",
+      "source": "hand-written; RetDec not installed",
+      "expect": "function_401050",
+      "gap": null,
+      "cindergraph_functions": [
+        "function_401050"
+      ],
+      "joern_functions": [
+        "function_401050"
+      ],
+      "cindergraph_expected_recovered": true,
+      "joern_expected_recovered": true,
+      "cindergraph_seconds": 0.0003130268305540085,
+      "joern_seconds": 5.008960883133113,
+      "joern_error": null,
+      "vj_ged": 0.0
+    }
+  ]
+}

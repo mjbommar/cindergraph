@@ -1,25 +1,21 @@
-//! `F-5`..`F-7` --- the C AST node tags: the `u16` the substrate stores and
-//! never interprets.
-//!
-//! Spec: `docs/design/static-c-analysis/requirements.md` `REQ-GEN-5` (the AST
-//! must be lowerable) and section 8 (the non-requirements that keep this list
-//! short).
+//! Compact tags for nodes in C syntax trees.
 //!
 //! # Why this list is this short
 //!
-//! Section 8 forbids a C semantic model: no type resolution, no CPG, no
-//! statement fidelity beyond what a control-flow graph reads. So the tag space
+//! This parser does not try to encode a complete C semantic model. The tag space
 //! is sized by its two consumers and nothing else. The **CFG builder** needs
 //! every construct that forks, joins, jumps or repeats, which is why `IfStmt`,
-//! `SwitchStmt`, `CaseLabel` and `CondExpr` each get their own tag while
-//! `struct`, `union` and `enum` bodies share one opaque [`NodeTag::StructBody`].
-//! The **lowering** of `roadmap.md` stage S4 needs declarations, initializers,
+//! `SwitchStmt`, `CaseLabel` and `CondExpr` each get their own tag. Record and
+//! enum bodies preserve their member/enumerator declaration boundaries because
+//! the structural type layer consumes them; expression interiors that have no
+//! semantic reader remain opaque token runs.
+//! Downstream analysis needs declarations, initializers,
 //! types as written and the declaration-versus-expression distinction, which is
 //! why `Decl`, `Initializer`, `TypeName` and `ExprStmt` exist even though the
 //! first consumer never reads them.
 //!
 //! Nothing else earns a tag. A construct with no control flow and no lowering
-//! consequence --- an attribute, an `asm` operand list, a parameter list, a
+//! consequence --- an attribute, an `asm` operand list, a parameter declaration, a
 //! `_Generic` selection --- is kept as a *token run* inside one opaque node.
 //! The tokens are still there, so a later consumer can re-read them
 //! (`REQ-GEN-2`: spans survive); what is absent is a grammar for them, which is
@@ -27,8 +23,8 @@
 //!
 //! # Why operator nodes are flat rather than nested
 //!
-//! [`crate::syntax::event::Events`] deliberately has no `precede` operation
-//! (`docs/design/source-front-ends/substrate.md` section 2.2), so a node cannot
+//! [`crate::syntax::event::Events`] deliberately has no `precede` operation,
+//! so a node cannot
 //! be wrapped around a subtree that has already been emitted. A left-
 //! associative binary chain therefore cannot be built as `((a+b)+c)` without
 //! knowing the chain's length before its first operand is parsed. It is built
@@ -83,13 +79,19 @@ node_tags! {
     FuncDef => "func_def",
     DeclSpecifiers => "decl_specifiers",
     StructBody => "struct_body",
+    MemberDecl => "member_decl",
+    EnumBody => "enum_body",
+    Enumerator => "enumerator",
     Attribute => "attribute",
     Asm => "asm",
     StaticAssert => "static_assert",
     LocalLabel => "local_label",
     Declarator => "declarator",
+    ParenthesizedDeclarator => "parenthesized_declarator",
+    PointerOperator => "pointer_operator",
     DeclName => "decl_name",
     ParamList => "param_list",
+    ParamDecl => "param_decl",
     ArraySuffix => "array_suffix",
     Initializer => "initializer",
     InitList => "init_list",

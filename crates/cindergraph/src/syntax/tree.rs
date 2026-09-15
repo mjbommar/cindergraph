@@ -1,7 +1,5 @@
 //! `SB-7` --- the struct-of-arrays arena tree.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 2.2 and 7.
-//!
 //! An [`Arena`] is parallel vectors, not a `Vec<Node>`: a `u16` tag, a `u32`
 //! main token and two `u32` child slots per node, with anything wider spilling
 //! into one flat `extra` table whose layout the tag decides. This is the shape
@@ -53,7 +51,7 @@ pub const NO_NODE: u32 = u32::MAX;
 /// per node to encode one bit.
 const EXTRA_FLAG: u32 = 1 << 31;
 
-/// The largest number of nodes an arena can hold, given [`EXTRA_FLAG`].
+/// The largest number of nodes an arena can hold, given `EXTRA_FLAG`.
 pub const MAX_NODES: u32 = EXTRA_FLAG - 1;
 
 /// How a node's children are stored, once `lhs`/`rhs` have been decoded.
@@ -71,7 +69,7 @@ pub enum ChildSlots {
     /// Two children, in `lhs` and `rhs`.
     Two(NodeId, NodeId),
     /// Three or more children: `lhs` is the start of a run in `extra` and
-    /// `rhs` is that run's length with [`EXTRA_FLAG`] set.
+    /// `rhs` is that run's length with `EXTRA_FLAG` set.
     Run {
         /// First index of the run in `extra`.
         start: u32,
@@ -98,7 +96,7 @@ pub struct Arena {
     main: Vec<u32>,
     /// A child id, a run start in `extra`, or [`NO_NODE`].
     lhs: Vec<u32>,
-    /// A child id, a run length with [`EXTRA_FLAG`], or [`NO_NODE`].
+    /// A child id, a run length with `EXTRA_FLAG`, or [`NO_NODE`].
     rhs: Vec<u32>,
     /// First token of the node's whole subtree, or [`NO_NODE`].
     first_token: Vec<u32>,
@@ -196,7 +194,7 @@ impl Arena {
     /// |---|---|---|
     /// | [`NO_NODE`] | [`NO_NODE`] | no children |
     /// | id | [`NO_NODE`] | one child |
-    /// | start | len \| [`EXTRA_FLAG`] | three or more children, in `extra` |
+    /// | start | len \| `EXTRA_FLAG` | three or more children, in `extra` |
     /// | id | id | two children |
     ///
     /// `rhs == NO_NODE` is tested before the flag because [`NO_NODE`] also has
@@ -298,7 +296,7 @@ impl Arena {
 
     /// Append `values` to `extra`, returning the index they start at.
     ///
-    /// `None` if `extra` cannot hold them without crossing [`EXTRA_FLAG`],
+    /// `None` if `extra` cannot hold them without crossing `EXTRA_FLAG`,
     /// which is the point past which a run start stops being addressable.
     pub fn push_extra(&mut self, values: &[u32]) -> Option<u32> {
         let start = u32::try_from(self.extra.len()).ok()?;
@@ -451,7 +449,7 @@ impl Arena {
     /// Record `children` as `node`'s children, spilling to `extra` past two.
     ///
     /// Reports whether it landed: `false` for an out-of-range node, for more
-    /// children than [`EXTRA_FLAG`] can count, or for an `extra` table too full
+    /// children than `EXTRA_FLAG` can count, or for an `extra` table too full
     /// to take the run. On `false` the node keeps whatever children it had,
     /// which for a node being closed is none --- a subtree is lost, the tree
     /// stays walkable, and the caller counts the loss.

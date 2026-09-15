@@ -318,27 +318,6 @@ fn a_ternary_nests_its_arms_but_not_its_condition() {
 
 // --- the in-repo corpus ------------------------------------------------------
 
-/// Every `.c` file under `root`, sorted, so a run is reproducible.
-fn c_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let mut found = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().and_then(|e| e.to_str()) == Some("c") {
-                found.push(path);
-            }
-        }
-    }
-    found.sort();
-    found
-}
-
 #[test]
 fn the_in_repo_corpus_measures_without_panicking_and_holds_its_invariants() {
     // Asserted rather than skipped: both trees are committed to this
@@ -347,7 +326,7 @@ fn the_in_repo_corpus_measures_without_panicking_and_holds_its_invariants() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
     for relative in ["tests/decompiler_fixtures/src", "tests/decbench_corpus/src"] {
-        files.extend(c_files(&root.join(relative)));
+        files.extend(crate::test_corpus::sources(&root.join(relative)));
     }
     assert!(
         files.len() > 100,
@@ -364,11 +343,8 @@ fn the_in_repo_corpus_measures_without_panicking_and_holds_its_invariants() {
     let mut max_cyclomatic = 0u32;
     let mut max_cognitive = 0u32;
 
-    for path in &files {
-        let Ok(text) = std::fs::read_to_string(path) else {
-            continue;
-        };
-        let report = analyze(&text).into_parts().0;
+    for (path, text) in &files {
+        let report = analyze(text).into_parts().0;
         assert!(
             report.lines.code_lines + report.lines.blank_lines + report.lines.other_lines
                 == report.lines.lines,

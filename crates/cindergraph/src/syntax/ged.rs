@@ -1,9 +1,5 @@
 //! `G-1`, `G-2`, `G-4` --- graph edit distance over control-flow graphs.
 //!
-//! Spec: `docs/design/static-c-analysis/implementation-inventory.md` section 4,
-//! and `docs/design/static-c-analysis/joern-behavior.md` section 2 for the
-//! proof that the distance reads only degree sequences and entry/exit flags.
-//!
 //! # Why the input type has no edges
 //!
 //! This is a reimplementation of `cfgutils.similarity.vj_ged`, the

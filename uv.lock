@@ -10,10 +10,6 @@ source = { editable = "." }
 graphs = [
     { name = "networkx" },
 ]
-tests = [
-    { name = "networkx" },
-    { name = "pytest" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -25,12 +21,8 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "networkx", marker = "extra == 'graphs'", specifier = ">=3.0" },
-    { name = "networkx", marker = "extra == 'tests'", specifier = ">=3.0" },
-    { name = "pytest", marker = "extra == 'tests'", specifier = ">=8.4" },
-]
-provides-extras = ["graphs", "tests"]
+requires-dist = [{ name = "networkx", marker = "extra == 'graphs'", specifier = ">=3.0" }]
+provides-extras = ["graphs"]
 
 [package.metadata.requires-dev]
 dev = [

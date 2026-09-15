@@ -1,7 +1,5 @@
 //! `SB-4` --- shared lexical sublanguages: numbers, strings, comments.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` section 7, row `SB-4`.
-//!
 //! C, C++ and Rust disagree about almost everything above the token and agree
 //! about nearly everything below it. Each shared construct is a place a
 //! hand-written lexer gets the edge case wrong: C's hex escape has no length

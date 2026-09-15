@@ -1,4 +1,4 @@
-name: Release wheels
+name: Release Cindergraph
 
 on:
   workflow_dispatch:
@@ -8,62 +8,326 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: cindergraph-release
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Validate release source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: "1.88"
+          components: rustfmt, clippy
+      - uses: rustsec/audit-check@858dc40f52ca2b8570b7a997c1c4e35c6fc9a432
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: EmbarkStudios/cargo-deny-action@9c67a826e39827395bfa619cd85cb2aaeb43cfaa
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: false
+          python-version: "3.12"
+      - run: uvx --from zizmor==1.30.1 zizmor .github/workflows
+      - name: Validate Python project and classifier metadata
+        run: |
+          uvx --from validate-pyproject==0.26 --with packaging==26.0 validate-pyproject pyproject.toml
+          uvx --from trove-classifiers==2026.6.1.19 python tools/check_trove_classifiers.py
+      - name: Audit every published Python extra from the lockfile
+        run: |
+          set -o pipefail
+          uv export --locked --no-dev --all-extras --no-emit-project --format requirements.txt | uvx --from pip-audit==2.10.1 pip-audit --strict --progress-spinner off --require-hashes -r /dev/stdin
+      - run: uv sync --locked --dev
+      - run: uv run maturin develop --release
+      - name: Require tag, package version and changelog to agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python3 tools/check_release_version.py "$GITHUB_REF_NAME"
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo check -p cindergraph --no-default-features
+      - run: cargo publish -p cindergraph --dry-run --locked
+      - name: Require byte-reproducible crate packaging
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "cindergraph"))')
+          archive="target/package/cindergraph-$version.crate"
+          cargo package -p cindergraph --locked
+          first=$(sha256sum "$archive" | cut -d' ' -f1)
+          cargo package -p cindergraph --locked
+          second=$(sha256sum "$archive" | cut -d' ' -f1)
+          test "$first" = "$second"
+          echo "$first  $archive"
+      - name: Verify and test the exact packaged crate
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "cindergraph"))')
+          archive="target/package/cindergraph-$version.crate"
+          python3 tools/check_crate_notices.py "$archive"
+          cargo test --manifest-path "target/package/cindergraph-$version/Cargo.toml" --target-dir target/release-packaged-tests --locked --all-features
+      - name: Preserve the reviewed crate for publication
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crate-package
+          path: target/package/cindergraph-*.crate
+          if-no-files-found: error
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - run: uv run python tools/gen_native_stub.py --check
+      - run: uv run pytest python/tests/ review/test_design_contracts.py
+      - run: uv run ruff format --check python/ tools/
+      - run: uv run ruff check python/ tools/
+      - run: uv run ty check python/
+
   wheels:
+    name: Wheel (${{ matrix.os }}, ${{ matrix.target }})
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64
-          - os: ubuntu-latest
+            manylinux: "2_17"
+          - os: ubuntu-24.04-arm
             target: aarch64
-          - os: macos-13
+            manylinux: "2_17"
+          - os: macos-15-intel
             target: x86_64
-          - os: macos-14
+          - os: macos-15
             target: aarch64
           - os: windows-latest
             target: x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Derive reproducible-build epoch from the release commit
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
-      - uses: PyO3/maturin-action@v1
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: false
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          manylinux: auto
-      - uses: actions/upload-artifact@v4
+          args: --release --locked --out dist --find-interpreter --compatibility pypi
+          manylinux: ${{ matrix.manylinux }}
+          maturin-version: v1.15.0
+          docker-options: -e SOURCE_DATE_EPOCH
+      - name: Recreate the wheel archive
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --locked --out dist-rebuilt --find-interpreter --compatibility pypi
+          manylinux: ${{ matrix.manylinux }}
+          maturin-version: v1.15.0
+          docker-options: -e SOURCE_DATE_EPOCH
+      - name: Remove build-host paths from wheel SBOMs
+        shell: bash
+        run: python3 tools/normalize_wheel_sbom.py dist/*.whl dist-rebuilt/*.whl
+      - name: Require byte-reproducible wheel packaging
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          first = {p.name: sha256(p.read_bytes()).hexdigest() for p in Path("dist").glob("*.whl")}
+          second = {p.name: sha256(p.read_bytes()).hexdigest() for p in Path("dist-rebuilt").glob("*.whl")}
+          if not first or first != second:
+              raise SystemExit(f"wheel rebuild mismatch: {first!r} != {second!r}")
+          print(first)
+          PY
+      - name: Install and smoke-test each native wheel before upload
+        shell: bash
+        run: |
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          test "${#wheels[@]}" -gt 0
+          python3 tools/check_python_distribution.py "${wheels[@]}"
+          uvx --from twine==7.0.0 twine check --strict "${wheels[@]}"
+          smoke_env="$RUNNER_TEMP/release-wheel-smoke"
+          uv venv --python 3.12 "$smoke_env"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            smoke_python="$smoke_env/Scripts/python.exe"
+          else
+            smoke_python="$smoke_env/bin/python"
+          fi
+          for wheel in "${wheels[@]}"; do
+            uv pip install --reinstall --no-deps --python "$smoke_python" "$wheel"
+            "$smoke_python" -I tools/smoke_installed.py
+          done
+          graphs_env="$RUNNER_TEMP/release-wheel-graphs"
+          uv venv --python 3.12 "$graphs_env"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            graphs_python="$graphs_env/Scripts/python.exe"
+          else
+            graphs_python="$graphs_env/bin/python"
+          fi
+          for wheel in "${wheels[@]}"; do
+            uv pip install --reinstall --python "$graphs_python" "$wheel[graphs]"
+            "$graphs_python" -I tools/smoke_graphs_installed.py
+          done
+          typing_dir="$RUNNER_TEMP/typing-consumer"
+          mkdir -p "$typing_dir"
+          cp tests/typing/pyproject.toml tests/typing/consumer.py tests/typing/graphs_consumer.py "$typing_dir/"
+          uvx --from ty==0.0.80 ty check --project "$typing_dir" --python "$smoke_env" "$typing_dir/consumer.py" --error-on-warning
+          uvx --from ty==0.0.80 ty check --project "$typing_dir" --python "$graphs_env" "$typing_dir/graphs_consumer.py" --error-on-warning
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
+          if-no-files-found: error
 
   sdist:
+    name: Source distribution
+    needs: validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: PyO3/maturin-action@v1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Derive reproducible-build epoch from the release commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: "1.88"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: false
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
           args: --out dist
-      - uses: actions/upload-artifact@v4
+          maturin-version: v1.15.0
+      - name: Recreate the source distribution
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          command: sdist
+          args: --out dist-rebuilt
+          maturin-version: v1.15.0
+      - name: Require byte-reproducible sdist packaging
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          first = {p.name: sha256(p.read_bytes()).hexdigest() for p in Path("dist").glob("*.tar.gz")}
+          second = {p.name: sha256(p.read_bytes()).hexdigest() for p in Path("dist-rebuilt").glob("*.tar.gz")}
+          if not first or first != second:
+              raise SystemExit(f"sdist rebuild mismatch: {first!r} != {second!r}")
+          print(first)
+          PY
+      - name: Build, install and smoke-test the source distribution
+        shell: bash
+        run: |
+          shopt -s nullglob
+          archives=(dist/*.tar.gz)
+          test "${#archives[@]}" -eq 1
+          python3 tools/check_python_distribution.py "${archives[@]}"
+          uvx --from twine==7.0.0 twine check --strict "${archives[@]}"
+          for version in 3.12 3.13 3.14; do
+            smoke_env="$RUNNER_TEMP/release-sdist-$version"
+            uv venv --python "$version" "$smoke_env"
+            for archive in "${archives[@]}"; do
+              uv pip install --reinstall --no-cache --no-deps --python "$smoke_env/bin/python" "$archive"
+              "$smoke_env/bin/python" -I tools/smoke_installed.py
+            done
+          done
+          graphs_env="$RUNNER_TEMP/release-sdist-graphs"
+          uv venv --python 3.12 "$graphs_env"
+          uv pip install --no-cache --python "$graphs_env/bin/python" "${archives[0]}[graphs]"
+          "$graphs_env/bin/python" -I tools/smoke_graphs_installed.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sdist
           path: dist
+          if-no-files-found: error
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+  publish-crate:
+    name: Publish Rust crate
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: "1.88"
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: crate-package
+          path: reviewed-crate
+      - name: Publish crate or verify an identical prior upload
+        run: |
+          archives=(reviewed-crate/*.crate)
+          test "${#archives[@]}" -eq 1
+          python3 tools/check_crate_notices.py "${archives[0]}"
+          python3 tools/publish_crate.py "${archives[0]}"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-pypi:
+    name: Publish Python artifacts
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [wheels, sdist, publish-crate]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write
+      contents: read
+      id-token: write # PyPI trusted publishing exchanges this OIDC token.
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          pattern: "*"
-          path: dist
-          merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: wheels-*
+          path: downloaded
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: sdist
+          path: downloaded/sdist
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: false
+      - name: Require the complete non-overlapping artifact set
+        run: |
+          python3 tools/collect_release_artifacts.py downloaded dist
+          python3 tools/check_python_distribution.py dist/*
+          uvx --from twine==7.0.0 twine check --strict dist/*
+      - name: Classify existing immutable PyPI state
+        id: pypi-preflight
+        run: echo "action=$(python3 tools/verify_pypi_release.py --preflight dist)" >> "$GITHUB_OUTPUT"
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        if: steps.pypi-preflight.outputs.action != 'skip'
+        with:
+          packages-dir: dist
+          attestations: true
+          skip-existing: ${{ steps.pypi-preflight.outputs.action == 'resume' }}
+      - name: Verify the complete published PyPI artifact set
+        run: python3 tools/verify_pypi_release.py dist
+      - name: Verify every PyPI attestation and publisher identity
+        shell: bash
+        run: |
+          shopt -s nullglob
+          artifacts=(dist/*)
+          test "${#artifacts[@]}" -eq 6
+          for artifact in "${artifacts[@]}"; do
+            uvx --from pypi-attestations==0.0.30 pypi-attestations verify pypi \
+              --repository https://github.com/mjbommar/cindergraph \
+              "pypi:${artifact##*/}"
+          done

@@ -1,13 +1,10 @@
 //! `F-6` --- the statement grammar, as continuations on the task stack.
 //!
-//! Spec: `docs/design/static-c-analysis/roadmap.md` stage S1 (`F-6`), and
-//! `REQ-IN-4` / `REQ-ROB-2` (a bad statement costs a statement).
-//!
 //! # Why every compound construct is a continuation
 //!
 //! `if (c) s1 else s2` has three suspension points --- after the condition,
 //! after the then-arm, after the else-arm --- and a recursive parser would keep
-//! them in its own frames. Here they are [`Cont`] phases: the construct's node
+//! them in its own frames. Here they are `Cont` phases: the construct's node
 //! marker and a phase number travel on the task stack, so nesting an `if`
 //! inside an `if` inside a `for` costs heap and nothing else (`REQ-SYN-3`).
 //!

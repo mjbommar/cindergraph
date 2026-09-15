@@ -1,45 +1,33 @@
 //! Source metrics for C: what one translation unit and each of its functions
 //! look like, measured.
 //!
-//! # What this is for
-//!
-//! Everything Glaurung measured about C before this module existed was a
-//! *comparison*: graph edit distance, tree edit distance, type match, byte
-//! match --- four metrics that score a decompilation against a ground truth
-//! and are meaningless with only one side. That covers benchmarking and
-//! nothing else. A reviewer asking which function in a tree is worth reading
-//! first, a researcher featurizing a corpus, a gate refusing a function above
-//! a complexity threshold, and a decompiler author asking whether this build's
-//! output is more structured than the last one all want the other kind of
-//! metric: a property of a single piece of source.
-//!
-//! That is what this module computes, and it is assembled from parts that
-//! already existed --- the CFG's adjacency and reachability, the arena tree's
-//! tags, the token buffer --- rather than from a new analysis.
+//! These are properties of one source unit, not similarity scores against a
+//! reference program. They support hotspot ranking, corpus feature extraction,
+//! complexity gates and comparisons between two versions of the same named
+//! functions. The implementation reuses the parser's token buffer, arena tree
+//! and general CFG rather than constructing a second model.
 //!
 //! # Layering
 //!
 //! The graph half is language-neutral and lives in
 //! [`crate::syntax::metrics`], for the same reason [`crate::syntax::ged`] does:
-//! `E - N + 2` reads adjacency and knows nothing about C. What is here is the
-//! C-specific half --- node tags, token kinds, the parameter-list spelling ---
-//! plus the assembly.
+//! `E - N + 2` reads adjacency and knows nothing about C. This module supplies
+//! the C-specific half: node tags, token kinds, parameter spellings and report
+//! assembly.
 //!
 //! **These metrics are computed on [`crate::csource::cfg`], never on
 //! [`crate::csource::parity`].** The parity layer reproduces another tool's
 //! artifacts on purpose: coalesced expression chains, a function-end node
 //! deleted when it stayed a singleton, entry and exit as derived flags. A
-//! cyclomatic number taken from that graph would faithfully reproduce a JVM
-//! program's expression granularity instead of measuring the source, and
-//! `docs/design/static-c-analysis/architecture.md` section 1 is about exactly
-//! this leak.
+//! cyclomatic number taken from that graph would measure comparison-specific
+//! expression granularity instead of the ordinary source CFG.
 //!
 //! # Totality
 //!
-//! [`analyze`] never fails and never panics on any input (`REQ-SYN-2`). A file
-//! the parser only partly recovered yields the functions it did recover
-//! alongside the diagnostics explaining the rest, because a front end that
-//! lost one function must not look like one that lost the file.
+//! [`analyze`] returns a report and diagnostics together. A partly recovered
+//! file retains the functions that were recovered and reports parser/CFG
+//! problems alongside them. Robustness is exercised by bundled and seeded
+//! malformed-input tests; finite tests are not a proof over every byte string.
 
 pub mod halstead;
 pub mod shape;
@@ -49,6 +37,7 @@ pub mod size;
 mod tests;
 
 use crate::csource::cfg::{function_cfgs_with, Coverage};
+use crate::csource::lex::TokenKind;
 use crate::csource::parse::tag::NodeTag;
 use crate::csource::parse::{parse, Tree};
 use crate::syntax::diag::Parsed;
@@ -74,8 +63,7 @@ pub struct FunctionMetrics {
     pub shape: ShapeMetrics,
     /// Halstead's token measures.
     pub halstead: Halstead,
-    /// Declared parameters; see [`size::parameters`] for the two spellings of
-    /// zero it recognises.
+    /// Declared named/fixed parameters; `(void)`, `()`, and `...` add none.
     pub parameters: u32,
     /// How many `&&`, `||` and `?:` operators the graph builder expanded into
     /// forks. Reported because it is the gap between the source's statement
@@ -199,7 +187,24 @@ fn parameter_count(tree: &Tree, node: NodeId, body: Option<NodeId>) -> u32 {
             }
         }
         if arena.tag(candidate).and_then(NodeTag::from_u16) == Some(NodeTag::ParamList) {
-            return size::parameters(tree.tokens(), arena.token_extent(candidate));
+            return arena
+                .children_iter(candidate)
+                .filter(|child| arena.tag(*child) == Some(NodeTag::ParamDecl.as_u16()))
+                .filter(|child| {
+                    let Some((first, end)) = arena.token_extent(*child) else {
+                        return false;
+                    };
+                    if end != first + 1 {
+                        return true;
+                    }
+                    !matches!(
+                        TokenKind::from_u16(
+                            tree.tokens().kind(crate::syntax::ids::TokenId::new(first))
+                        ),
+                        Some(TokenKind::KwVoid | TokenKind::Ellipsis)
+                    )
+                })
+                .count() as u32;
         }
     }
     0

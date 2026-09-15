@@ -1,7 +1,5 @@
 //! `SB-2` --- symbol interning.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 2.3 and 7.
-
 use std::collections::HashMap;
 
 use crate::syntax::ids::Symbol;

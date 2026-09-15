@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-09-15T10:12:36Z",
+  "scope": "compiler-verified offsetof CFG adjudication; no upstream interaction",
+  "population_sha256": "35e38c2f03151fa167aaa4e63983c179c1323920a84da92de18c41d2dbbae3b0",
+  "summary": {
+    "functions": 3,
+    "compiler_verified": 3,
+    "cindergraph_invariant": 3,
+    "providers_equal_after_literal_substitution": 3
+  },
+  "functions": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/94_alignment.c",
+      "function": "offset_of_payload",
+      "compiler_verified_offsets": {
+        "struct Padded.payload": 16,
+        "struct Packed.payload": 4
+      },
+      "raw": {
+        "cindergraph_nodes": 4,
+        "cindergraph_edges": 4,
+        "joern_nodes": 1,
+        "joern_edges": 0
+      },
+      "cindergraph_invariant_under_literal_substitution": true,
+      "providers_equal_after_literal_substitution": true
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/100_struct_layout.c",
+      "function": "layout_offsets",
+      "compiler_verified_offsets": {
+        "struct Wasteful.value": 4,
+        "struct Wasteful.extra": 12,
+        "struct Tight.tag": 8,
+        "struct Tight.flag": 9
+      },
+      "raw": {
+        "cindergraph_nodes": 5,
+        "cindergraph_edges": 4,
+        "joern_nodes": 1,
+        "joern_edges": 0
+      },
+      "cindergraph_invariant_under_literal_substitution": true,
+      "providers_equal_after_literal_substitution": true
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/161_packed_struct_layout.c",
+      "function": "pk161_member_offset",
+      "compiler_verified_offsets": {
+        "struct pk161_natural.kind": 0,
+        "struct pk161_natural.seq": 4,
+        "struct pk161_natural.port": 8,
+        "struct pk161_natural.ttl": 10,
+        "struct pk161_wire.kind": 0,
+        "struct pk161_wire.seq": 1,
+        "struct pk161_wire.port": 5,
+        "struct pk161_wire.ttl": 7
+      },
+      "raw": {
+        "cindergraph_nodes": 9,
+        "cindergraph_edges": 8,
+        "joern_nodes": 1,
+        "joern_edges": 0
+      },
+      "cindergraph_invariant_under_literal_substitution": true,
+      "providers_equal_after_literal_substitution": true
+    }
+  ]
+}

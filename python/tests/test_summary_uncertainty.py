@@ -33,9 +33,16 @@ def test_unknown_callee_propagates_through_seeded_call_graph(seed):
 
 def test_ambiguous_definition_has_no_merged_positive_flow():
     code = "int f(int x){return x;} int f(int x,int y){return y;}"
-    summary = cg.call_summaries(code)[0]
-    assert not summary["complete"]
-    assert summary["flows"] == []
+    summaries = cg.call_summaries(code)
+    assert [summary["function_id"] for summary in summaries] == [0, 1]
+    assert all(summary["complete"] for summary in summaries)
+    assert summaries[0]["flows"] == [
+        {"parameter": 0, "sink": "return", "sink_parameter": None}
+    ]
+    assert summaries[1]["flows"] == [
+        {"parameter": 1, "sink": "return", "sink_parameter": None}
+    ]
+    assert cg.query_reaches(code, "f", 0, "f").claim == "unknown"
 
 
 def test_ambiguous_callee_taints_caller_completeness():

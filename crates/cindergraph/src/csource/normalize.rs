@@ -1,22 +1,15 @@
-//! `F-1`, `F-2`, `F-3` --- the text normalization passes, ported byte-exactly.
-//!
-//! Spec: `docs/design/static-c-analysis/requirements.md` section 2
-//! (`REQ-NORM-1` .. `REQ-NORM-4`). Reference implementation:
-//! `decbench/utils/cfg.py`'s `strip_system_headers`, `sanitize_decompiled_c`,
-//! `escape_literal_control_bytes` and the module-level regexes they use.
+//! Text normalization for preprocessed and decompiler-shaped C.
 //!
 //! These are pure text transforms with no parser behind them yet -- they run
-//! *before* anything in `crate::syntax` sees the bytes, on both DecBench's own
-//! side (a gcc-preprocessed `.i` translation unit) and the side under test (a
-//! decompiler's `.c` output). A divergence from the Python here does not fail
-//! loudly: it silently reshapes what the parser downstream receives, which
-//! changes which functions parse at all and therefore every GED number that
-//! follows. Byte-exactness is the whole point, so ports below favour a
-//! character-by-character or line-by-line translation of the Python source
-//! over an idiomatic rewrite wherever the two could diverge.
+//! *before* anything in [`crate::syntax`] sees the text. Normalization changes
+//! function recovery and all following source coordinates, so callers choose a
+//! dialect explicitly and retain the normalized text with downstream results.
+//! The transforms preserve the behavior of the implementation from which this
+//! standalone module was extracted; regression tests cover the byte-sensitive
+//! line and literal cases.
 //!
-//! **Encoding (REQ-NORM-4).** The Python originals read files with
-//! `Path.read_text(errors="replace")`, i.e. invalid UTF-8 in the input file is
+//! **Encoding.** The Python facade reads files using replacement for invalid
+//! UTF-8, i.e. invalid bytes in the input file are
 //! replaced (lossily) before any of this logic runs. A Rust `&str` is already
 //! guaranteed valid UTF-8, so that replacement is necessarily the caller's
 //! job (e.g. `String::from_utf8_lossy` at the point a file is read) --
@@ -240,7 +233,7 @@ fn strip_system_headers(preprocessed: &str) -> String {
 ///   [`escape_literal_control_bytes`], so a verbatim `.rodata` string cannot
 ///   make pyjoern's fast parser emit non-JSON and void the invocation.
 ///
-/// Private: see [`strip_system_headers`]'s doc for why, and
+/// Private: see `strip_system_headers`'s doc for why, and
 /// [`Dialect::normalize`] for the one sanctioned way in.
 fn sanitize_decompiled_c(text: &str) -> String {
     let text = agg_return_regex().replace_all(text, "$1 $2");
@@ -256,13 +249,13 @@ fn sanitize_decompiled_c(text: &str) -> String {
 /// go through.
 ///
 /// REQ-NORM-2 states plainly: "It must be impossible to apply this pass
-/// [`sanitize_decompiled_c`] to a `.i` input" -- sanitizing ground truth would
+/// `sanitize_decompiled_c` to a `.i` input" -- sanitizing ground truth would
 /// corrupt the very thing decompiled output is scored against. The Python
 /// original enforces that only by convention: `extract_cfgs_from_source`
 /// gates the call behind a `sanitize_decompiled: bool` parameter that a
 /// caller must remember to pass correctly. A byte-exact port's job is to not
-/// reintroduce that failure mode, so [`strip_system_headers`] and
-/// [`sanitize_decompiled_c`] are private to this module -- there is no path
+/// reintroduce that failure mode, so `strip_system_headers` and
+/// `sanitize_decompiled_c` are private to this module -- there is no path
 /// to either except through [`Dialect::normalize`], which the type itself
 /// forces a caller to pick explicitly for every string it normalizes. Mixing
 /// up which text is which is still possible (nothing stops a caller writing
@@ -278,10 +271,10 @@ fn sanitize_decompiled_c(text: &str) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dialect<'a> {
     /// A gcc-preprocessed translation unit (`.i`): normalized with
-    /// [`strip_system_headers`] (F-1).
+    /// `strip_system_headers` (F-1).
     Preprocessed(&'a str),
     /// Decompiler-emitted C, from any backend: normalized with
-    /// [`sanitize_decompiled_c`] (F-3, which itself ends with F-2).
+    /// `sanitize_decompiled_c` (F-3, which itself ends with F-2).
     Decompiled(&'a str),
 }
 

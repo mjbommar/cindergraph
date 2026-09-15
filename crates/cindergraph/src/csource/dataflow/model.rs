@@ -4,7 +4,104 @@
 //! match on a [`DefKind`] without pulling in the syntax walk or the fixpoint,
 //! and so the two halves have one reason to change apiece.
 
+use crate::csource::semantic::{FunctionId, SourceUnitId};
 use crate::syntax::ids::Span;
+
+/// Semantic capability affected by an analysis issue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CoverageDimension {
+    /// Parsing, recovery, declaration boundaries, or lexical identity.
+    Syntax,
+    /// Runtime reads, writes, calls, and sequencing.
+    Effects,
+    /// Pointer targets and reads or writes through storage.
+    Memory,
+    /// Type-driven runtime values such as captured VLA bounds.
+    TypeValue,
+    /// Destinations of indirect control transfers.
+    ControlTargets,
+}
+
+impl CoverageDimension {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Syntax => "syntax",
+            Self::Effects => "effects",
+            Self::Memory => "memory",
+            Self::TypeValue => "type_value",
+            Self::ControlTargets => "control_targets",
+        }
+    }
+}
+
+/// Why an analysis result cannot certify absence in one or more dimensions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SemanticIssueKind {
+    /// The parser or CFG builder recovered from at least one diagnostic.
+    RecoveredSyntax,
+    /// A low-level function analysis was called without TU diagnostics.
+    RecoveryContextUnavailable,
+    /// An evaluated construct could not be lowered into explicit events.
+    UnmodeledEffect,
+    /// Conflicting scalar accesses have no language-defined relative order.
+    UnsequencedAccess,
+    /// A memory access exceeded the supported local points-to model.
+    UnknownMemoryEffect,
+    /// A type-driven runtime value dependency could not be represented.
+    UnmodeledTypeValue,
+    /// Declaration type resolution could not establish a structural type.
+    UnknownType,
+    /// An indirect control transfer required a widened target set.
+    UnresolvedControlTarget,
+}
+
+impl SemanticIssueKind {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::RecoveredSyntax => "recovered_syntax",
+            Self::RecoveryContextUnavailable => "recovery_context_unavailable",
+            Self::UnmodeledEffect => "unmodeled_effect",
+            Self::UnsequencedAccess => "unsequenced_access",
+            Self::UnknownMemoryEffect => "unknown_memory_effect",
+            Self::UnmodeledTypeValue => "unmodeled_type_value",
+            Self::UnknownType => "unknown_type",
+            Self::UnresolvedControlTarget => "unresolved_control_target",
+        }
+    }
+
+    /// Capabilities whose negative answers this issue qualifies.
+    pub const fn dimensions(self) -> &'static [CoverageDimension] {
+        match self {
+            Self::RecoveredSyntax | Self::RecoveryContextUnavailable => &[
+                CoverageDimension::Syntax,
+                CoverageDimension::Effects,
+                CoverageDimension::Memory,
+                CoverageDimension::TypeValue,
+                CoverageDimension::ControlTargets,
+            ],
+            Self::UnmodeledEffect | Self::UnsequencedAccess => &[CoverageDimension::Effects],
+            Self::UnknownMemoryEffect => &[CoverageDimension::Memory],
+            Self::UnmodeledTypeValue => &[CoverageDimension::TypeValue],
+            Self::UnknownType => &[
+                CoverageDimension::Effects,
+                CoverageDimension::Memory,
+                CoverageDimension::TypeValue,
+            ],
+            Self::UnresolvedControlTarget => &[CoverageDimension::ControlTargets],
+        }
+    }
+}
+
+/// One structured qualification on a function analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticIssue {
+    /// Machine-readable reason.
+    pub kind: SemanticIssueKind,
+    /// Best known affected source range; `None` currently means function-wide.
+    pub span: Option<Span>,
+}
 
 /// Which variable an event is about: an index into the function's binding
 /// table, or [`Binding::FREE`].
@@ -23,6 +120,192 @@ impl Binding {
     }
 }
 
+/// Dense identity of one abstract storage region within a function.
+///
+/// Region IDs are graph-local, just like [`Binding`]. A region is rooted in a
+/// resolved binding and may then select fields or the summary of all elements
+/// of an array. The element summary is intentionally conservative until index
+/// values and object extents have a sound disjointness model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MemoryRegionId(pub u32);
+
+/// Structural identity of an abstract memory region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryRegionKind {
+    /// The complete storage owned by a resolved declaration.
+    Binding { binding: Binding },
+    /// Storage reached through one formal pointer's incoming value.
+    ///
+    /// This is an abstract caller-owned root, not the local object holding the
+    /// pointer itself. `parameter` is the formal position and `binding` keeps
+    /// the graph-local declaration identity used for names and diagnostics.
+    ParameterPointee { parameter: u32, binding: Binding },
+    /// One named member below another region.
+    Field {
+        base: MemoryRegionId,
+        member: String,
+        /// Members with the same base overlap because that base is a union.
+        overlapping_members: bool,
+    },
+    /// A may-alias summary of every element below another region.
+    Elements { base: MemoryRegionId },
+}
+
+impl MemoryRegionKind {
+    /// Stable serialized name.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Binding { .. } => "binding",
+            Self::ParameterPointee { .. } => "parameter_pointee",
+            Self::Field { .. } => "field",
+            Self::Elements { .. } => "elements",
+        }
+    }
+}
+
+/// One interned abstract storage region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRegion {
+    pub id: MemoryRegionId,
+    pub kind: MemoryRegionKind,
+}
+
+/// Why two distinct abstract regions can name overlapping storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryOverlapKind {
+    /// `left` contains `right` through field/element projection.
+    Containment,
+    /// Distinct members of one union share storage.
+    UnionMembers,
+    /// Distinct formal pointers may designate the same caller-owned storage.
+    ParameterAlias,
+}
+
+impl MemoryOverlapKind {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Containment => "containment",
+            Self::UnionMembers => "union_members",
+            Self::ParameterAlias => "parameter_alias",
+        }
+    }
+}
+
+/// One explicit overlap relationship between distinct regions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRegionOverlap {
+    pub left: MemoryRegionId,
+    pub right: MemoryRegionId,
+    pub kind: MemoryOverlapKind,
+}
+
+/// Direction of one operation-owned memory access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryAccessKind {
+    Read,
+    Write,
+}
+
+impl MemoryAccessKind {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+        }
+    }
+}
+
+/// Precision of an access-to-region association.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MemoryAccessPrecision {
+    /// The operation directly names this unique region.
+    Exact,
+    /// This region may be accessed; alternatives or summarized elements exist.
+    MayAlias,
+}
+
+impl MemoryAccessPrecision {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::MayAlias => "may_alias",
+        }
+    }
+}
+
+/// One read or write associated with an abstract memory region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryAccess {
+    pub region: MemoryRegionId,
+    pub kind: MemoryAccessKind,
+    pub precision: MemoryAccessPrecision,
+    pub node: u32,
+    pub span: Span,
+    /// Point at which a write becomes visible. Equal to `span.lo` for reads.
+    pub effect_at: u32,
+}
+
+/// A write participating in the abstract-memory reaching-definition lattice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryDefinition {
+    pub region: MemoryRegionId,
+    pub kind: MemoryDefinitionKind,
+    pub precision: MemoryAccessPrecision,
+    pub node: u32,
+    pub span: Span,
+    pub effect_at: u32,
+}
+
+/// Origin of an abstract-memory definition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryDefinitionKind {
+    /// State supplied at function entry by a by-value aggregate parameter.
+    IncomingParameter,
+    /// An operation-owned store in the function body.
+    Store,
+    /// A call that may modify storage reachable through a pointer argument.
+    CallClobber,
+    /// A write instantiated from a complete known callee effect summary.
+    CallEffect,
+}
+
+impl MemoryDefinitionKind {
+    /// Stable serialized name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::IncomingParameter => "incoming_parameter",
+            Self::Store => "store",
+            Self::CallClobber => "call_clobber",
+            Self::CallEffect => "call_effect",
+        }
+    }
+}
+
+/// A read participating in the abstract-memory reaching-definition lattice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryUse {
+    pub region: MemoryRegionId,
+    pub precision: MemoryAccessPrecision,
+    pub node: u32,
+    pub span: Span,
+}
+
+/// One possible reaching-memory-definition relationship.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryFlowEdge {
+    /// Index into [`DataFlow::memory_definitions`].
+    pub definition: u32,
+    /// Index into [`DataFlow::memory_uses`].
+    pub use_: u32,
+    pub definition_region: MemoryRegionId,
+    pub use_region: MemoryRegionId,
+    /// `None` when both endpoints name the same region.
+    pub overlap: Option<MemoryOverlapKind>,
+}
+
 /// A C type as the source spells it.
 ///
 /// **As written, not resolved.** This front end reads one translation unit and
@@ -31,7 +314,7 @@ impl Binding {
 /// nothing here claims to know it is four bytes. Storing the spelling is
 /// useful; claiming a width we cannot derive would not be.
 ///
-/// Deliberately **not** built on [`crate::metrics::type_name::normalize_type`].
+/// Deliberately **not** built on `crate::metrics::type_name::normalize_type`.
 /// That function reproduces four defects in DecBench's reference
 /// implementation on purpose --- it emits the non-C spelling `long long long`,
 /// and turns `_Bool` into `_bool` --- because parity with the benchmark is its
@@ -137,12 +420,24 @@ pub struct CallRecord {
     pub arguments: Vec<Binding>,
     /// Source extent of each argument expression, including nested calls.
     pub argument_spans: Vec<Span>,
-    /// Bindings the call's result is assigned to, when it is assigned at all.
-    pub results: Vec<Binding>,
     /// Whether the call's result is returned directly: `return g(x);`.
     pub result_is_returned: bool,
     /// Where the call sits, for a label.
     pub span: Span,
+}
+
+/// Pointer identity retained for one actual argument at one call site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallMemoryArgument {
+    pub call_span: Span,
+    pub node: u32,
+    pub argument: u32,
+    /// Concrete local objects this actual argument may designate.
+    pub targets: Vec<Binding>,
+    /// Formal pointee roots in this caller from which the actual may derive.
+    pub parameter_origins: Vec<u32>,
+    /// Whether the two may sets above cover every supported source alternative.
+    pub complete: bool,
 }
 
 /// One write of a variable.
@@ -189,7 +484,7 @@ pub struct Use {
     pub span: Span,
 }
 
-/// How a definition was written, which a reader wants and a fixpoint does not.
+/// The kind of value definition or address-taking event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DefKind {
     /// A parameter, defined at the function entry.
@@ -202,10 +497,10 @@ pub enum DefKind {
     CompoundAssignment,
     /// The operand of `++` or `--`, which also reads.
     IncDec,
-    /// The operand of `&`. Taking an address is how C spells an out
-    /// parameter, so the callee may write through it and the value after the
-    /// call is unknown. Recorded as a definition for that reason, not because
-    /// `&x` stores anything itself.
+    /// The operand of `&`. Recorded in the definition-shaped event table so
+    /// the points-to pass can recover targets and consumers can see escapes.
+    /// It is not inserted into the reaching-definition lattice because `&x`
+    /// does not write the value of `x`.
     AddressTaken,
     /// A write through a pointer to a possible local target. A weak update:
     /// it adds a reaching definition without killing alternative writes.
@@ -241,8 +536,41 @@ pub struct FlowEdge {
 /// One function's reaching-definition analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataFlow {
+    /// Exact source snapshot that owns every span and graph-local ID here.
+    pub source_id: SourceUnitId,
+    /// Dense function identity within `source_id`.
+    pub function_id: FunctionId,
+    /// Semantic result contract revision.
+    pub analysis_revision: u32,
+    /// Source extent of each CFG node, indexed by its graph-local ID.
+    /// Used to evaluate a controller's value in its own expression context.
+    pub node_spans: Vec<Span>,
+    /// `(comma expression, discarded operand)` spans. The discarded operand
+    /// still executes, but its value does not contribute to the enclosing
+    /// comma expression's value.
+    pub discarded_values: Vec<(Span, Span)>,
+    /// The translation unit produced no parser or CFG diagnostics.
+    /// False also means diagnostic context was not supplied to the low-level
+    /// function analyzer. This is not a certificate of valid or sound C.
+    pub recovery_free: bool,
+    /// Whether reads, writes and calls were fully lowered into events.
+    /// False for opaque selection/variadic builtins and inline assembly whose
+    /// evaluated operands or clobbers this syntax-level analysis cannot model.
+    pub effects_complete: bool,
     /// Whether accesses stayed within the supported local-pointer model.
     pub memory_complete: bool,
+    /// Whether variable-length-array value dependencies are fully represented.
+    /// False currently identifies a VLA typedef whose captured bound cannot be
+    /// propagated through a later use of the typedef name.
+    pub vla_complete: bool,
+    /// Whether every indirect control transfer has an exact destination set.
+    pub control_targets_complete: bool,
+    /// Structured source of truth for coverage qualifications.
+    ///
+    /// The four compatibility booleans above are derived from this ledger at
+    /// the analysis boundary. Early migration stages use function-wide issues;
+    /// later semantic lowering can attach precise spans.
+    pub semantic_issues: Vec<SemanticIssue>,
     /// Dense binding IDs whose declarations were not recovered in this function.
     /// Equal unresolved spellings share an ID; different spellings do not.
     pub unresolved_bindings: Vec<Binding>,
@@ -254,7 +582,8 @@ pub struct DataFlow {
     pub control_edges: Vec<(u32, u32)>,
     /// The function's declared name.
     pub name: String,
-    /// Every write, in source order.
+    /// Every value definition, memory write and address-taking event, in source
+    /// order. `AddressTaken` entries describe escapes but are not value writes.
     pub definitions: Vec<Definition>,
     /// Every read, in source order.
     pub uses: Vec<Use>,
@@ -269,11 +598,28 @@ pub struct DataFlow {
     pub unresolved_uses: Vec<u32>,
     /// Every call this function makes, in source order.
     ///
-    /// Recorded during the syntax walk because that is the only place the
-    /// argument *positions* are visible: by the time the analysis has a
-    /// dependence graph, `g(a, b)` is two reads with no record of which was
-    /// first. Interprocedural summaries need the position.
+    /// Calls owned by the evaluation plan retain ordered argument positions;
+    /// the syntax walk supplies records only for roots that lowering declined.
+    /// Interprocedural summaries consume this common representation.
     pub calls: Vec<CallRecord>,
+    /// Pointer-aware actual/formal evidence for interprocedural memory effects.
+    pub call_memory_arguments: Vec<CallMemoryArgument>,
+    /// Interned abstract storage regions referenced by projected accesses.
+    pub memory_regions: Vec<MemoryRegion>,
+    /// Explicit containment and union-member overlap relationships.
+    pub memory_overlaps: Vec<MemoryRegionOverlap>,
+    /// Operation-owned reads and writes of abstract storage regions.
+    ///
+    /// These records expose identity independently of scalar bindings. Their
+    /// reaching relationships are in [`DataFlow::memory_edges`]; consult
+    /// `memory_complete` before treating an absent access as impossible.
+    pub memory_accesses: Vec<MemoryAccess>,
+    /// Writes in the region reaching-definition lattice.
+    pub memory_definitions: Vec<MemoryDefinition>,
+    /// Reads in the region reaching-definition lattice.
+    pub memory_uses: Vec<MemoryUse>,
+    /// Possible definition-to-use flows over abstract memory regions.
+    pub memory_edges: Vec<MemoryFlowEdge>,
     /// The spelling of each binding, in binding order.
     ///
     /// A binding that is declared and never mentioned again appears in neither
@@ -302,12 +648,176 @@ pub struct DataFlow {
 }
 
 impl DataFlow {
+    /// Record one semantic qualification in deterministic discovery order.
+    pub(crate) fn record_issue(&mut self, kind: SemanticIssueKind, span: Option<Span>) {
+        let issue = SemanticIssue { kind, span };
+        if !self.semantic_issues.contains(&issue) {
+            self.semantic_issues.push(issue);
+        }
+    }
+
+    /// Whether no recorded issue affects `dimension`.
+    pub fn covers(&self, dimension: CoverageDimension) -> bool {
+        !self
+            .semantic_issues
+            .iter()
+            .any(|issue| issue.kind.dimensions().contains(&dimension))
+    }
+
+    /// Bridge legacy pass flags into the structured P1 coverage ledger.
+    ///
+    /// Passes will migrate to recording precise issues directly. Until then,
+    /// this single boundary prevents public booleans and issue records from
+    /// disagreeing.
+    pub(crate) fn refresh_semantic_issues(&mut self, recovery_issue: Option<SemanticIssueKind>) {
+        self.semantic_issues.retain(|issue| {
+            !matches!(
+                issue.kind,
+                SemanticIssueKind::RecoveredSyntax | SemanticIssueKind::RecoveryContextUnavailable
+            )
+        });
+        if let Some(kind) = recovery_issue {
+            self.record_issue(kind, None);
+        }
+        if !self.effects_complete
+            && !self
+                .semantic_issues
+                .iter()
+                .any(|issue| issue.kind == SemanticIssueKind::UnmodeledEffect)
+        {
+            self.record_issue(SemanticIssueKind::UnmodeledEffect, None);
+        }
+        if !self.memory_complete
+            && !self
+                .semantic_issues
+                .iter()
+                .any(|issue| issue.kind == SemanticIssueKind::UnknownMemoryEffect)
+        {
+            self.record_issue(SemanticIssueKind::UnknownMemoryEffect, None);
+        }
+        if !self.vla_complete
+            && !self
+                .semantic_issues
+                .iter()
+                .any(|issue| issue.kind == SemanticIssueKind::UnmodeledTypeValue)
+        {
+            self.record_issue(SemanticIssueKind::UnmodeledTypeValue, None);
+        }
+        self.sync_compatibility_flags();
+    }
+
+    /// Replace recovery qualifications with their known diagnostic origins.
+    /// Their dimensions remain function-wide until semantic resolution can
+    /// prove a narrower affected region.
+    pub(crate) fn replace_recovery_issues(
+        &mut self,
+        kind: Option<SemanticIssueKind>,
+        spans: &[Span],
+    ) {
+        self.semantic_issues.retain(|issue| {
+            !matches!(
+                issue.kind,
+                SemanticIssueKind::RecoveredSyntax | SemanticIssueKind::RecoveryContextUnavailable
+            )
+        });
+        if let Some(kind) = kind {
+            if spans.is_empty() {
+                self.record_issue(kind, None);
+            } else {
+                for span in spans {
+                    self.record_issue(kind, Some(*span));
+                }
+            }
+        }
+        self.sync_compatibility_flags();
+    }
+
+    pub(crate) fn sync_compatibility_flags(&mut self) {
+        self.recovery_free = !self.semantic_issues.iter().any(|issue| {
+            matches!(
+                issue.kind,
+                SemanticIssueKind::RecoveredSyntax | SemanticIssueKind::RecoveryContextUnavailable
+            )
+        });
+        self.effects_complete = self.covers(CoverageDimension::Effects);
+        self.memory_complete = self.covers(CoverageDimension::Memory);
+        self.vla_complete = self.covers(CoverageDimension::TypeValue);
+        self.control_targets_complete = self.covers(CoverageDimension::ControlTargets);
+    }
+
     /// Definitions that reach `use_index`.
     pub fn definitions_reaching(&self, use_index: u32) -> impl Iterator<Item = &Definition> {
         self.edges
             .iter()
             .filter(move |edge| edge.use_ == use_index)
             .filter_map(|edge| self.definitions.get(edge.def as usize))
+    }
+
+    /// Human-readable structural path for an abstract memory region.
+    ///
+    /// Returns `None` for a malformed/cyclic table or an unknown root binding.
+    pub fn memory_region_name(&self, id: MemoryRegionId) -> Option<String> {
+        let mut components: Vec<Option<&str>> = Vec::new();
+        let mut current = id;
+        let mut visited = std::collections::BTreeSet::new();
+        loop {
+            if !visited.insert(current) {
+                return None;
+            }
+            match &self.memory_regions.get(current.0 as usize)?.kind {
+                MemoryRegionKind::Binding { binding } => {
+                    let mut name = self.names.get(binding.0 as usize)?.clone();
+                    for component in components.iter().rev() {
+                        match component {
+                            Some(member) => {
+                                name.push('.');
+                                name.push_str(member);
+                            }
+                            None => name.push_str("[*]"),
+                        }
+                    }
+                    return Some(name);
+                }
+                MemoryRegionKind::ParameterPointee { binding, .. } => {
+                    let mut name = format!("*{}", self.names.get(binding.0 as usize)?);
+                    for component in components.iter().rev() {
+                        match component {
+                            Some(member) => {
+                                name.push('.');
+                                name.push_str(member);
+                            }
+                            None => name.push_str("[*]"),
+                        }
+                    }
+                    return Some(name);
+                }
+                MemoryRegionKind::Field { base, member, .. } => {
+                    components.push(Some(member.as_str()));
+                    current = *base;
+                }
+                MemoryRegionKind::Elements { base } => {
+                    components.push(None);
+                    current = *base;
+                }
+            }
+        }
+    }
+
+    /// Binding whose storage owns `id`, following parent links defensively.
+    pub fn memory_region_root_binding(&self, mut id: MemoryRegionId) -> Option<Binding> {
+        let mut visited = std::collections::BTreeSet::new();
+        loop {
+            if !visited.insert(id) {
+                return None;
+            }
+            match self.memory_regions.get(id.0 as usize)?.kind {
+                MemoryRegionKind::Binding { binding } => return Some(binding),
+                MemoryRegionKind::ParameterPointee { .. } => return None,
+                MemoryRegionKind::Field { base, .. } | MemoryRegionKind::Elements { base } => {
+                    id = base;
+                }
+            }
+        }
     }
 
     /// Every call this function makes, in the shape a summary consumes.
@@ -318,7 +828,6 @@ impl DataFlow {
             .map(|record| CallSite {
                 callee: record.callee.clone(),
                 arguments: record.arguments.clone(),
-                results: record.results.clone(),
                 result_is_returned: record.result_is_returned,
             })
             .collect()
@@ -343,15 +852,30 @@ impl DataFlow {
     /// A parameter is excluded for the same reason it is there --- the
     /// signature is the contract.
     pub fn unused_bindings(&self) -> Vec<Binding> {
+        let mut used = vec![false; self.names.len()];
+        for use_ in &self.uses {
+            if let Some(slot) = used.get_mut(use_.binding.0 as usize) {
+                *slot = true;
+            }
+        }
+        for access in &self.memory_accesses {
+            if let Some(binding) = self.memory_region_root_binding(access.region) {
+                if let Some(slot) = used.get_mut(binding.0 as usize) {
+                    *slot = true;
+                }
+            }
+        }
+        for definition in &self.definitions {
+            if matches!(definition.kind, DefKind::Parameter | DefKind::AddressTaken) {
+                if let Some(slot) = used.get_mut(definition.binding.0 as usize) {
+                    *slot = true;
+                }
+            }
+        }
         (0..self.names.len() as u32)
             .map(Binding)
             .filter(|binding| {
-                !self.unresolved_bindings.contains(binding)
-                    && !self.uses.iter().any(|use_| use_.binding == *binding)
-                    && !self
-                        .definitions
-                        .iter()
-                        .any(|d| d.binding == *binding && d.kind == DefKind::Parameter)
+                !self.unresolved_bindings.contains(binding) && !used[binding.0 as usize]
             })
             .collect()
     }

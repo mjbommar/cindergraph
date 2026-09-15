@@ -1,14 +1,12 @@
-//! F-11 entry/exit flag derivation and F-12 singleton-funcend removal.
+//! Entry/exit flag derivation and singleton function-end removal.
 //!
-//! Owned by stage S3. `mod.rs` currently derives both inline and
-//! approximately; this module is where the rules Joern actually applies go,
-//! and `mod.rs` will call into it once they are here.
+//! The parity pipeline applies these rules after expression expansion and
+//! chain contraction.
 //!
 //! # Why these two rules are worth their own file
 //!
 //! `cfgutils.similarity.vj_ged` reads three things about a node: its in-degree,
-//! its out-degree, and its `is_entrypoint` / `is_exitpoint` flags
-//! ([`docs/design/static-c-analysis/joern-behavior.md`] section 2). This module
+//! its out-degree, and its `is_entrypoint` / `is_exitpoint` flags. This module
 //! produces two of the three, and F-12 moves the third: deleting the
 //! function-end block drops its in-edges with it, which takes every `return`
 //! block from out-degree 1 to out-degree 0. Getting either rule wrong changes
@@ -16,8 +14,8 @@
 //!
 //! # What the published corpus says (measured, not assumed)
 //!
-//! Over the 91,548 functions of `~/.cache/glaurung/decbench-full/tree`
-//! (`O0`, `O2`, `O2-noinline`), re-measured 2026-09-04:
+//! A 91,548-function research corpus (`O0`, `O2`, and `O2-noinline`) was
+//! measured on 2026-09-04:
 //!
 //! | fact | count |
 //! |---|---|
@@ -380,7 +378,7 @@ impl BlockView {
 ///   holds both regimes --- `xstrdup` (two `return`s, funcend stayed a
 ///   singleton, deleted, `exit []`) and `xasprintf` (one `return`, funcend
 ///   merged into it, kept, `exit [0]`).
-/// * (2) counts **statements**, not chain members --- see [`statement_count`].
+/// * (2) counts **statements**, not chain members --- see `statement_count`.
 ///   The two agree on every graph S2 produces today, because the function-end
 ///   node is built by `CfgNode::single`; they stop agreeing the moment a node
 ///   carries more than one span, and then counting members would delete a
@@ -709,7 +707,7 @@ mod tests {
     #[test]
     fn several_entry_blocks_are_reported_rather_than_normalized_away() {
         // 1,334 of the 91,548 published functions carry more than one entry
-        // flag (measured over ~/.cache/glaurung/decbench-full/tree). Collapsing
+        // flag (measured over the research corpus). Collapsing
         // them to one is the natural bug, so the derivation must report both.
         let cfg = graph(
             &[NodeKind::Entry, NodeKind::Stmt, NodeKind::Entry],

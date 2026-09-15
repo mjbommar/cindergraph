@@ -1,10 +1,6 @@
 //! The per-function pre-pass: which statements control can reach, which
 //! subtrees contain a jump target, and which contain a short-circuit operator.
 //!
-//! Spec: `docs/design/static-c-analysis/requirements.md` `REQ-GEN-1` (every
-//! node is reachable from the entry), `REQ-CFG-6` (the short-circuit operators
-//! are control flow) and `REQ-CFG-7` (a computed `goto`'s target set).
-//!
 //! # Why the emitter needs an answer before it emits
 //!
 //! Two of the emitter's decisions cannot be made from the statement in front
@@ -81,7 +77,7 @@
 //! computed-`goto` target set --- is unchanged, because none of it is a
 //! reachability question.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::csource::lex::TokenKind;
 use crate::csource::parse::tag::NodeTag;
@@ -105,9 +101,8 @@ const MAX_LIVE_ROUNDS: usize = 64;
 ///
 /// This is a property of the *consumer*, not of the C: the same function has
 /// both graphs, and which one is wanted depends on what the caller is going to
-/// do with it. Making it an argument rather than two emitters is what keeps
-/// `docs/design/static-c-analysis/architecture.md` section 1's rule --- the
-/// parity layer's quirks must not leak into the general graph --- true by
+/// do with it. Making it an argument rather than two emitters keeps the parity
+/// layer's quirks from leaking into the general graph by
 /// construction: the default is the only behaviour any general consumer can
 /// obtain, and the variant is named after what it does rather than after the
 /// tool that wants it.
@@ -195,6 +190,8 @@ pub(super) struct Reach {
     /// Every label whose address is taken with GNU `&&label`, in source order:
     /// the target set of a computed `goto` (`REQ-CFG-7`).
     address_taken: Vec<String>,
+    /// One semantic resolution per computed-goto syntax node.
+    indirect_dispatches: BTreeMap<NodeId, super::dispatch::ResolvedDispatch>,
 }
 
 /// One `goto` and what it names: `None` is the computed form.
@@ -264,6 +261,17 @@ impl Reach {
             }
         }
 
+        let mut indirect_dispatches = BTreeMap::new();
+        for jump in &jumps {
+            if jump.label.is_none() {
+                if let Some(resolution) =
+                    super::dispatch::resolve(tree, text, spans, body, jump.node, &address_taken)
+                {
+                    indirect_dispatches.insert(jump.node, resolution);
+                }
+            }
+        }
+
         let mut reach = Self {
             coverage,
             base,
@@ -276,6 +284,7 @@ impl Reach {
             sc_in: vec![false; len],
             init_in: vec![false; len],
             address_taken,
+            indirect_dispatches,
         };
 
         if coverage == Coverage::Syntactic {
@@ -482,7 +491,14 @@ impl Reach {
                 // `REQ-CFG-7`: a computed `goto`'s target set is the labels
                 // whose address was taken, which is the only way C lets a
                 // program name one.
-                None => targets.extend(self.address_taken.iter().cloned()),
+                None => targets.extend(
+                    self.indirect_dispatches
+                        .get(&jump.node)
+                        .map(|resolution| resolution.labels.as_slice())
+                        .unwrap_or(&self.address_taken)
+                        .iter()
+                        .cloned(),
+                ),
             }
         }
         targets
@@ -562,6 +578,14 @@ impl Reach {
     /// order.
     pub(super) fn address_taken(&self) -> &[String] {
         &self.address_taken
+    }
+
+    /// Resolution computed before reachability and reused during emission.
+    pub(super) fn indirect_dispatch(
+        &self,
+        node: NodeId,
+    ) -> Option<&super::dispatch::ResolvedDispatch> {
+        self.indirect_dispatches.get(&node)
     }
 
     /// Whether `node`'s subtree carries a `default` label bound to a switch

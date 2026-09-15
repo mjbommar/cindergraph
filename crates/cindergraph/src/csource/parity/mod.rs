@@ -1,28 +1,19 @@
-//! The parity layer --- stage S3 of
-//! [`docs/design/static-c-analysis/roadmap.md`].
+//! A narrow control-flow projection for offline graph-shape comparison.
 //!
-//! # What this is for
+//! This module starts from the syntactic general CFG, expands the supported
+//! expression-level nodes that affect the comparison, contracts eligible
+//! chains, derives entry/exit flags and assigns dense deterministic IDs. The
+//! resulting [`ParityCfg`] contains only the topology and role flags consumed
+//! by the stored comparison format.
 //!
-//! DecBench's `ged` column is `vj_ged(published source CFG, our CFG of the
-//! stored decompiled C)`. Today the second argument is produced by Joern: one
-//! JVM per file, no server mode, ~37 minutes for the 56-cell matrix gate. This
-//! module is the replacement, and the only thing that has to be true for it to
-//! work is *shape parity* --- `vj_ged` reads node in/out degrees and the
-//! `is_entrypoint` / `is_exitpoint` flags, and nothing else. Statements, types
-//! and operators never reach the distance.
+//! It is intentionally separate from [`crate::csource::cfg`]. Metrics,
+//! dependence analysis, slicing and ordinary export use the general CFG; they
+//! must not inherit quirks introduced solely for shape comparison.
 //!
-//! # What is NOT yet at parity
-//!
-//! This is the anchor, not the finished layer. It bridges S2's statement-
-//! granular [`crate::csource::cfg`] output to the serialized shape DecBench
-//! stores, so the end-to-end measurement can run and report a real number.
-//! **It does not yet implement F-9**, Joern's expression-level node
-//! granularity --- in particular that `&&`, `||` and `?:` materialize an
-//! operator node of their own. Until that lands, every count here is a
-//! *baseline to improve on*, not a parity claim. The inventory in
-//! [`docs/design/static-c-analysis/implementation-inventory.md`] tracks the
-//! rest (F-8..F-17); `tools/source_cfg_parity.py --provider glaurung` is the
-//! number that says where we are.
+//! This projection is not a code property graph, a complete model of Joern's
+//! internal CFG, or a general Joern-compatible API. Its behavior is calibrated
+//! against finite stored fixtures and supported syntax. Consumers that need a
+//! program CFG should use [`crate::csource::cfg`] instead.
 
 pub mod chains;
 pub mod flags;

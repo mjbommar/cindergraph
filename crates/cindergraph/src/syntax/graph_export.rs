@@ -9,21 +9,16 @@
 //! graph is nodes, edges and labels like the other two, so adding one is a
 //! builder rather than four more writers.
 //!
-//! This sits beside [`crate::syntax::ged`] and [`crate::syntax::metrics`] for
-//! the reason `docs/design/static-c-analysis/architecture.md` section 1 gives
-//! for those: a writer that reads ids, labels and adjacency is neither
-//! C-specific nor bound to one front end. Nothing here knows what a statement
-//! is, and nothing here may reach into a language module (`REQ-SYN-8`).
+//! This sits beside [`crate::syntax::ged`] and [`crate::syntax::metrics`]: a
+//! writer that reads IDs, labels and adjacency is neither C-specific nor bound
+//! to one front end. Nothing here knows what a statement is or reaches into a
+//! language module.
 //!
 //! # The four formats, and why these four in 2026
 //!
-//! * [`to_dot`] --- Graphviz. Universal, human-readable, and what
-//!   `glaurung graph` already emits for binary CFGs, so a reader who knows one
-//!   knows the other. It is also `joern-export`'s default, which matters when
-//!   the point is to replace it.
-//! * [`to_graphml`] --- the interchange standard. `networkx`, `igraph`,
-//!   `JGraphT`, Gephi and yEd all read it, and `joern-export` writes it, so a
-//!   pipeline built on Joern's GraphML keeps working.
+//! * [`to_dot`] --- Graphviz DOT, a common human-readable graph format.
+//! * [`to_graphml`] --- an XML interchange format read by NetworkX, igraph,
+//!   JGraphT, Gephi and yEd.
 //! * [`to_json`] --- node-link JSON in the shape `networkx` reads. NetworkX
 //!   3.4 deprecated the `link` keyword in favour of `edges` and 3.6 removed it,
 //!   so the edge array is named **`edges`** here and
@@ -33,18 +28,13 @@
 //!   transcript without a Graphviz install. A source CFG is small enough for
 //!   this to be the format a person actually looks at.
 //!
-//! GraphSON and Neo4j CSV are deliberately absent. Both exist in
-//! `joern-export` to feed a graph database, which is the code-property-graph
-//! path `requirements.md` section 8 declines; adding them without that is
-//! carrying a format nobody here reads.
+//! GraphSON, Neo4j CSV and code-property-graph formats are deliberately absent.
 //!
 //! # Rules inherited from the substrate
 //!
-//! * **No panics** (`REQ-SYN-2`): every writer is total. An edge naming a node
-//!   that does not exist is still written, because dropping it would make the
-//!   export disagree with the graph it came from, and a reader that cares can
-//!   compare the id sets.
-//! * **Determinism** (`REQ-SYN-5`): nodes and edges are written in the order
+//! * **Faithful edges.** An edge naming a node absent from the view is still
+//!   written; silently dropping it would hide an invalid input graph.
+//! * **Determinism.** Nodes and edges are written in the order
 //!   the view holds them, and attributes in insertion order, so two runs over
 //!   one input produce identical bytes.
 //! * **Escaping is per format and total**: no input string can terminate a
@@ -150,7 +140,7 @@ impl GraphView {
     }
 }
 
-/// The wire formats [`write`] can produce.
+/// The wire formats [`write()`] can produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Format {
     /// Graphviz DOT.
@@ -303,44 +293,91 @@ pub fn to_graphml(view: &GraphView) -> String {
 /// The edge array is named `edges`, which is what NetworkX 3.6 reads by
 /// default after the `link` keyword was deprecated in 3.4 and removed in 3.6.
 pub fn to_json(view: &GraphView) -> String {
-    let nodes: Vec<serde_json::Value> = view
-        .nodes
-        .iter()
-        .map(|node| {
-            let mut map = serde_json::Map::new();
-            map.insert("id".into(), node.id.into());
-            map.insert("label".into(), node.label.clone().into());
-            for (key, value) in &node.attrs {
-                map.insert(key.clone(), value.clone().into());
-            }
-            serde_json::Value::Object(map)
-        })
-        .collect();
-    let edges: Vec<serde_json::Value> = view
-        .edges
-        .iter()
-        .map(|edge| {
-            let mut map = serde_json::Map::new();
-            map.insert("source".into(), edge.src.into());
-            map.insert("target".into(), edge.dst.into());
-            map.insert("label".into(), edge.label.clone().into());
-            for (key, value) in &edge.attrs {
-                map.insert(key.clone(), value.clone().into());
-            }
-            serde_json::Value::Object(map)
-        })
-        .collect();
+    let mut out = String::with_capacity(96 + view.nodes.len() * 64 + view.edges.len() * 64);
+    out.push_str("{\n  \"directed\": true,\n  \"edges\": [");
+    for (index, edge) in view.edges.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    {");
+        let mut fields = std::collections::BTreeMap::from([
+            ("label".to_owned(), JsonValue::String(&edge.label)),
+            ("source".to_owned(), JsonValue::Number(edge.src)),
+            ("target".to_owned(), JsonValue::Number(edge.dst)),
+        ]);
+        for (key, value) in &edge.attrs {
+            fields.insert(key.clone(), JsonValue::String(value));
+        }
+        write_json_fields(&mut out, &fields, 6);
+        out.push_str("\n    }");
+    }
+    out.push_str("\n  ],\n  \"graph\": {\n    \"name\": ");
+    write_json_string(&mut out, &view.name);
+    out.push_str("\n  },\n  \"multigraph\": true,\n  \"nodes\": [");
+    for (index, node) in view.nodes.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    {");
+        let mut fields = std::collections::BTreeMap::from([
+            ("id".to_owned(), JsonValue::Number(node.id)),
+            ("label".to_owned(), JsonValue::String(&node.label)),
+        ]);
+        for (key, value) in &node.attrs {
+            fields.insert(key.clone(), JsonValue::String(value));
+        }
+        write_json_fields(&mut out, &fields, 6);
+        out.push_str("\n    }");
+    }
+    out.push_str("\n  ]\n}");
+    out
+}
 
-    let document = serde_json::json!({
-        "directed": true,
-        "multigraph": true,
-        "graph": { "name": view.name },
-        "nodes": nodes,
-        "edges": edges,
-    });
-    // `to_string_pretty` cannot fail on a value built from owned strings and
-    // integers, but the fallback keeps this total rather than unwrapping.
-    serde_json::to_string_pretty(&document).unwrap_or_else(|_| String::from("{}"))
+enum JsonValue<'a> {
+    Number(u32),
+    String(&'a str),
+}
+
+fn write_json_fields(
+    out: &mut String,
+    fields: &std::collections::BTreeMap<String, JsonValue<'_>>,
+    indent: usize,
+) {
+    for (index, (key, value)) in fields.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push('\n');
+        out.extend(std::iter::repeat_n(' ', indent));
+        write_json_string(out, key);
+        out.push_str(": ");
+        match value {
+            JsonValue::Number(number) => {
+                let _ = write!(out, "{number}");
+            }
+            JsonValue::String(value) => write_json_string(out, value),
+        }
+    }
+}
+
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if control <= '\u{1f}' => {
+                let _ = write!(out, "\\u{:04x}", control as u32);
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
 }
 
 /// Serializes `view` as a Mermaid `flowchart`.
@@ -439,10 +476,18 @@ fn xml_escape(text: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
+            // Character references survive XML line-ending and attribute
+            // whitespace normalization. This helper serves both contexts.
+            '\t' => out.push_str("&#x9;"),
+            '\n' => out.push_str("&#xA;"),
+            '\r' => out.push_str("&#xD;"),
             // XML 1.0 forbids most control characters outright, so they are
             // dropped rather than escaped: a numeric reference to them is
             // itself invalid, and decompiler output does contain them.
             c if (c as u32) < 0x20 && c != '\t' && c != '\n' && c != '\r' => {}
+            // XML 1.0 Char also excludes these two BMP noncharacters.
+            // Supplementary-plane noncharacters are legal XML characters.
+            '\u{fffe}' | '\u{ffff}' => {}
             other => out.push(other),
         }
     }
@@ -484,6 +529,21 @@ mod tests {
         view.edges
             .push(ExportEdge::new(0, 1, "fall").with("kind", "fall"));
         view
+    }
+
+    #[test]
+    fn graphml_whitespace_survives_xml_normalization() {
+        let mut view = sample();
+        view.name = "graph\tname\nline\rend".into();
+        view.nodes[0].label = "label\r\nline".into();
+        view.nodes[0]
+            .attrs
+            .push(("key\tname".into(), "value\rtext".into()));
+        let xml = to_graphml(&view);
+        assert!(xml.contains("graph&#x9;name&#xA;line&#xD;end"));
+        assert!(xml.contains("label&#xD;&#xA;line"));
+        assert!(xml.contains("key&#x9;name"));
+        assert!(xml.contains("value&#xD;text"));
     }
 
     #[test]
@@ -554,6 +614,21 @@ mod tests {
         assert_eq!(value["edges"][0]["source"], serde_json::json!(0));
         assert_eq!(value["edges"][0]["target"], serde_json::json!(1));
         assert!(value.get("links").is_none(), "the removed NetworkX key");
+    }
+
+    #[test]
+    fn json_writer_escapes_strings_and_preserves_unicode_without_runtime_serde() {
+        let mut view = GraphView::new("quote \" slash \\ newline\n snowman ☃");
+        view.nodes.push(
+            ExportNode::new(0, "\u{0001}\t")
+                .with("label", "replacement")
+                .with("odd\"key", "value\r"),
+        );
+        let out = to_json(&view);
+        let value: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        assert_eq!(value["graph"]["name"], view.name);
+        assert_eq!(value["nodes"][0]["label"], "replacement");
+        assert_eq!(value["nodes"][0]["odd\"key"], "value\r");
     }
 
     #[test]

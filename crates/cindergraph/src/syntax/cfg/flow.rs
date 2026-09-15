@@ -5,9 +5,7 @@
 //! This is the *vocabulary*, kept separate from the graph type (`super`) and
 //! the builder (`super::build`) because it is what a second language front
 //! end reuses unchanged: it supplies only the grammar that emits `Flow`
-//! events, never a token, node tag or keyword (`REQ-SYN-8`, checked by
-//! `python/tests/test_src_dependency_boundaries.py`). See
-//! `docs/design/source-front-ends/substrate.md` sections 5 and 7.
+//! events, never a token, node tag or keyword.
 
 use crate::syntax::ids::{NodeId, Span, Symbol};
 
@@ -76,7 +74,7 @@ pub enum LoopKind {
 /// A [`Flow::Label`] immediately followed by a construct-opening event names
 /// that construct, which is how `foo: while (...)` and `'a: loop` both reach a
 /// labelled `break`. The label remains an ordinary `goto` target as well.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Flow {
     /// A straight-line item: one node, one successor.
     Stmt(Span),
@@ -142,6 +140,25 @@ pub enum Flow {
         /// Span of the transfer.
         span: Span,
     },
+    /// Transfers through a computed address to any statically known label.
+    ///
+    /// The target set belongs to this event so an indirect transfer is atomic:
+    /// front ends do not have to encode one machine operation as a synthetic
+    /// chain of tests and direct gotos.
+    IndirectDispatch {
+        /// Labels whose addresses are taken in the containing function, in a
+        /// deterministic source order.
+        targets: Vec<Symbol>,
+        /// Whether `targets` is the proven valid destination set or a sound
+        /// over-approximation.
+        precision: TargetPrecision,
+        /// Whether evaluation may fail to produce a valid destination.
+        may_be_invalid: bool,
+        /// Stable reasons why this transfer could not be resolved exactly.
+        reasons: Vec<DispatchUncertainty>,
+        /// Span of the complete indirect transfer.
+        span: Span,
+    },
     /// A named landing pad a [`Flow::Goto`] may target, and the name of a
     /// construct if one opens immediately after it.
     Label {
@@ -158,12 +175,80 @@ pub enum Flow {
     Diverge(Span),
 }
 
+/// Precision of an indirect control-transfer target set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TargetPrecision {
+    /// Every valid destination, and no other destination, is present.
+    Exact,
+    /// The target set was widened to avoid omitting a valid destination.
+    Conservative,
+}
+
+impl TargetPrecision {
+    /// Stable serialized spelling.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Conservative => "conservative",
+        }
+    }
+}
+
+/// Why an indirect control-transfer target set was widened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DispatchUncertainty {
+    /// The dispatch expression has not been resolved to a finite value set.
+    UnresolvedValue,
+    /// A load may read storage outside the supported memory model.
+    UnknownMemory,
+    /// Storage containing a label address may be modified after escaping.
+    EscapedLabelAddress,
+    /// Pointer arithmetic could not be related to a known label table.
+    UnsupportedPointerArithmetic,
+    /// A table index could not be proven in bounds.
+    IndexMayBeOutOfBounds,
+    /// Parser recovery obscured part of the dispatch expression.
+    RecoveredSyntax,
+    /// A configured analysis budget was exhausted.
+    BudgetExceeded,
+    /// Flow-insensitive assignments may add values unavailable at this point.
+    FlowInsensitiveJoin,
+}
+
+impl DispatchUncertainty {
+    /// Stable serialized spelling.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::UnresolvedValue => "unresolved_value",
+            Self::UnknownMemory => "unknown_memory",
+            Self::EscapedLabelAddress => "escaped_label_address",
+            Self::UnsupportedPointerArithmetic => "unsupported_pointer_arithmetic",
+            Self::IndexMayBeOutOfBounds => "index_may_be_out_of_bounds",
+            Self::RecoveredSyntax => "recovered_syntax",
+            Self::BudgetExceeded => "budget_exceeded",
+            Self::FlowInsensitiveJoin => "flow_insensitive_join",
+        }
+    }
+}
+
+/// Sparse qualifications for one [`NodeKind::IndirectDispatch`] node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndirectDispatchInfo {
+    /// The dispatch node whose successors are its current target set.
+    pub node: NodeId,
+    /// Exactness of those successor edges.
+    pub precision: TargetPrecision,
+    /// Whether the source expression may produce no valid destination.
+    pub may_be_invalid: bool,
+    /// Sorted, deduplicated explanations for conservative resolution.
+    pub reasons: Vec<DispatchUncertainty>,
+}
+
 /// What kind of source construct a [`CfgNode`] came from.
 ///
-/// The kind is what lets a consumer read the graph without re-deriving
-/// structure from degrees --- the derivation that
-/// `docs/design/static-c-analysis/architecture.md` section 1 identifies as the
-/// parity layer's quirk, kept out of the general graph on purpose.
+/// The kind lets a consumer read the graph without re-deriving structure from
+/// degrees. That degree-based derivation is a parity-layer concern and is kept
+/// out of the general graph on purpose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeKind {
     /// The unique function entry. Never has a predecessor.
@@ -178,6 +263,8 @@ pub enum NodeKind {
     LoopHeader,
     /// A switch's dispatch node.
     Switch,
+    /// A computed multiway transfer to statically known labels.
+    IndirectDispatch,
     /// One switch arm's label.
     Case,
     /// A `goto` landing pad.
@@ -222,6 +309,7 @@ impl NodeKind {
             NodeKind::Cond => "cond",
             NodeKind::LoopHeader => "loop_header",
             NodeKind::Switch => "switch",
+            NodeKind::IndirectDispatch => "indirect_dispatch",
             NodeKind::Case => "case",
             NodeKind::Label => "label",
             NodeKind::Goto => "goto",
@@ -274,7 +362,7 @@ impl EdgeKind {
     }
 }
 
-/// One node of a [`Cfg`], carrying every span that was coalesced into it.
+/// One node of a [`super::Cfg`], carrying every span that was coalesced into it.
 ///
 /// The span list is a list rather than a single covering span because a
 /// coalesced chain's members are not contiguous in the source --- a loop body's
@@ -324,11 +412,11 @@ impl CfgNode {
     }
 }
 
-/// One directed edge of a [`Cfg`].
+/// One directed edge of a [`super::Cfg`].
 ///
 /// Fields are public because an edge is a plain record with no invariant of its
 /// own to protect, and because the parity layer assembles its own edge list to
-/// hand to [`Cfg::from_parts`].
+/// hand to [`super::Cfg::from_parts`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CfgEdge {
     /// Where control leaves.

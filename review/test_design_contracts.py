@@ -55,9 +55,11 @@ def test_incomplete_callee_makes_caller_incomplete():
     assert summary(code)["complete"] is False
 
 
-def test_duplicate_definitions_cannot_produce_a_complete_merged_summary():
+def test_duplicate_definitions_keep_exact_summaries_but_make_names_ambiguous():
     code = "int f(int x){return x;} int f(int x,int y){return y;}"
-    assert summary(code)["complete"] is False
+    summaries = [item for item in cg.call_summaries(code) if item["name"] == "f"]
+    assert [item["function_id"] for item in summaries] == [0, 1]
+    assert cg.reaches(code, "f", 0, "f") == "unknown"
 
 
 def test_slice_rejects_a_node_outside_the_selected_function():

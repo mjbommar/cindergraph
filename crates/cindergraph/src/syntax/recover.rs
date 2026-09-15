@@ -1,9 +1,7 @@
-//! `SB-8` --- error-recovery primitives: synchronizing sets and bounded depth.
+//! Error-recovery primitives: synchronizing sets and bounded depth.
 //!
-//! Spec: `docs/design/source-front-ends/substrate.md` sections 6 and 7.
-//!
-//! This is what makes "parsing never fails" (`REQ-SYN-2`) a real property
-//! rather than a slogan. A grammar module above this one still has to *use*
+//! These primitives let parsers return partial output and diagnostics for
+//! malformed input. A grammar module above this one still has to *use*
 //! these pieces correctly at every recovery point, but the primitives are
 //! built so that the classic ways to get that wrong -- an infinite recovery
 //! loop, an unbounded recursive descent, an unbounded token walk -- are hard
@@ -25,8 +23,7 @@
 //! plausibly declares several dozen of these as `const`s. At 8 KiB apiece
 //! that is hundreds of kilobytes of mostly-zero static data for sets whose
 //! *combined* membership -- summed across every sync point in the grammar --
-//! is a few hundred kinds at most, because [`docs/design/source-front-ends/
-//! substrate.md`] section 6 gives the representative case directly: a
+//! is a few hundred kinds at most. A representative case: a
 //! statement parser syncs on a statement terminator, a block-closing
 //! delimiter, and a few statement-introducing keywords -- single digits to
 //! perhaps two dozen members, not thousands.
@@ -38,15 +35,12 @@
 //! `const fn` over a literal array, where a bitset would need either a
 //! `while`-loop const-evaluation for every declared set or a build script.
 //! `O(log n)` is not the textbook `O(1)` of a bitset, but at the `n` real
-//! grammars use the two are indistinguishable at the machine level, and the
+//! grammars use, the two are close enough to benchmark before complicating the
+//! representation, and the
 //! representation this module ships is a small `struct` wrapping a slice, so
 //! nothing about the public API forecloses swapping the internals for a
 //! bitset later if a consumer ever measures a set large enough for the
-//! asymptotics to matter. `REQ-SYN-10` applies: build the piece today's two
-//! consumers need, not the one a hypothetical third might.
-//!
-//! [`docs/design/source-front-ends/substrate.md`]: ../../../docs/design/source-front-ends/substrate.md
-//!
+//! asymptotics to matter.
 //! # Language neutrality
 //!
 //! `REQ-SYN-1`. Nothing below names a token kind, keyword or punctuation mark

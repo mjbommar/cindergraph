@@ -7,32 +7,120 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
+    name: Rust core and package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: "1.88"
           components: rustfmt, clippy
+      - uses: rustsec/audit-check@858dc40f52ca2b8570b7a997c1c4e35c6fc9a432
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: EmbarkStudios/cargo-deny-action@9c67a826e39827395bfa619cd85cb2aaeb43cfaa
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features
       - run: cargo check -p cindergraph --no-default-features
-      - run: cargo package -p cindergraph --allow-dirty
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - name: Require byte-reproducible crate packaging
+        run: |
+          cargo package -p cindergraph --locked
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "cindergraph"))')
+          archive="target/package/cindergraph-$version.crate"
+          first=$(sha256sum "$archive" | cut -d' ' -f1)
+          cargo package -p cindergraph --locked
+          second=$(sha256sum "$archive" | cut -d' ' -f1)
+          test "$first" = "$second"
+          echo "$first  $archive"
+      - name: Verify packaged licence, provenance and tests
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "cindergraph"))')
+          archive="target/package/cindergraph-$version.crate"
+          python3 tools/check_crate_notices.py "$archive"
+          cargo test --manifest-path "target/package/cindergraph-$version/Cargo.toml" --target-dir target/packaged-tests --locked --all-features
 
   python:
+    name: Python bindings and artifacts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Derive reproducible-build epoch from the tested commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           python-version: "3.12"
+      - run: uvx --from zizmor==1.30.1 zizmor .github/workflows
+      - name: Validate Python project and classifier metadata
+        run: |
+          uvx --from validate-pyproject==0.26 --with packaging==26.0 validate-pyproject pyproject.toml
+          uvx --from trove-classifiers==2026.6.1.19 python tools/check_trove_classifiers.py
+      - name: Audit every published Python extra from the lockfile
+        run: |
+          set -o pipefail
+          uv export --locked --no-dev --all-extras --no-emit-project --format requirements.txt | uvx --from pip-audit==2.10.1 pip-audit --strict --progress-spinner off --require-hashes -r /dev/stdin
       - run: uv sync --locked --dev
       - run: uv run maturin develop
       - run: uv run python tools/gen_native_stub.py --check
-      - run: uv run pytest python/tests/
-      - run: uv run ruff format --check python/
-      - run: uv run ruff check python/
+      - run: uv run pytest python/tests/ review/test_design_contracts.py
+      - run: uv run ruff format --check python/ tools/
+      - run: uv run ruff check python/ tools/
       - run: uv run ty check python/
+      - name: Build release wheel for isolated ABI3 smoke tests
+        run: |
+          uv run maturin build --release --out target/ci-wheels
+          python3 tools/normalize_wheel_sbom.py target/ci-wheels/*.whl
+      - name: Test the same wheel on supported CPython versions
+        shell: bash
+        run: |
+          python3 tools/check_python_distribution.py target/ci-wheels/*.whl
+          uvx --from twine==7.0.0 twine check --strict target/ci-wheels/*.whl
+          for version in 3.12 3.13 3.14; do
+            smoke_env="$RUNNER_TEMP/wheel-$version"
+            uv venv --python "$version" "$smoke_env"
+            uv pip install --no-deps --python "$smoke_env/bin/python" target/ci-wheels/*.whl
+            "$smoke_env/bin/python" -I tools/smoke_installed.py
+          done
+          graphs_env="$RUNNER_TEMP/wheel-graphs"
+          uv venv --python 3.12 "$graphs_env"
+          wheels=(target/ci-wheels/*.whl)
+          test "${#wheels[@]}" -eq 1
+          wheel="${wheels[0]}"
+          uv pip install --python "$graphs_env/bin/python" "${wheel}[graphs]"
+          "$graphs_env/bin/python" -I tools/smoke_graphs_installed.py
+          typing_dir="$RUNNER_TEMP/typing-consumer"
+          mkdir -p "$typing_dir"
+          cp tests/typing/pyproject.toml tests/typing/consumer.py tests/typing/graphs_consumer.py "$typing_dir/"
+          uv run ty check --project "$typing_dir" --python "$RUNNER_TEMP/wheel-3.12" "$typing_dir/consumer.py" --error-on-warning
+          uv run ty check --project "$typing_dir" --python "$graphs_env" "$typing_dir/graphs_consumer.py" --error-on-warning
+      - name: Build and install the source distribution
+        shell: bash
+        run: |
+          uv run maturin sdist --out target/ci-sdist
+          python3 tools/check_python_distribution.py target/ci-sdist/*.tar.gz
+          uvx --from twine==7.0.0 twine check --strict target/ci-sdist/*.tar.gz
+          for version in 3.12 3.13 3.14; do
+            smoke_env="$RUNNER_TEMP/sdist-$version"
+            uv venv --python "$version" "$smoke_env"
+            uv pip install --no-cache --no-deps --python "$smoke_env/bin/python" target/ci-sdist/*.tar.gz
+            "$smoke_env/bin/python" -I tools/smoke_installed.py
+          done
+          graphs_env="$RUNNER_TEMP/sdist-graphs"
+          uv venv --python 3.12 "$graphs_env"
+          archives=(target/ci-sdist/*.tar.gz)
+          test "${#archives[@]}" -eq 1
+          uv pip install --no-cache --python "$graphs_env/bin/python" "${archives[0]}[graphs]"
+          "$graphs_env/bin/python" -I tools/smoke_graphs_installed.py

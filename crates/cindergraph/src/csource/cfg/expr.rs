@@ -1,7 +1,6 @@
 //! `REQ-CFG-6` --- `&&`, `||` and `?:` are control flow, not expressions.
 //!
-//! Spec: `docs/design/static-c-analysis/requirements.md` `REQ-CFG-6`, and
-//! `src/csource/parse/expr.rs`, which deliberately parses all three as ordinary
+//! [`crate::csource::parse::expr`] deliberately parses all three as ordinary
 //! expression nodes and says so: "their control-flow meaning is the CFG layer's
 //! job, not the parser's". This file is that job.
 //!

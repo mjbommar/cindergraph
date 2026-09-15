@@ -4,15 +4,9 @@
 //! about C. This module is the other half: it reads a [`Tree`] and the
 //! [`Cfg`]s built from it and produces the labelled views those writers take.
 //!
-//! # What this replaces
-//!
-//! `joern-export --repr {ast,cfg,cdg,ddg,pdg} --format {dot,graphml,...}` is
-//! the shape a caller already knows, so [`Repr`] uses Joern's spelling and now
-//! covers every representation it offers except `cpg14`, which is a code
-//! property graph and is the one thing
-//! `docs/design/static-c-analysis/requirements.md` section 8 declines.
-//!
-//! None of the three dependence graphs is a copy of Joern's.
+//! [`Repr`] uses the conventional AST/CFG/DDG/CDG/PDG vocabulary. It does not
+//! expose a code property graph, and the dependence representations describe
+//! Cindergraph's own analysis rather than another tool's internal graph.
 //!
 //! * [`Repr::Ddg`] labels every edge with the variable the dependence is
 //!   about. `joern-export --repr ddg` does too, in its DOT; pyjoern's
@@ -27,26 +21,21 @@
 //! # Which control-flow graph
 //!
 //! [`Repr::Cfg`] exports [`crate::csource::cfg`], the general graph, and never
-//! [`crate::csource::parity`], the parity graph. Same rule as
-//! [`crate::csource::metrics`], same reason
-//! (`docs/design/static-c-analysis/architecture.md` section 1): the parity
-//! layer reproduces another tool's expression granularity so one similarity
-//! score can be compared against it, and a person reading an exported graph
-//! wants the graph their source describes. A caller who specifically wants the
-//! parity shape already has [`crate::csource::parity::parity_cfgs`].
+//! [`crate::csource::parity`]. The parity projection carries comparison-specific
+//! expression and contraction choices that ordinary graph consumers should not
+//! inherit. A caller that explicitly needs it can use
+//! [`crate::csource::parity::parity_cfgs`].
 //!
 //! # Totality
 //!
-//! Every entry point here is total (`REQ-SYN-2`). A file that is not C exports
-//! zero graphs and the diagnostics saying so; a function the parser only partly
-//! recovered exports the graph it did build. Span slicing goes through
-//! [`snippet`], which returns an empty label rather than panicking on an offset
-//! that is not a character boundary --- reachable input, because a label is cut
-//! to a length and decompiler output contains multi-byte text.
+//! A file with no recovered C functions exports zero graphs plus diagnostics;
+//! partial functions retain the graph that could be built. Span slicing goes
+//! through a checked helper and produces an empty label for an invalid UTF-8
+//! boundary instead of indexing the string directly.
 
-use crate::csource::cfg::function_cfgs;
 use crate::csource::parse::tag::NodeTag;
-use crate::csource::parse::{parse, Tree};
+use crate::csource::parse::Tree;
+use crate::csource::semantic::AnalysisUnit;
 use crate::syntax::cfg::Cfg;
 use crate::syntax::diag::Parsed;
 use crate::syntax::dominance::ControlDependence;
@@ -91,6 +80,17 @@ impl Repr {
         }
     }
 
+    /// Stable graph-identity name used when coordinating graph-local IDs.
+    pub const fn graph_kind(self) -> &'static str {
+        match self {
+            Repr::Cfg => "executable_cfg",
+            Repr::Ast => "syntax_ast",
+            Repr::Ddg => "data_dependence_graph",
+            Repr::Cdg => "control_dependence_graph",
+            Repr::Pdg => "program_dependence_graph",
+        }
+    }
+
     /// Parses a representation name.
     pub fn parse(name: &str) -> Option<Repr> {
         match name.trim().to_ascii_lowercase().as_str() {
@@ -111,54 +111,49 @@ impl Repr {
 /// would silently drop one --- the same reason
 /// [`crate::csource::metrics`] reports a list.
 pub fn export(text: &str, repr: Repr) -> Parsed<Vec<GraphView>> {
-    let parsed = parse(text);
-    let (tree, mut diagnostics) = parsed.into_parts();
+    let unit = AnalysisUnit::new(text);
+    let views = export_unit(&unit, repr);
+    Parsed::new(views, unit.diagnostics().clone())
+}
 
-    let views = match repr {
-        Repr::Cfg => {
-            let built = function_cfgs(&tree, text);
-            let (cfgs, cfg_diags) = built.into_parts();
-            for diagnostic in cfg_diags.iter() {
-                diagnostics.push(diagnostic.clone());
-            }
-            cfgs.iter()
-                .map(|function| cfg_view(&function.name, &function.cfg, text))
-                .collect()
-        }
+/// Every function's graph from an already-owned analysis snapshot.
+///
+/// Unlike [`export`], this does not parse, rebuild CFGs, or recompute dataflow.
+/// It is the export path for session-oriented callers that need several graph
+/// products to carry the same source and function identity.
+pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
+    let tree = unit.tree();
+    let text = unit.source();
+    match repr {
+        Repr::Cfg => unit
+            .functions()
+            .iter()
+            .map(|function| cfg_view(&function.name, &function.cfg, text))
+            .collect(),
         Repr::Ast => {
             let spans = tree.token_spans(text);
             tree.functions(text)
                 .iter()
-                .map(|function| ast_view(&function.name, &tree, function.node, &spans, text))
+                .map(|function| ast_view(&function.name, tree, function.node, &spans, text))
                 .collect()
         }
-        Repr::Ddg | Repr::Cdg | Repr::Pdg => {
-            let built = function_cfgs(&tree, text);
-            let (cfgs, cfg_diags) = built.into_parts();
-            for diagnostic in cfg_diags.iter() {
-                diagnostics.push(diagnostic.clone());
-            }
-            let spans = tree.token_spans(text);
-            cfgs.iter()
-                .map(|function| match repr {
-                    Repr::Cdg => cdg_view(&function.name, &function.cfg, text),
-                    Repr::Pdg => {
-                        let flow = crate::csource::dataflow::analyze_function(
-                            &tree, text, &spans, function,
-                        );
-                        pdg_view(&function.name, &function.cfg, &flow, text)
-                    }
-                    _ => {
-                        let flow = crate::csource::dataflow::analyze_function(
-                            &tree, text, &spans, function,
-                        );
-                        ddg_view(&flow, text)
-                    }
-                })
-                .collect()
-        }
-    };
-    Parsed::new(views, diagnostics)
+        Repr::Ddg => unit
+            .dataflows()
+            .iter()
+            .map(|flow| ddg_view(flow, text))
+            .collect(),
+        Repr::Cdg => unit
+            .functions()
+            .iter()
+            .map(|function| cdg_view(&function.name, &function.cfg, text))
+            .collect(),
+        Repr::Pdg => unit
+            .functions()
+            .iter()
+            .zip(unit.dataflows())
+            .map(|(function, flow)| pdg_view(&function.name, &function.cfg, flow, text))
+            .collect(),
+    }
 }
 
 /// One function's control-flow graph as a view.
@@ -178,11 +173,25 @@ pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
         } else {
             format!("{kind}\n{text_of}")
         };
-        view.nodes.push(
-            ExportNode::new(index as u32, label)
-                .with("kind", kind)
-                .with("span", format!("{}:{}", span.lo, span.hi)),
-        );
+        let mut exported = ExportNode::new(index as u32, label)
+            .with("kind", kind)
+            .with("span", format!("{}:{}", span.lo, span.hi));
+        if let Some(info) = cfg.indirect_dispatch(NodeId::new(index as u32)) {
+            let reasons = info
+                .reasons
+                .iter()
+                .map(|reason| reason.name())
+                .collect::<Vec<_>>()
+                .join(",");
+            exported = exported
+                .with("dispatch_precision", info.precision.name())
+                .with(
+                    "dispatch_may_be_invalid",
+                    if info.may_be_invalid { "true" } else { "false" },
+                )
+                .with("dispatch_reasons", reasons);
+        }
+        view.nodes.push(exported);
     }
     for edge in cfg.edges() {
         view.edges.push(
@@ -279,6 +288,9 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
 
     let mut view = GraphView::new(&flow.name);
     let def_count = flow.definitions.len() as u32;
+    let use_count = flow.uses.len() as u32;
+    let memory_def_start = def_count + use_count;
+    let memory_use_start = memory_def_start + flow.memory_definitions.len() as u32;
 
     for (index, definition) in flow.definitions.iter().enumerate() {
         let dead = flow.is_dead_store(index as u32);
@@ -328,6 +340,61 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
         view.edges.push(
             ExportEdge::new(edge.def, def_count + edge.use_, edge.name.clone())
                 .with("variable", edge.name.clone()),
+        );
+    }
+    for (index, definition) in flow.memory_definitions.iter().enumerate() {
+        let name = flow
+            .memory_region_name(definition.region)
+            .unwrap_or_else(|| format!("region#{}", definition.region.0));
+        view.nodes.push(
+            ExportNode::new(
+                memory_def_start + index as u32,
+                format!("memory def {name}"),
+            )
+            .with("role", "memory_definition")
+            .with("region", definition.region.0.to_string())
+            .with("memory", name)
+            .with("precision", definition.precision.name())
+            .with("cfg_node", definition.node.to_string())
+            .with(
+                "span",
+                format!("{}:{}", definition.span.lo, definition.span.hi),
+            )
+            .with("text", snippet(text, definition.span)),
+        );
+    }
+    for (index, use_) in flow.memory_uses.iter().enumerate() {
+        let name = flow
+            .memory_region_name(use_.region)
+            .unwrap_or_else(|| format!("region#{}", use_.region.0));
+        view.nodes.push(
+            ExportNode::new(
+                memory_use_start + index as u32,
+                format!("memory use {name}"),
+            )
+            .with("role", "memory_use")
+            .with("region", use_.region.0.to_string())
+            .with("memory", name)
+            .with("precision", use_.precision.name())
+            .with("cfg_node", use_.node.to_string())
+            .with("span", format!("{}:{}", use_.span.lo, use_.span.hi))
+            .with("text", snippet(text, use_.span)),
+        );
+    }
+    for edge in &flow.memory_edges {
+        let name = flow
+            .memory_region_name(edge.use_region)
+            .unwrap_or_else(|| format!("region#{}", edge.use_region.0));
+        view.edges.push(
+            ExportEdge::new(
+                memory_def_start + edge.definition,
+                memory_use_start + edge.use_,
+                name.clone(),
+            )
+            .with("memory", name)
+            .with("definition_region", edge.definition_region.0.to_string())
+            .with("use_region", edge.use_region.0.to_string())
+            .with("overlap", edge.overlap.map_or("same", |kind| kind.name())),
         );
     }
     // Silence the unused-import warning in builds where the type alias is the
@@ -426,6 +493,30 @@ pub fn pdg_view(
                 .with("variable", edge.name.clone()),
         );
     }
+    for edge in &flow.memory_edges {
+        let (Some(definition), Some(use_)) = (
+            flow.memory_definitions.get(edge.definition as usize),
+            flow.memory_uses.get(edge.use_ as usize),
+        ) else {
+            continue;
+        };
+        let name = flow
+            .memory_region_name(edge.use_region)
+            .unwrap_or_else(|| format!("region#{}", edge.use_region.0));
+        let key = (definition.node, use_.node, name.clone());
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        view.edges.push(
+            ExportEdge::new(definition.node, use_.node, name.clone())
+                .with("dependence", "data")
+                .with("memory", name)
+                .with("definition_region", edge.definition_region.0.to_string())
+                .with("use_region", edge.use_region.0.to_string())
+                .with("overlap", edge.overlap.map_or("same", |kind| kind.name())),
+        );
+    }
     view
 }
 
@@ -480,6 +571,16 @@ int greet(const char *name, int times)
 "#;
 
     #[test]
+    fn an_owned_unit_exports_every_representation_without_a_second_front_end() {
+        let unit = AnalysisUnit::new(HELLO);
+        for repr in Repr::ALL {
+            let from_unit = export_unit(&unit, repr);
+            let one_shot = export(HELLO, repr).into_parts().0;
+            assert_eq!(from_unit, one_shot, "{} export differs", repr.name());
+        }
+    }
+
+    #[test]
     fn a_cfg_export_names_the_function_and_its_branches() {
         let views = export(HELLO, Repr::Cfg).into_parts().0;
         assert_eq!(views.len(), 1);
@@ -508,6 +609,34 @@ int greet(const char *name, int times)
             labels.iter().any(|label| label.contains("puts(name)")),
             "{labels:?}"
         );
+    }
+
+    #[test]
+    fn a_cfg_export_carries_indirect_dispatch_uncertainty() {
+        let source = concat!(
+            "int f(int n) { static void *table[] = {&&a, &&b}; ",
+            "goto *table[n]; a: return 1; b: return 2; }",
+        );
+        let views = export(source, Repr::Cfg).into_parts().0;
+        let dispatch = views[0]
+            .nodes
+            .iter()
+            .find(|node| {
+                node.attrs
+                    .iter()
+                    .any(|(key, value)| key == "kind" && value == "indirect_dispatch")
+            })
+            .expect("one exported indirect dispatch");
+        let attr = |key: &str| {
+            dispatch
+                .attrs
+                .iter()
+                .find(|(candidate, _)| candidate == key)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(attr("dispatch_precision"), Some("exact"));
+        assert_eq!(attr("dispatch_may_be_invalid"), Some("true"));
+        assert_eq!(attr("dispatch_reasons"), Some("index_may_be_out_of_bounds"));
     }
 
     #[test]
@@ -584,8 +713,8 @@ int greet(const char *name, int times)
         assert_eq!(Repr::parse("ddg"), Some(Repr::Ddg));
         assert_eq!(Repr::parse("cdg"), Some(Repr::Cdg));
         assert_eq!(Repr::parse("pdg"), Some(Repr::Pdg));
-        // `cpg14` is a code property graph, which `requirements.md` section 8
-        // declines. It stays refused rather than faked.
+        // `cpg14` is a code property graph, which this conventional CFG
+        // exporter declines. It stays refused rather than faked.
         assert_eq!(Repr::parse("cpg14"), None, "not offered rather than faked");
         assert_eq!(Repr::parse("cpg"), None, "not offered rather than faked");
     }
@@ -631,6 +760,24 @@ mod ddg_tests {
             assert!(!edge.label.is_empty(), "unlabelled edge: {edge:?}");
             assert!(edge.attrs.iter().any(|(k, _)| k == "variable"));
         }
+    }
+
+    #[test]
+    fn projected_memory_edges_are_first_class_ddg_nodes() {
+        let source = "struct S{int x;};int f(int v){struct S s;s.x=v;return s.x;}";
+        let views = export(source, Repr::Ddg).into_parts().0;
+        let view = &views[0];
+        assert!(view.nodes.iter().any(|node| node
+            .attrs
+            .iter()
+            .any(|(key, value)| key == "role" && value == "memory_definition")));
+        assert!(view.nodes.iter().any(|node| node
+            .attrs
+            .iter()
+            .any(|(key, value)| key == "role" && value == "memory_use")));
+        assert!(view.edges.iter().any(|edge| {
+            edge.label == "s.x" && edge.attrs.iter().any(|(key, _)| key == "use_region")
+        }));
     }
 
     #[test]
@@ -836,6 +983,21 @@ int classify(int a, int b, int n)
                 }
             }
         }
+    }
+
+    #[test]
+    fn representation_and_coordinate_identity_have_distinct_stable_names() {
+        let names = Repr::ALL.map(|repr| (repr.name(), repr.graph_kind()));
+        assert_eq!(
+            names,
+            [
+                ("cfg", "executable_cfg"),
+                ("ast", "syntax_ast"),
+                ("ddg", "data_dependence_graph"),
+                ("cdg", "control_dependence_graph"),
+                ("pdg", "program_dependence_graph"),
+            ]
+        );
     }
 
     #[test]

@@ -11,12 +11,16 @@
 //! to this file because nothing outside the builder's own state machine needs
 //! them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::syntax::diag::{Diagnostic, Diagnostics, Parsed};
 use crate::syntax::ids::{NodeId, Span, Symbol};
 
-use super::{Cfg, CfgEdge, CfgNode, EdgeKind, Flow, LoopKind, NodeKind, MAX_NODES};
+use super::{
+    Cfg, CfgEdge, CfgNode, EdgeKind, Flow, IndirectDispatchInfo, LoopKind, NodeKind, MAX_NODES,
+};
+#[cfg(test)]
+use super::{DispatchUncertainty, TargetPrecision};
 
 /// Where a pending edge is headed while the events are still arriving.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +120,7 @@ pub struct CfgBuilder {
     exit: NodeId,
     next_scope_id: u32,
     exhausted: bool,
+    indirect_dispatches: Vec<IndirectDispatchInfo>,
 }
 
 impl CfgBuilder {
@@ -123,9 +128,8 @@ impl CfgBuilder {
     /// function-end nodes already placed.
     ///
     /// Both are real nodes with real ids, not flags derived from degrees: that
-    /// derivation is the parity layer's quirk, and
-    /// `docs/design/static-c-analysis/architecture.md` section 1 is why it must
-    /// not appear here. Their spans are the empty spans at the function's two
+    /// derivation belongs to the parity layer and must not appear here. Their
+    /// spans are the empty spans at the function's two
     /// ends, so `REQ-SYN-7` holds for them too.
     pub fn new(function: Span) -> Self {
         let nodes = vec![
@@ -148,6 +152,7 @@ impl CfgBuilder {
             exit: NodeId::new(1),
             next_scope_id: 0,
             exhausted: false,
+            indirect_dispatches: Vec::new(),
         }
     }
 
@@ -201,6 +206,41 @@ impl CfgBuilder {
                     kind: EdgeKind::Jump,
                     is_back: false,
                 });
+                self.frontier.clear();
+            }
+            Flow::IndirectDispatch {
+                targets,
+                precision,
+                may_be_invalid,
+                mut reasons,
+                span,
+            } => {
+                if targets.is_empty() {
+                    self.diagnostics.push(Diagnostic::error(
+                        span,
+                        "indirect dispatch has no statically known target",
+                    ));
+                    self.place(NodeKind::Diverge, span);
+                    self.frontier.clear();
+                    return;
+                }
+                let node = self.place(NodeKind::IndirectDispatch, span);
+                reasons.sort_unstable();
+                reasons.dedup();
+                self.indirect_dispatches.push(IndirectDispatchInfo {
+                    node,
+                    precision,
+                    may_be_invalid,
+                    reasons,
+                });
+                for label in targets {
+                    self.edges.push(RawEdge {
+                        src: node,
+                        dst: Dest::Label(label, span),
+                        kind: EdgeKind::Jump,
+                        is_back: false,
+                    });
+                }
                 self.frontier.clear();
             }
             Flow::Label { name, span } => {
@@ -590,6 +630,7 @@ impl CfgBuilder {
         }
 
         let mut edges = Vec::with_capacity(self.edges.len());
+        let mut unresolved_sources = BTreeSet::new();
         for raw in std::mem::take(&mut self.edges) {
             let mut is_back = raw.is_back;
             let dst = match raw.dst {
@@ -633,16 +674,28 @@ impl CfgBuilder {
                     is_back,
                 }),
                 None => {
-                    if let Some(node) = self.nodes.get_mut(raw.src.index()) {
-                        let node_span = node.span();
-                        *node = CfgNode::single(NodeKind::Diverge, node_span);
-                    }
+                    unresolved_sources.insert(raw.src);
+                }
+            }
+        }
+        for src in unresolved_sources {
+            if !edges.iter().any(|edge| edge.src == src) {
+                if let Some(node) = self.nodes.get_mut(src.index()) {
+                    let node_span = node.span();
+                    *node = CfgNode::single(NodeKind::Diverge, node_span);
                 }
             }
         }
 
         let targets = self.scope_continue.iter().copied().flatten().collect();
-        let mut cfg = Cfg::assemble(self.nodes, edges, self.entry, self.exit, targets);
+        let mut cfg = Cfg::assemble(
+            self.nodes,
+            edges,
+            self.entry,
+            self.exit,
+            targets,
+            self.indirect_dispatches,
+        );
         mark_cycle_closing_back_edges(&mut cfg);
         Parsed::new(cfg, self.diagnostics)
     }
@@ -1139,6 +1192,120 @@ mod tests {
         assert!(report
             .iter()
             .any(|d| d.message.contains("not reachable from the entry")));
+    }
+
+    #[test]
+    fn an_indirect_dispatch_is_one_atomic_multi_target_node() {
+        let first = sym(3);
+        let second = sym(4);
+        let (cfg, diagnostics) = build(vec![
+            Flow::IndirectDispatch {
+                targets: vec![first, second],
+                precision: TargetPrecision::Exact,
+                may_be_invalid: false,
+                reasons: Vec::new(),
+                span: s(10),
+            },
+            Flow::Label {
+                name: first,
+                span: s(20),
+            },
+            Flow::Return(s(21)),
+            Flow::Label {
+                name: second,
+                span: s(30),
+            },
+            Flow::Return(s(31)),
+        ]);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let dispatch = node_of(&cfg, 10);
+        assert_eq!(
+            cfg.node(dispatch).map(CfgNode::kind),
+            Some(NodeKind::IndirectDispatch)
+        );
+        assert_eq!(
+            cfg.successors(dispatch).collect::<Vec<_>>(),
+            vec![node_of(&cfg, 20), node_of(&cfg, 30)],
+            "target order is the event's deterministic source order"
+        );
+        assert!(cfg
+            .successor_edges(dispatch)
+            .iter()
+            .all(|edge| edge.kind == EdgeKind::Jump));
+        let info = cfg
+            .indirect_dispatch(dispatch)
+            .expect("the first-class node carries its resolution metadata");
+        assert_eq!(info.precision, TargetPrecision::Exact);
+        assert!(!info.may_be_invalid);
+        assert!(info.reasons.is_empty());
+        assert_eq!(cfg.indirect_dispatches(), std::slice::from_ref(info));
+        assert!(cfg.validate().is_empty());
+
+        let coalesced = cfg.coalesced();
+        let coalesced_dispatch = coalesced
+            .nodes()
+            .iter()
+            .position(|node| node.kind() == NodeKind::IndirectDispatch)
+            .map(|index| NodeId::new(index as u32))
+            .expect("coalescing preserves the semantic dispatch boundary");
+        assert_eq!(
+            coalesced
+                .indirect_dispatch(coalesced_dispatch)
+                .map(|info| info.precision),
+            Some(TargetPrecision::Exact)
+        );
+    }
+
+    #[test]
+    fn an_empty_indirect_dispatch_becomes_a_diagnostic_divergence() {
+        let (cfg, diagnostics) = build(vec![Flow::IndirectDispatch {
+            targets: Vec::new(),
+            precision: TargetPrecision::Conservative,
+            may_be_invalid: true,
+            reasons: vec![DispatchUncertainty::UnresolvedValue],
+            span: s(10),
+        }]);
+        assert_eq!(diagnostics.error_count(), 1);
+        assert_eq!(
+            cfg.node(node_of(&cfg, 10)).map(CfgNode::kind),
+            Some(NodeKind::Diverge)
+        );
+    }
+
+    #[test]
+    fn an_indirect_dispatch_keeps_resolved_targets_when_one_is_missing() {
+        let present = sym(3);
+        let missing = sym(4);
+        let (cfg, diagnostics) = build(vec![
+            Flow::IndirectDispatch {
+                targets: vec![present, missing],
+                precision: TargetPrecision::Conservative,
+                may_be_invalid: true,
+                reasons: vec![DispatchUncertainty::RecoveredSyntax],
+                span: s(10),
+            },
+            Flow::Label {
+                name: present,
+                span: s(20),
+            },
+            Flow::Diverge(s(21)),
+        ]);
+        assert_eq!(diagnostics.error_count(), 1);
+        let dispatch = node_of(&cfg, 10);
+        assert_eq!(
+            cfg.node(dispatch).map(CfgNode::kind),
+            Some(NodeKind::IndirectDispatch)
+        );
+        assert_eq!(
+            cfg.successors(dispatch).collect::<Vec<_>>(),
+            vec![node_of(&cfg, 20)]
+        );
+        let info = cfg
+            .indirect_dispatch(dispatch)
+            .expect("a partially resolved dispatch retains its qualification");
+        assert_eq!(info.precision, TargetPrecision::Conservative);
+        assert!(info.may_be_invalid);
+        assert_eq!(info.reasons, [DispatchUncertainty::RecoveredSyntax]);
     }
 
     #[test]

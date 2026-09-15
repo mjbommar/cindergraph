@@ -24,8 +24,8 @@
 //!    smaller `main` beats a larger same-named `main` pulled in from another
 //!    TU of the same project.
 //!
-//! Mining `~/.cache/glaurung/decbench-full/tree/*/*/source_cfgs/*.json`
-//! confirms step 2 is real, not a corner case: in `O2/coreutils`, `main`
+//! Mining the corpus's published `source_cfgs/*.json` files confirms step 2 is
+//! real, not a corner case: in `O2/coreutils`, `main`
 //! appears in 108 binaries' JSONs with wildly different shapes (`link` 19
 //! nodes, `numfmt` 152 nodes, `date` 101 nodes, `df` 108 nodes) -- each
 //! binary's own TU, not one shared "biggest main" picked by rank. Conversely,

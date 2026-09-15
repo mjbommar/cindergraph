@@ -1,23 +1,14 @@
 //! `F-7` --- declarations: parsed far enough to be skipped correctly, and to
 //! keep what contributes control flow.
 //!
-//! Spec: `docs/design/static-c-analysis/requirements.md` `REQ-GEN-5` (the AST
-//! is lowerable), `REQ-CFG-3` (a declaration with an initializer is a node, one
-//! without is not) and section 9 open question 1.
-//!
 //! # What is kept, and what is a token run
 //!
 //! Kept as structure: the specifier run, each declarator with the identifier it
-//! declares, and each initializer --- because an initializer can contain a
-//! call, a `?:` or a compound literal, and is therefore the part of a
-//! declaration that has control flow. Everything else is a *token run* inside
-//! one opaque node: a parameter list, a `struct` body, an `__attribute__`, an
-//! `asm` operand list. The tokens are still addressable (`REQ-GEN-2`), so
-//! nothing is destroyed; what is skipped is a grammar for text with no reader.
-//!
-//! A `struct` body being opaque is the one that looks lossy and is not. Its
-//! members declare types, and section 8 says there is no type resolution here;
-//! a member declaration contributes no statement, no edge and no node.
+//! declares, each record-member and outer-parameter declaration, and each
+//! initializer. Initializers can contain calls, `?:` or compound literals and
+//! therefore contribute control flow; member declarators feed the structural
+//! type graph. Parameter declaration interiors, attributes, `asm` operands and
+//! bit-field widths remain token runs within grammar-owned boundaries.
 //!
 //! # Decorations that are consumed and produce nothing
 //!
@@ -32,7 +23,7 @@
 //! tag for tag.
 //!
 //! `__declspec(...)` is the fourth, and it is *not* free: it takes a balanced
-//! parenthesis group, so it shares [`Parser::eat_attribute_run`] with
+//! parenthesis group, so it shares `Parser::eat_attribute_run` with
 //! `__attribute__((...))` and produces the same [`NodeTag::Attribute`] node
 //! both already produced. Before it was recognised, `__declspec(noreturn) int
 //! f(void) {...}` parsed as a function named **`noreturn`** --- a silently
@@ -51,7 +42,7 @@
 use super::expr::NO_POSITION;
 use super::look::{is_type_keyword, LEVEL_ASSIGN};
 use super::tag::NodeTag;
-use super::{Parser, Task};
+use super::{DeclarationKind, Parser, Task};
 use crate::csource::lex::TokenKind;
 use crate::syntax::event::Marker;
 use crate::syntax::recover::SyncSet;
@@ -145,14 +136,12 @@ impl Parser<'_> {
     pub(super) fn declaration(&mut self) {
         let marker = self.open(NodeTag::Decl);
         let specifiers = self.open(NodeTag::DeclSpecifiers);
-        self.eat_decl_specifiers();
-        self.close(specifiers);
-        // `struct s { int a; };` declares a type and nothing else.
-        if self.eat(TokenKind::Semi) {
-            self.close(marker);
-            return;
-        }
-        self.push(Task::Declarators { marker, index: 0 });
+        self.push(Task::DeclSpecifiers {
+            declaration: marker,
+            specifiers,
+            kind: DeclarationKind::Ordinary,
+            saw_type: false,
+        });
     }
 
     /// The specifier run: storage classes, qualifiers, type specifiers and the
@@ -163,11 +152,20 @@ impl Parser<'_> {
     /// yet, and the next token continues a declaration head --- is the standard
     /// one, and it is what makes `undefined4 uVar1;` a declaration without
     /// anybody having declared `undefined4`.
-    fn eat_decl_specifiers(&mut self) {
+    pub(super) fn decl_specifiers(
+        &mut self,
+        declaration: Marker,
+        specifiers: Marker,
+        kind: DeclarationKind,
+        mut saw_type: bool,
+    ) {
         use TokenKind::*;
-        let mut saw_type = false;
         loop {
-            if self.at_eof() || !self.work.charge(1) {
+            if self.at_eof() {
+                self.finish_decl_specifiers(declaration, specifiers, kind);
+                return;
+            }
+            if !self.work.charge(1) {
                 return;
             }
             // Every arm below consumes at least one token, and the loop ends
@@ -199,15 +197,30 @@ impl Parser<'_> {
                 }
                 KwStruct | KwUnion | KwEnum => {
                     saw_type = true;
+                    let aggregate = self.peek();
                     self.bump();
                     self.eat_attribute_run();
                     if self.at(Identifier) {
                         self.bump();
                     }
                     if self.at(LBrace) {
-                        let body = self.open(NodeTag::StructBody);
-                        self.eat_balanced();
-                        self.close(body);
+                        if aggregate == KwEnum {
+                            self.eat_enum_body();
+                        } else {
+                            let body = self.open(NodeTag::StructBody);
+                            self.bump();
+                            self.push(Task::DeclSpecifiers {
+                                declaration,
+                                specifiers,
+                                kind,
+                                saw_type,
+                            });
+                            self.push(Task::StructMembers {
+                                marker: body,
+                                last: NO_POSITION,
+                            });
+                            return;
+                        }
                     }
                     self.eat_attribute_run();
                 }
@@ -246,12 +259,171 @@ impl Parser<'_> {
                     saw_type = true;
                     self.bump();
                 }
-                _ => return,
+                _ => {
+                    self.finish_decl_specifiers(declaration, specifiers, kind);
+                    return;
+                }
             }
             if self.cursor.pos() == before {
+                self.finish_decl_specifiers(declaration, specifiers, kind);
                 return;
             }
         }
+    }
+
+    /// Close a declaration head and hand the remainder to the shared
+    /// declarator grammar. An anonymous record member and a tag-only ordinary
+    /// declaration legitimately end immediately at `;`.
+    fn finish_decl_specifiers(
+        &mut self,
+        declaration: Marker,
+        specifiers: Marker,
+        kind: DeclarationKind,
+    ) {
+        self.close(specifiers);
+        if self.eat(TokenKind::Semi) {
+            self.close(declaration);
+            return;
+        }
+        self.push(Task::Declarators {
+            marker: declaration,
+            index: 0,
+            kind,
+        });
+    }
+
+    /// Parse one record member declaration, preserving the same specifier and
+    /// declarator nodes ordinary declarations use. The surrounding body task
+    /// is queued first so a completed member naturally resumes at the next
+    /// token without native recursion.
+    pub(super) fn struct_member(&mut self, marker: Marker, last: u32) {
+        use TokenKind::*;
+        if self.eat(RBrace) {
+            self.close(marker);
+            return;
+        }
+        if self.at_eof() {
+            self.error("unterminated struct or union body: expected `}`");
+            self.close(marker);
+            return;
+        }
+        if self.cursor.pos() == last {
+            let skipped = self.open(NodeTag::Error);
+            self.error(format!(
+                "unexpected `{}` in a struct or union body",
+                self.peek().name()
+            ));
+            self.bump();
+            self.close(skipped);
+        }
+        let start = self.cursor.pos();
+        self.push(Task::StructMembers {
+            marker,
+            last: start,
+        });
+        if self.at(KwStaticAssert) {
+            self.static_assert();
+            return;
+        }
+        if self.eat(Semi) {
+            return;
+        }
+        let declaration = self.open(NodeTag::MemberDecl);
+        let specifiers = self.open(NodeTag::DeclSpecifiers);
+        self.push(Task::DeclSpecifiers {
+            declaration,
+            specifiers,
+            kind: DeclarationKind::Member,
+            saw_type: false,
+        });
+    }
+
+    /// Consume an enum body and retain each enumerator declaration boundary.
+    ///
+    /// Initializer expressions remain token runs for now, but their nested
+    /// comma operators and call arguments cannot split the outer enumerator
+    /// list. This is the declaration structure lexical resolution needs; it
+    /// replaces downstream scans for identifiers following `{` or `,`.
+    fn eat_enum_body(&mut self) {
+        use TokenKind::*;
+
+        let body = self.open(NodeTag::EnumBody);
+        self.bump();
+        if self.at_eof() {
+            self.error("unterminated enum body");
+            self.close(body);
+            return;
+        }
+        if self.at(RBrace) {
+            self.bump();
+            self.close(body);
+            return;
+        }
+
+        let mut enumerator = Some(self.open(NodeTag::Enumerator));
+        let mut open = std::mem::take(&mut self.brackets);
+        open.clear();
+        open.push(LBrace);
+        loop {
+            if self.at_eof() {
+                self.error("unterminated enum body");
+                break;
+            }
+            if !self.work.charge(1) {
+                break;
+            }
+            let kind = self.peek();
+            if open.len() == 1 {
+                if kind == Semi {
+                    self.error("unterminated enum body: `;` ends it without a closer");
+                    break;
+                }
+                if kind == Comma {
+                    if let Some(marker) = enumerator.take() {
+                        self.close(marker);
+                    }
+                    self.bump();
+                    if !self.at_eof() && !self.at(RBrace) {
+                        enumerator = Some(self.open(NodeTag::Enumerator));
+                    }
+                    continue;
+                }
+                if kind == RBrace {
+                    if let Some(marker) = enumerator.take() {
+                        self.close(marker);
+                    }
+                    self.bump();
+                    break;
+                }
+            }
+            match kind {
+                LParen | LBracket | LBrace => open.push(kind),
+                RParen | RBracket | RBrace => {
+                    let want = match kind {
+                        RParen => LParen,
+                        RBracket => LBracket,
+                        _ => LBrace,
+                    };
+                    match open.iter().rposition(|candidate| *candidate == want) {
+                        Some(at) => open.truncate(at),
+                        None => {
+                            self.error(format!(
+                                "unterminated enum body: `{}` closes nothing it opened",
+                                kind.name()
+                            ));
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            self.bump();
+        }
+        if let Some(marker) = enumerator {
+            self.close(marker);
+        }
+        self.brackets = open;
+        self.close(body);
     }
 
     /// Whether the identifier under the cursor belongs to this specifier run
@@ -502,11 +674,33 @@ impl Parser<'_> {
     }
 
     /// One declarator, and then whichever of the four things can follow it.
-    pub(super) fn declarators(&mut self, marker: Marker, index: u32) {
-        use TokenKind::*;
+    pub(super) fn declarators(&mut self, marker: Marker, index: u32, kind: DeclarationKind) {
         let before = self.cursor.pos();
         let declarator = self.open(NodeTag::Declarator);
-        self.eat_declarator();
+        self.push(Task::DeclaratorDone {
+            declaration: marker,
+            declarator,
+            index,
+            before,
+            kind,
+        });
+        self.push(Task::DeclaratorBody {
+            found_name: false,
+            depth: 0,
+            grouped: Vec::new(),
+        });
+    }
+
+    /// Close a completed declarator and dispatch its initializer or tail.
+    pub(super) fn declarator_done(
+        &mut self,
+        marker: Marker,
+        declarator: Marker,
+        index: u32,
+        before: u32,
+        kind: DeclarationKind,
+    ) {
+        use TokenKind::*;
         if self.cursor.pos() == before {
             // `int;` and every recovery path: an empty node would carry no
             // span, which `REQ-SYN-7` would rather not have to explain.
@@ -517,18 +711,31 @@ impl Parser<'_> {
         self.eat_gnu_declarator_tail();
 
         if self.at(LBrace) && index == 0 {
+            if kind == DeclarationKind::Member {
+                self.error(
+                    "function definition encountered in a struct or union body; recovering it as a definition",
+                );
+            }
             self.begin_function_body(marker);
             return;
         }
-        if self.at(Eq) {
+        if kind == DeclarationKind::Ordinary && self.at(Eq) {
             let initializer = self.open(NodeTag::Initializer);
             self.bump();
-            self.push(Task::DeclTail { marker, index });
+            self.push(Task::DeclTail {
+                marker,
+                index,
+                kind,
+            });
             self.push(Task::Close(initializer));
             self.push_initializer_value();
             return;
         }
-        self.push(Task::DeclTail { marker, index });
+        self.push(Task::DeclTail {
+            marker,
+            index,
+            kind,
+        });
     }
 
     /// Queue an initializer's value: a braced list, or an
@@ -561,12 +768,16 @@ impl Parser<'_> {
 
     /// Decide what ends a declarator: another declarator, the declaration's
     /// `;`, an old-style parameter list, or a recovery.
-    pub(super) fn decl_tail(&mut self, marker: Marker, index: u32) {
+    pub(super) fn decl_tail(&mut self, marker: Marker, index: u32, kind: DeclarationKind) {
         use TokenKind::*;
+        if kind == DeclarationKind::Member && self.eat(Colon) {
+            self.eat_member_bitfield_width();
+        }
         if self.eat(Comma) {
             self.push(Task::Declarators {
                 marker,
                 index: index + 1,
+                kind,
             });
             return;
         }
@@ -582,7 +793,11 @@ impl Parser<'_> {
         // K&R: `int f(a, b) int a; int b; { ... }`. Only reachable when the
         // declarator ended in `)`, so an ordinary misparse cannot land here
         // and swallow the rest of the file looking for a brace.
-        if index == 0 && self.previous_kind() == Some(RParen) && self.starts_declaration() {
+        if kind == DeclarationKind::Ordinary
+            && index == 0
+            && self.previous_kind() == Some(RParen)
+            && self.starts_declaration()
+        {
             let params = self.open(NodeTag::ParamList);
             while !self.at_eof() && !self.at(LBrace) && self.work.charge(1) {
                 self.bump();
@@ -605,6 +820,40 @@ impl Parser<'_> {
         self.close(skipped);
         self.eat(Semi);
         self.close(marker);
+    }
+
+    /// Retain a bit-field width as tokens inside its member declaration. The
+    /// width is a constant expression but does not execute at runtime; parsing
+    /// it through the ordinary evaluation grammar would falsely manufacture
+    /// effects. Commas nested in calls or conditionals do not split members.
+    fn eat_member_bitfield_width(&mut self) {
+        use TokenKind::*;
+        let mut open = std::mem::take(&mut self.brackets);
+        open.clear();
+        while !self.at_eof() && self.work.charge(1) {
+            let token = self.peek();
+            if open.is_empty() && matches!(token, Comma | Semi | RBrace) {
+                break;
+            }
+            match token {
+                LParen | LBracket | LBrace => open.push(token),
+                RParen | RBracket | RBrace => {
+                    let want = match token {
+                        RParen => LParen,
+                        RBracket => LBracket,
+                        _ => LBrace,
+                    };
+                    if let Some(at) = open.iter().rposition(|candidate| *candidate == want) {
+                        open.truncate(at);
+                    } else {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            self.bump();
+        }
+        self.brackets = open;
     }
 
     /// The kind of the token just consumed, or `None` at the start of input.
@@ -648,19 +897,33 @@ impl Parser<'_> {
     /// identifier reached at declarator level: array suffixes and parameter
     /// lists are consumed whole, so nothing inside them can be mistaken for it,
     /// and `int (*resolve(int k))(void)` still names `resolve`.
-    fn eat_declarator(&mut self) {
+    pub(super) fn declarator_body(
+        &mut self,
+        mut found_name: bool,
+        mut depth: u32,
+        mut grouped: Vec<Marker>,
+    ) {
         use TokenKind::*;
-        let mut found_name = false;
-        let mut depth = 0u32;
         loop {
             if self.at_eof() || !self.work.charge(1) {
+                while let Some(marker) = grouped.pop() {
+                    self.close(marker);
+                }
                 return;
             }
             // The same no-progress guard `eat_decl_specifiers` carries, for the
             // same reason.
             let before = self.cursor.pos();
             match self.peek() {
-                Star | KwConst | KwVolatile | KwRestrict | KwAtomic => self.bump(),
+                Star => {
+                    let pointer = self.open(NodeTag::PointerOperator);
+                    self.bump();
+                    while matches!(self.peek(), KwConst | KwVolatile | KwRestrict | KwAtomic) {
+                        self.bump();
+                    }
+                    self.close(pointer);
+                }
+                KwConst | KwVolatile | KwRestrict | KwAtomic => self.bump(),
                 // `void (__stdcall *fp)(void)` puts the convention inside the
                 // declarator, and `f@<eax>` puts the annotation directly after
                 // the name. Both are dropped, and neither may set
@@ -699,29 +962,181 @@ impl Parser<'_> {
                     found_name = true;
                 }
                 LParen if !found_name && !self.parameter_list_ahead() => {
+                    let group = self.open(NodeTag::ParenthesizedDeclarator);
                     self.bump();
+                    grouped.push(group);
                     depth += 1;
                 }
                 LParen => {
-                    let params = self.open(NodeTag::ParamList);
-                    self.eat_balanced_until(&DECLARATOR_FOLLOW);
-                    self.close(params);
+                    self.eat_parameter_list();
                 }
                 RParen if depth > 0 => {
                     self.bump();
                     depth -= 1;
+                    if let Some(group) = grouped.pop() {
+                        self.close(group);
+                    }
                 }
                 LBracket => {
                     let suffix = self.open(NodeTag::ArraySuffix);
-                    self.eat_balanced_until(&DECLARATOR_FOLLOW);
-                    self.close(suffix);
+                    self.bump();
+                    // C permits `static` and type qualifiers in parameter
+                    // array declarators. They are array syntax, not part of
+                    // the bound expression, in either permitted order.
+                    while matches!(
+                        self.peek(),
+                        KwStatic | KwConst | KwVolatile | KwRestrict | KwAtomic
+                    ) {
+                        self.bump();
+                    }
+                    if self.at(RBracket) {
+                        self.bump();
+                        self.close(suffix);
+                    } else if self.at(Star) && self.nth(1) == RBracket {
+                        // `[*]` is the prototype-scope unspecified VLA form,
+                        // not a dereference expression.
+                        self.bump();
+                        self.bump();
+                        self.close(suffix);
+                    } else {
+                        self.push(Task::DeclaratorBody {
+                            found_name,
+                            depth,
+                            grouped,
+                        });
+                        self.push(Task::EatClose {
+                            kind: RBracket,
+                            hard: true,
+                            marker: suffix,
+                        });
+                        self.push_expr(LEVEL_ASSIGN);
+                        return;
+                    }
                 }
-                _ => return,
+                _ => {
+                    while let Some(marker) = grouped.pop() {
+                        self.close(marker);
+                    }
+                    return;
+                }
             }
             if self.cursor.pos() == before {
                 return;
             }
         }
+    }
+
+    /// Consume a parameter list and preserve each outer declaration boundary.
+    ///
+    /// Commas inside function-pointer signatures, array bounds and anonymous
+    /// aggregate bodies are nested and therefore remain inside one
+    /// [`NodeTag::ParamDecl`]. The recovery rules deliberately mirror
+    /// [`Parser::eat_balanced_until`]: a function body or declaration
+    /// terminator at the outer level ends a list with a diagnostic, while a
+    /// `struct`/`union`/`enum` body may legally open a brace there.
+    fn eat_parameter_list(&mut self) {
+        use TokenKind::*;
+
+        let list = self.open(NodeTag::ParamList);
+        self.bump();
+        if self.at_eof() {
+            self.error("unterminated bracket group");
+            self.close(list);
+            return;
+        }
+        if self.peek() == RParen {
+            self.bump();
+            self.close(list);
+            return;
+        }
+
+        let mut parameter = Some(self.open(NodeTag::ParamDecl));
+        let mut open = std::mem::take(&mut self.brackets);
+        open.clear();
+        open.push(LParen);
+        let mut brace_is_legal = false;
+        let mut enum_brace_is_legal = false;
+
+        loop {
+            if self.at_eof() {
+                self.error("unterminated bracket group");
+                break;
+            }
+            if !self.work.charge(1) {
+                break;
+            }
+            let kind = self.peek();
+
+            if open.len() == 1 {
+                if kind == Comma {
+                    if let Some(marker) = parameter.take() {
+                        self.close(marker);
+                    }
+                    self.bump();
+                    if !self.at_eof() && self.peek() != RParen {
+                        parameter = Some(self.open(NodeTag::ParamDecl));
+                    }
+                    brace_is_legal = false;
+                    enum_brace_is_legal = false;
+                    continue;
+                }
+                if kind == RParen {
+                    if let Some(marker) = parameter.take() {
+                        self.close(marker);
+                    }
+                    self.bump();
+                    break;
+                }
+                if DECLARATOR_FOLLOW.contains(kind.as_u16()) && !(kind == LBrace && brace_is_legal)
+                {
+                    self.error(format!(
+                        "unterminated bracket group: `{}` ends it without a closer",
+                        kind.name()
+                    ));
+                    break;
+                }
+                if kind == LBrace && enum_brace_is_legal {
+                    self.eat_enum_body();
+                    brace_is_legal = false;
+                    enum_brace_is_legal = false;
+                    continue;
+                }
+            }
+
+            match kind {
+                LParen | LBracket | LBrace => open.push(kind),
+                RParen | RBracket | RBrace => {
+                    let want = match kind {
+                        RParen => LParen,
+                        RBracket => LBracket,
+                        _ => LBrace,
+                    };
+                    match open.iter().rposition(|candidate| *candidate == want) {
+                        Some(at) => open.truncate(at),
+                        None => {
+                            self.error(format!(
+                                "unterminated bracket group: `{}` closes nothing it opened",
+                                kind.name()
+                            ));
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            if open.len() == 1 {
+                brace_is_legal = matches!(kind, KwStruct | KwUnion | KwEnum)
+                    || (kind == Identifier && brace_is_legal);
+                enum_brace_is_legal = kind == KwEnum || (kind == Identifier && enum_brace_is_legal);
+            }
+            self.bump();
+        }
+
+        if let Some(marker) = parameter {
+            self.close(marker);
+        }
+        self.brackets = open;
+        self.close(list);
     }
 
     /// Whether the `(` under the cursor opens a parameter list rather than
@@ -843,6 +1258,74 @@ mod tests {
     }
 
     #[test]
+    fn parameter_declarations_have_grammar_owned_outer_boundaries() {
+        let text =
+            "int f(int a, void (*cb)(int x, int y), struct { int x, y; } p, ...) { return a; }";
+        let parsed = parse(text);
+        assert!(
+            parsed.diagnostics().error_count() == 0,
+            "{:?}",
+            errors(text)
+        );
+        let tree = parsed.into_parts().0;
+        let arena = tree.arena();
+        let spans = tree.token_spans(text);
+        let list = arena
+            .preorder_roots()
+            .find(|node| arena.tag(*node) == Some(NodeTag::ParamList.as_u16()))
+            .expect("function has a parameter list");
+        let declarations: Vec<&str> = arena
+            .children_iter(list)
+            .filter(|node| arena.tag(*node) == Some(NodeTag::ParamDecl.as_u16()))
+            .filter_map(|node| arena.span(node, &spans))
+            .map(|span| &text[span.range()])
+            .collect();
+        assert_eq!(
+            declarations,
+            [
+                "int a",
+                "void (*cb)(int x, int y)",
+                "struct { int x, y; } p",
+                "..."
+            ]
+        );
+
+        let empty = parse("int empty() { return 0; }").into_parts().0;
+        assert!(!empty
+            .arena()
+            .preorder_roots()
+            .any(|node| empty.arena().tag(node) == Some(NodeTag::ParamDecl.as_u16())));
+    }
+
+    #[test]
+    fn enumerators_have_grammar_owned_boundaries() {
+        let text = "enum E { A, B = choose(1, 2), C = (3, 4), };";
+        let parsed = parse(text);
+        assert_eq!(parsed.diagnostics().error_count(), 0, "{:?}", errors(text));
+        let tree = parsed.into_parts().0;
+        let arena = tree.arena();
+        let spans = tree.token_spans(text);
+        let body = arena
+            .preorder_roots()
+            .find(|node| arena.tag(*node) == Some(NodeTag::EnumBody.as_u16()))
+            .expect("enum body");
+        let enumerators: Vec<&str> = arena
+            .children_iter(body)
+            .filter(|node| arena.tag(*node) == Some(NodeTag::Enumerator.as_u16()))
+            .filter_map(|node| arena.span(node, &spans))
+            .map(|span| &text[span.range()])
+            .collect();
+        assert_eq!(enumerators, ["A", "B = choose(1, 2)", "C = (3, 4)"]);
+    }
+
+    #[test]
+    fn a_missing_enum_closer_does_not_consume_later_definitions() {
+        let text = "enum E { A, B = 2; int f(void) { return 1; } int g(void) { return 2; }";
+        assert_eq!(definition_names(text), ["f", "g"]);
+        assert!(!errors(text).is_empty());
+    }
+
+    #[test]
     fn a_qualified_definition_survives_a_dropped_brace() {
         // A dropped `}` puts the next definition at *block* scope, where
         // `starts_declaration` decides. `long long ns::f(...)` was already a
@@ -929,6 +1412,77 @@ mod tests {
     }
 
     #[test]
+    fn declarator_tree_preserves_pointer_array_precedence() {
+        let child_tags = |text: &str| {
+            let tree = parse(text).into_parts().0;
+            let arena = tree.arena();
+            let declarator = arena
+                .preorder_roots()
+                .find(|node| arena.tag(*node) == Some(NodeTag::Declarator.as_u16()))
+                .expect("declarator");
+            let direct = arena
+                .children_iter(declarator)
+                .filter_map(|node| arena.tag(node).and_then(NodeTag::from_u16))
+                .collect::<Vec<_>>();
+            let grouped = arena
+                .children_iter(declarator)
+                .find(|node| arena.tag(*node) == Some(NodeTag::ParenthesizedDeclarator.as_u16()))
+                .map(|group| {
+                    arena
+                        .children_iter(group)
+                        .filter_map(|node| arena.tag(node).and_then(NodeTag::from_u16))
+                        .collect::<Vec<_>>()
+                });
+            (direct, grouped)
+        };
+
+        let (array_of_pointers, ungrouped) = child_tags("int *a[4];");
+        assert_eq!(
+            array_of_pointers,
+            [
+                NodeTag::PointerOperator,
+                NodeTag::DeclName,
+                NodeTag::ArraySuffix
+            ]
+        );
+        assert!(ungrouped.is_none());
+
+        let (pointer_to_array, grouped) = child_tags("int (*p)[4];");
+        assert_eq!(
+            pointer_to_array,
+            [NodeTag::ParenthesizedDeclarator, NodeTag::ArraySuffix]
+        );
+        assert_eq!(
+            grouped.expect("grouped declarator"),
+            [NodeTag::PointerOperator, NodeTag::DeclName]
+        );
+    }
+
+    #[test]
+    fn array_bounds_are_owned_expression_subtrees() {
+        let text = "int f(int n) { int a[n && bump() ? n + 1 : 1]; return a[0]; }";
+        let bad = errors(text);
+        assert!(bad.is_empty(), "{bad:?}");
+        let tree = parse(text).into_parts().0;
+        let arena = tree.arena();
+        let suffix = arena
+            .preorder_roots()
+            .find(|node| arena.tag(*node) == Some(NodeTag::ArraySuffix.as_u16()))
+            .expect("array suffix");
+        let descendants = arena
+            .preorder(suffix)
+            .filter_map(|node| arena.tag(node).and_then(NodeTag::from_u16))
+            .collect::<Vec<_>>();
+        assert!(descendants.contains(&NodeTag::CondExpr), "{descendants:?}");
+        assert!(
+            descendants.contains(&NodeTag::BinaryExpr),
+            "{descendants:?}"
+        );
+        assert!(descendants.contains(&NodeTag::CallArgs), "{descendants:?}");
+        assert!(descendants.contains(&NodeTag::NameRef), "{descendants:?}");
+    }
+
+    #[test]
     fn several_declarators_share_one_declaration() {
         let text = "int a, *b, c[4], (*d)(void);";
         assert!(errors(text).is_empty(), "{:?}", errors(text));
@@ -1001,13 +1555,48 @@ mod tests {
     }
 
     #[test]
-    fn a_struct_body_is_one_opaque_node_and_declares_no_locals() {
-        let text = "struct s { int a; int b; };";
-        let dump = tags(text);
-        assert!(dump.contains(&"struct_body"), "{dump:?}");
-        // The members are inside the token run, so they are not `decl_name`s
-        // competing with the thing being declared.
-        assert!(!dump.contains(&"decl_name"), "{dump:?}");
+    fn record_members_reuse_structural_declarators_without_becoming_locals() {
+        let text = "struct s { int a; const char *names[4]; unsigned bits : 3; };";
+        let tree = parse(text).into_parts().0;
+        let arena = tree.arena();
+        let spans = tree.token_spans(text);
+        let body = arena
+            .preorder_roots()
+            .find(|node| arena.tag(*node) == Some(NodeTag::StructBody.as_u16()))
+            .expect("record body");
+        let members = arena
+            .children_iter(body)
+            .filter(|node| arena.tag(*node) == Some(NodeTag::MemberDecl.as_u16()))
+            .collect::<Vec<_>>();
+        assert_eq!(members.len(), 3);
+        let names = members
+            .iter()
+            .flat_map(|member| arena.preorder(*member))
+            .filter(|node| arena.tag(*node) == Some(NodeTag::DeclName.as_u16()))
+            .filter_map(|node| arena.span(node, &spans))
+            .map(|span| &text[span.range()])
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["a", "names", "bits"]);
+        let names_declarator = arena
+            .children_iter(members[1])
+            .find(|node| arena.tag(*node) == Some(NodeTag::Declarator.as_u16()))
+            .expect("names declarator");
+        let tags = arena
+            .preorder(names_declarator)
+            .filter_map(|node| arena.tag(node).and_then(NodeTag::from_u16))
+            .collect::<Vec<_>>();
+        assert!(tags.contains(&NodeTag::PointerOperator));
+        assert!(tags.contains(&NodeTag::ArraySuffix));
+    }
+
+    #[test]
+    fn a_missing_record_closer_does_not_erase_following_definitions() {
+        let text = concat!(
+            "struct Broken { int value; ",
+            "int first(void) { return 1; } int second(void) { return 2; }"
+        );
+        assert_eq!(definition_names(text), ["first", "second"]);
+        assert!(!errors(text).is_empty());
     }
 
     #[test]

@@ -1,0 +1,206 @@
+{
+  "schema": 1,
+  "comparison": "docs/benchmarks/data/joern-complete-2026-09-15.json",
+  "shared_functions": 930,
+  "exact_functions": 894,
+  "nonzero_functions": 36,
+  "baseline_nonzero_functions": 72,
+  "became_exact_functions": 36,
+  "new_nonzero_functions": [],
+  "covered_nonzero_functions": 36,
+  "missing": [],
+  "stale_evidence": [],
+  "classes": {
+    "C-permitted conditional-store evaluation order": 1,
+    "branch-hint artifact": 1,
+    "compiler-verified offsetof artifact": 3,
+    "complex-operator artifact": 5,
+    "function macro or statement-expression artifact": 4,
+    "invalid repeated Joern entry role": 4,
+    "object-like macro artifact": 16,
+    "provider preprocessing fix plus raw Joern macro artifact": 1,
+    "unreachable Joern orphan": 1
+  },
+  "functions": [
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/100_struct_layout.c",
+      "function": "layout_offsets",
+      "disposition": "compiler-verified offsetof artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/103_computed_goto.c",
+      "function": "threaded_interpreter",
+      "disposition": "unreachable Joern orphan"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/104_statement_expression.c",
+      "function": "single_evaluation",
+      "disposition": "function macro or statement-expression artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/104_statement_expression.c",
+      "function": "statement_expression_max",
+      "disposition": "function macro or statement-expression artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/119_branch_hints.c",
+      "function": "hinted_validation",
+      "disposition": "branch-hint artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/126_x_macros.c",
+      "function": "apply_opcode",
+      "disposition": "provider preprocessing fix plus raw Joern macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/126_x_macros.c",
+      "function": "total_weight",
+      "disposition": "function macro or statement-expression artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/131_obfuscated_composite.c",
+      "function": "obfuscated_pipeline",
+      "disposition": "function macro or statement-expression artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_accumulate",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_classify",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_gcd",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/145_control_flow_flattening.c",
+      "function": "flattened_search",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/150_obfuscation_composite.c",
+      "function": "obfuscated_digest",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/150_obfuscation_composite.c",
+      "function": "obfuscated_transform",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_absent_probe",
+      "disposition": "invalid repeated Joern entry role"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_dispatch",
+      "disposition": "invalid repeated Joern entry role"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/158_weak_symbols.c",
+      "function": "weak_fold",
+      "disposition": "invalid repeated Joern entry role"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/159_ifunc_resolver.c",
+      "function": "ifn159_resolve",
+      "disposition": "invalid repeated Joern entry role"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/161_packed_struct_layout.c",
+      "function": "pk161_member_offset",
+      "disposition": "compiler-verified offsetof artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/164_nested_tlv_walker.c",
+      "function": "tlv164_seek",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/174_float_compare_classify.c",
+      "function": "classify_binary32",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "function": "complex_add_conj",
+      "disposition": "complex-operator artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "function": "complex_array_sum",
+      "disposition": "complex-operator artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "function": "complex_float_multiply",
+      "disposition": "complex-operator artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "function": "complex_multiply",
+      "disposition": "complex-operator artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/217_complex_arithmetic.c",
+      "function": "complex_through_call",
+      "disposition": "complex-operator artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/31_edit_distance.c",
+      "function": "edit_distance",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/32_longest_common_subsequence.c",
+      "function": "lcs_length",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/32_longest_common_subsequence.c",
+      "function": "lcs_recover",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/35_matrix_chain.c",
+      "function": "matrix_chain_cost",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/45_string_algorithms.c",
+      "function": "parse_decimal",
+      "disposition": "C-permitted conditional-store evaluation order"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/47_huffman.c",
+      "function": "huffman_code_lengths",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/78_ring_buffer.c",
+      "function": "ring_pop",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/78_ring_buffer.c",
+      "function": "ring_push",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/79_segment_tree.c",
+      "function": "segment_build",
+      "disposition": "object-like macro artifact"
+    },
+    {
+      "path": "crates/cindergraph/tests/decompiler_fixtures/src/94_alignment.c",
+      "function": "offset_of_payload",
+      "disposition": "compiler-verified offsetof artifact"
+    }
+  ]
+}

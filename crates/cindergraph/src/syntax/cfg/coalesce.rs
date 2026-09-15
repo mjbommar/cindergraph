@@ -6,11 +6,11 @@
 //! the basic-block view a reader wants, in one `O(V + E)` sweep over chain
 //! heads rather than contracting to a fixpoint. It is kept apart from the
 //! builder and from [`super::validate`] because it is the one part of this
-//! component the parity layer in `docs/design/static-c-analysis/` reuses over
-//! a differently-shaped graph, through [`ChainPartition`] rather than through
+//! component the parity layer reuses over a differently-shaped graph, through
+//! [`ChainPartition`] rather than through
 //! [`Cfg::coalesced`] itself.
 
-use super::{Cfg, CfgEdge, CfgNode, NodeId, NodeKind};
+use super::{Cfg, CfgEdge, CfgNode, IndirectDispatchInfo, NodeId, NodeKind};
 
 impl Cfg {
     /// Partition the nodes into maximal contractible chains, in `O(V + E)`.
@@ -49,7 +49,11 @@ impl Cfg {
             }
             let src_kind = self.nodes[index].kind();
             let dst_kind = self.nodes[dst.index()].kind();
-            if src_kind.is_anchor() || dst_kind.is_anchor() {
+            if src_kind.is_anchor()
+                || dst_kind.is_anchor()
+                || src_kind == NodeKind::IndirectDispatch
+                || dst_kind == NodeKind::IndirectDispatch
+            {
                 continue;
             }
             next[index] = Some(dst);
@@ -116,10 +120,27 @@ impl Cfg {
             .iter()
             .map(|id| NodeId::new(partition.of_node[id.index()]))
             .collect();
+        let indirect_dispatches = self
+            .indirect_dispatches
+            .iter()
+            .map(|info| IndirectDispatchInfo {
+                node: NodeId::new(partition.of_node[info.node.index()]),
+                precision: info.precision,
+                may_be_invalid: info.may_be_invalid,
+                reasons: info.reasons.clone(),
+            })
+            .collect();
         // `chain_of` rather than indexing: an empty graph has no chain for the
         // placeholder entry and exit ids, and this must not panic (`REQ-SYN-2`).
         let anchor = |id: NodeId| NodeId::new(partition.chain_of(id).unwrap_or(0));
-        Cfg::assemble(nodes, edges, anchor(self.entry), anchor(self.exit), targets)
+        Cfg::assemble(
+            nodes,
+            edges,
+            anchor(self.entry),
+            anchor(self.exit),
+            targets,
+            indirect_dispatches,
+        )
     }
 }
 

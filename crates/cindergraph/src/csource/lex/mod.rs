@@ -1,11 +1,7 @@
 //! `F-4` --- the C lexer: text in, [`Tokens`] out, never a failure.
 //!
-//! Spec: `docs/design/static-c-analysis/roadmap.md` stage S1;
-//! `docs/design/static-c-analysis/requirements.md` `REQ-IN-1` (two dialects,
-//! one lexer), `REQ-IN-3` (the GNU surface), `REQ-IN-4` (ill-formed input must
-//! not abort the file), `REQ-GEN-2` (spans survive) and `REQ-GEN-4` (explicit
-//! stacks). The kind space is [`kind`]; the shared scanners this drives are
-//! [`crate::syntax::scan`].
+//! The kind space is [`kind`]; shared number, literal and trivia scanners live
+//! in [`crate::syntax::scan`].
 //!
 //! # What this layer is, and what it deliberately is not
 //!
@@ -35,13 +31,12 @@
 //!   meaning; see [`kind`]'s docs.
 //! * **Register annotations.** `f@<eax>` becomes one
 //!   [`kind::TokenKind::RegisterAnnotation`] token rather than a stray `@`
-//!   followed by a comparison; [`scan_register_annotation`] argues why here
+//!   followed by a comparison; `scan_register_annotation` argues why here
 //!   rather than in [`crate::csource::normalize`].
 //!
 //! # Trivia is skipped, and the extent trap that follows from it
 //!
-//! Whitespace and comments never become tokens
-//! (`docs/design/source-front-ends/substrate.md` §2.1). The buffer stores only
+//! Whitespace and comments never become tokens. The buffer stores only
 //! a start offset per token, so a token's *extent* --- `starts[i + 1] -
 //! starts[i]` --- runs to the **next token** and therefore swallows the trivia
 //! in between: for `int x;` the extents are `["int ", "x", ";"]`, and for
@@ -54,6 +49,15 @@
 //! bytes the token occupies. That is the same resolution Zig's tokenizer
 //! reaches for the identical representation, and it is cheap because it scans
 //! one token rather than the file.
+//!
+//! An unterminated block comment is different from an ordinary comment: valid
+//! C says it consumes the rest of the file, but there is no valid-program
+//! interpretation to preserve. The tolerant front end keeps the diagnostic
+//! and may restart at a later line that has the conservative lexical shape of
+//! a top-level function definition. This recovers an unaffected neighbour in
+//! editor or damaged input without teaching the shared C scanner a false
+//! comment rule. The restart is deliberately narrow and remains recovery-
+//! qualified downstream.
 //!
 //! # Line splices
 //!
@@ -288,6 +292,9 @@ fn skip_trivia(text: &str, from: usize, diagnostics: &mut Diagnostics) -> usize 
         if let Some(comment) = scan_block_comment(text, at, C_SCAN) {
             if let Some(issue) = comment.issue {
                 diagnostics.push(issue.to_diagnostic());
+                if let Some(resume) = unterminated_comment_resync(text, at) {
+                    return resume;
+                }
             }
             at += comment.len.max(1);
             continue;
@@ -299,6 +306,85 @@ fn skip_trivia(text: &str, from: usize, diagnostics: &mut Diagnostics) -> usize 
         break;
     }
     at
+}
+
+/// Find a conservative line-level restart after an unterminated block comment.
+///
+/// Only a later line whose prefix looks like `type name(...) {` qualifies.
+/// Control statements and calls are rejected, and the candidate must carry a
+/// return-type-like prefix before its declarator name. The original diagnostic
+/// still spans the lexical damage, so downstream completeness remains false.
+fn unterminated_comment_resync(text: &str, comment_start: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut line_start = comment_start.saturating_add(2).min(bytes.len());
+    while line_start < bytes.len() {
+        let relative = bytes[line_start..].iter().position(|byte| *byte == b'\n')?;
+        line_start += relative + 1;
+        let line_end = bytes[line_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(bytes.len(), |relative| line_start + relative);
+        // A top-level definition starts in column zero in the recovery
+        // contract.  Refusing indented lines is important: prose in a block
+        // comment frequently contains parenthesised phrases followed by `{`,
+        // and treating those as declarations manufactures anonymous functions.
+        if plausible_function_restart(&bytes[line_start..line_end]) {
+            return Some(line_start);
+        }
+    }
+    None
+}
+
+fn plausible_function_restart(line: &[u8]) -> bool {
+    if matches!(line.first(), Some(b' ' | b'\t' | b'\r')) {
+        return false;
+    }
+    let Some(open_paren) = line.iter().position(|byte| *byte == b'(') else {
+        return false;
+    };
+    let Some(open_brace) = line.iter().position(|byte| *byte == b'{') else {
+        return false;
+    };
+    if open_paren == 0 || open_paren >= open_brace {
+        return false;
+    }
+    let prefix = trim_ascii_end(&line[..open_paren]);
+    let name_start = prefix
+        .iter()
+        .rposition(|byte| !identifier_continue(*byte))
+        .map_or(0, |index| index + 1);
+    if name_start == 0 || name_start == prefix.len() {
+        return false;
+    }
+    let leader = trim_ascii_end(&prefix[..name_start]);
+    if leader.is_empty() {
+        return false;
+    }
+    if !leader
+        .iter()
+        .all(|byte| identifier_continue(*byte) || matches!(byte, b' ' | b'\t' | b'*'))
+    {
+        return false;
+    }
+    let first_end = leader
+        .iter()
+        .position(|byte| !identifier_continue(*byte))
+        .unwrap_or(leader.len());
+    !matches!(
+        &leader[..first_end],
+        b"if" | b"for" | b"while" | b"switch" | b"return" | b"sizeof"
+    )
+}
+
+fn trim_ascii_end(mut bytes: &[u8]) -> &[u8] {
+    while matches!(bytes.last(), Some(b' ' | b'\t' | b'\r')) {
+        bytes = &bytes[..bytes.len() - 1];
+    }
+    bytes
+}
+
+const fn identifier_continue(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$')
 }
 
 /// Turn a literal's scan issues into diagnostics, naming the literal's form.
@@ -697,8 +783,8 @@ mod tests {
             ]
         );
 
-        // The substrate's extent runs to the next token and so carries the
-        // comment; `lexeme` is what trims it back (substrate.md 2.1).
+        // The token extent runs to the next token and so carries the comment;
+        // `lexeme` is what trims it back.
         let parsed = tokenize(text);
         let tokens = parsed.value();
         assert_eq!(tokens.text(TokenId::new(0), text), "x /* c */ ");
@@ -828,6 +914,27 @@ mod tests {
             .expect("a diagnostic")
             .message
             .contains("unterminated block comment"));
+    }
+
+    #[test]
+    fn an_unterminated_comment_can_resynchronise_at_a_later_function() {
+        let text = "int f(void) { return 1 + /* broken\nstatic int g(void) { return 2; }";
+        let (tokens, messages) = lexed(text);
+        assert!(messages
+            .iter()
+            .any(|message| message.contains("unterminated block comment")));
+        assert!(tokens.iter().any(|(_, text)| text == "g"));
+
+        let no_boundary = "int f(void) { /* broken\nif (x) { return 2; }";
+        let (tokens, messages) = lexed(no_boundary);
+        assert!(messages
+            .iter()
+            .any(|message| message.contains("unterminated block comment")));
+        assert!(!tokens.iter().any(|(_, text)| text == "if"));
+
+        let comment_prose = "int f(void) { /* broken\n * prose call(arg) { is not code";
+        let (tokens, _) = lexed(comment_prose);
+        assert!(!tokens.iter().any(|(_, text)| text == "prose"));
     }
 
     #[test]
@@ -1122,11 +1229,11 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files: Vec<PathBuf> = Vec::new();
         for relative in ["tests/decompiler_fixtures/src", "tests/decbench_corpus/src"] {
-            files.extend(c_files(&root.join(relative)));
-        }
-        if files.is_empty() {
-            println!("SKIP: no in-repo C corpus under {}", root.display());
-            return;
+            files.extend(
+                crate::test_corpus::sources(&root.join(relative))
+                    .into_iter()
+                    .map(|(path, _)| path),
+            );
         }
         let (mut lines, mut tokens, mut failures) = (0usize, 0usize, Vec::new());
         for path in &files {

@@ -12,8 +12,10 @@ those analyses raises. See ``docs/reference/source-python.md`` for the contract.
 from __future__ import annotations
 
 import warnings
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from stat import S_ISREG
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -69,12 +71,16 @@ class Function:
     @property
     def ddg(self) -> nx.DiGraph:
         """Reject access to an unimplemented data-dependence graph."""
-        raise NotImplementedError("Glaurung's Joern adapter does not compute DDGs")
+        raise NotImplementedError(
+            "Cindergraph's compatibility adapter does not expose Joern DDGs"
+        )
 
     @property
     def ast(self) -> nx.DiGraph:
         """Reject access to a Joern-compatible AST."""
-        raise NotImplementedError("Glaurung's Joern adapter does not expose Joern ASTs")
+        raise NotImplementedError(
+            "Cindergraph's compatibility adapter does not expose Joern ASTs"
+        )
 
 
 def _networkx() -> ModuleType:
@@ -123,6 +129,20 @@ def _graphs(report: source.SourceReport) -> dict[str, nx.DiGraph]:
     return graphs
 
 
+def _require_unique_definitions(report: source.SourceReport, path: Path) -> None:
+    """Prevent name-keyed adapters from merging independent function bodies."""
+    duplicates = sorted(
+        name
+        for name, count in Counter(f.name for f in report.functions).items()
+        if count > 1
+    )
+    if duplicates:
+        raise ValueError(
+            f"{path}: duplicate function definitions for {', '.join(duplicates)}; "
+            "use cindergraph.source.analyze_path to inspect them"
+        )
+
+
 def fast_cfgs_from_source(
     filepath: str | Path,
     lift_cfgs: bool = True,
@@ -153,7 +173,7 @@ def fast_cfgs_from_source(
         ValueError: The path is a directory.
         SourceParseError: Strict mode encountered diagnostics.
         NotImplementedError: A requested option has no supported implementation.
-        ImportError: NetworkX is missing; install ``glaurung[graphs]``.
+        ImportError: NetworkX is missing; install ``cindergraph[graphs]``.
     """
     if not lift_cfgs or not supergraph:
         raise NotImplementedError("Only lift_cfgs=True, supergraph=True is supported")
@@ -206,14 +226,14 @@ def parse_source(
     paths = sorted({*path.rglob("*.c"), *path.rglob("*.h")}) if directory else [path]
     result: dict[str | tuple[str, str], Function] = {}
     for file in paths:
-        if directory and not file.is_file():
+        # is_file() suppresses missing-target errors (and, on newer Python,
+        # other OS errors). A selected but unreadable source must not vanish
+        # from the result. stat() surfaces the error without opening FIFOs or
+        # other special files that are not regular source inputs.
+        if directory and not S_ISREG(file.stat().st_mode):
             continue
         report = _read(file, is_decompilation, strict)
-        names = [f.name for f in report.functions]
-        if len(names) != len(set(names)):
-            raise ValueError(
-                f"{file}: duplicate function definitions; use cindergraph.source.analyze_path to inspect them"
-            )
+        _require_unique_definitions(report, file)
         graphs = {} if no_cfg else _graphs(report)
         for f in report.functions:
             function = Function(
@@ -251,12 +271,14 @@ def parse_callgraph(
 
     Raises:
         OSError: The file cannot be read.
-        ValueError: The path is a directory.
+        ValueError: The path is a directory or contains duplicate function definitions.
         SourceParseError: Strict mode encountered diagnostics.
         ImportError: NetworkX is missing.
     """
     nx = _networkx()
-    report = _read(_single_file(source_path), is_decompilation, strict)
+    path = _single_file(source_path)
+    report = _read(path, is_decompilation, strict)
+    _require_unique_definitions(report, path)
     graph = nx.DiGraph(path=report.name, diagnostics=report.diagnostics)
     graph.add_nodes_from(f.name for f in report.functions)
     graph.add_edges_from(
