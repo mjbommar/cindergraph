@@ -4,7 +4,7 @@ All notable changes to Cindergraph will be documented here. The project uses
 [Semantic Versioning](https://semver.org/) for released versions; pre-1.0 minor
 versions may change APIs and serialized schemas.
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-09-15
 
 Initial standalone extraction from Glaurung:
 
