@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "generated_utc": "2026-09-15T23:16:15Z",
+  "generated_utc": "2026-09-15T23:43:32Z",
   "scope": "15 adjudicated IOCCC C sources; raw and shared-preprocessing Joern lanes",
   "provenance": {
     "ioccc_git_head": "4e10cbf3187c5d7cd882d10e107de1d56375c70c",
-    "cindergraph_git_head": "650f8d6815c58050cbf62743378a252dd953ed23",
-    "cindergraph_worktree_dirty": true,
+    "cindergraph_git_head": "280e35aac85dc5c5e37a2f1fa6662637db8ebdf6",
+    "cindergraph_worktree_dirty": false,
     "python": "3.12.13 (main, Mar 20 2026, 00:33:26) [Clang 22.1.1 ]",
     "platform": "Linux-7.0.0-27-generic-x86_64-with-glibc2.43",
     "pyjoern": "4.0.150.4",
@@ -24,8 +24,8 @@
       "micro_precision": 1.0,
       "micro_recall": 1.0,
       "crashes": 0,
-      "total_seconds": 0.1691537406295538,
-      "median_seconds": 0.00956658273935318
+      "total_seconds": 0.15860483329743147,
+      "median_seconds": 0.01064404845237732
     },
     "joern_raw": {
       "true_positive": 44,
@@ -34,8 +34,8 @@
       "micro_precision": 0.6111111111111112,
       "micro_recall": 1.0,
       "crashes": 0,
-      "total_seconds": 85.88840444199741,
-      "median_seconds": 5.461865711957216
+      "total_seconds": 85.71495386399329,
+      "median_seconds": 5.574266088195145
     },
     "joern_prepared": {
       "true_positive": 44,
@@ -44,13 +44,13 @@
       "micro_precision": 1.0,
       "micro_recall": 1.0,
       "crashes": 0,
-      "total_seconds": 82.2212756164372,
-      "median_seconds": 5.403990942053497
+      "total_seconds": 84.48992460872978,
+      "median_seconds": 5.479416949674487
     },
     "shared_cfgs": 44,
-    "shared_vj_ged_zero": 37,
-    "shared_vj_ged_nonzero": 7,
-    "shared_vj_ged_total": 301.0
+    "shared_vj_ged_zero": 38,
+    "shared_vj_ged_nonzero": 6,
+    "shared_vj_ged_total": 296.0
   },
   "cases": [
     {
@@ -66,7 +66,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.0001492844894528389,
+        "seconds": 0.0002694781869649887,
         "cfgs": {},
         "diagnostics": {
           "errors": 0,
@@ -91,7 +91,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.389979831874371,
+        "seconds": 5.968392575159669,
         "cfgs": {},
         "error": null,
         "diagnostics": "unavailable through pyjoern"
@@ -105,7 +105,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 4.9933048859238625,
+        "seconds": 5.932839554734528,
         "cfgs": {},
         "error": null,
         "diagnostics": "unavailable through pyjoern"
@@ -129,7 +129,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.0003111083060503006,
+        "seconds": 0.0002741338685154915,
         "cfgs": {
           "main": {
             "nodes": 9,
@@ -174,7 +174,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.51009467523545,
+        "seconds": 5.163499393500388,
         "cfgs": {
           "main": {
             "nodes": 9,
@@ -198,7 +198,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 4.98866436816752,
+        "seconds": 5.227112669497728,
         "cfgs": {
           "main": {
             "nodes": 9,
@@ -236,7 +236,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.010834692046046257,
+        "seconds": 0.01126397680491209,
         "cfgs": {
           "cc": {
             "nodes": 6,
@@ -277,7 +277,7 @@
             "-x",
             "c"
           ],
-          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmp18gk90g3.c:21:9: warning: \u2018keyboard\u2019 redefined\n   21 | #define keyboard \"dijs QH.soav Vdtnsaoh DmfpaksoQz;kkt oa, -dijs\"\n      |         ^~~~~~~~\n/home/mjbommar/.cache/glaurung/tmp/tmp18gk90g3.c:3:9: note: this is the location of the previous definition\n    3 | #define keyboard \",,B3-u;.(&*5., /(b*(1\\036!a%\\031m,,,,,\\r\\n\"\n      |         ^~~~~~~~",
+          "stderr": "/tmp/tmp1kr4yke4.c:21:9: warning: \u2018keyboard\u2019 redefined\n   21 | #define keyboard \"dijs QH.soav Vdtnsaoh DmfpaksoQz;kkt oa, -dijs\"\n      |         ^~~~~~~~\n/tmp/tmp1kr4yke4.c:3:9: note: this is the location of the previous definition\n    3 | #define keyboard \",,B3-u;.(&*5., /(b*(1\\036!a%\\031m,,,,,\\r\\n\"\n      |         ^~~~~~~~",
           "includes_removed": false
         },
         "provenance": {
@@ -324,7 +324,7 @@
           "precision": 0.3,
           "recall": 1.0
         },
-        "seconds": 5.39084242656827,
+        "seconds": 5.217449630610645,
         "cfgs": {
           "C": {
             "nodes": 1,
@@ -413,7 +413,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.355862936004996,
+        "seconds": 5.32188883703202,
         "cfgs": {
           "cc": {
             "nodes": 6,
@@ -463,7 +463,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.00012316182255744934,
+        "seconds": 0.0001690620556473732,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -508,7 +508,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.393767054192722,
+        "seconds": 5.103459035977721,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -532,7 +532,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.151930985040963,
+        "seconds": 5.049681252799928,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -568,7 +568,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.020169745199382305,
+        "seconds": 0.014287206344306469,
         "cfgs": {
           "F_OO": {
             "nodes": 403,
@@ -636,7 +636,7 @@
           "precision": 0.6666666666666666,
           "recall": 1.0
         },
-        "seconds": 6.171079323627055,
+        "seconds": 6.225325208157301,
         "cfgs": {
           "F_OO": {
             "nodes": 805,
@@ -675,7 +675,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 6.250369030982256,
+        "seconds": 6.110805802978575,
         "cfgs": {
           "F_OO": {
             "nodes": 403,
@@ -729,7 +729,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.011075494810938835,
+        "seconds": 0.010991917923092842,
         "cfgs": {
           "K": {
             "nodes": 10,
@@ -803,7 +803,7 @@
             "-x",
             "c"
           ],
-          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:92:9: warning: \u2018Y\u2019 redefined\n   92 | #define Y\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:6:9: note: this is the location of the previous definition\n    6 | #define Y {}\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:93:9: warning: \u2018X\u2019 redefined\n   93 | #define X {}\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:5:9: note: this is the location of the previous definition\n    5 | #define X\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:94:9: warning: \u2018o\u2019 redefined\n   94 | #define o }\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:8:9: note: this is the location of the previous definition\n    8 | #define o {\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:95:9: warning: \u2018C\u2019 redefined\n   95 | #define C {\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmp4rhk7j6e.c:7:9: note: this is the location of the previous definition\n    7 | #define C  }\n      |         ^",
+          "stderr": "/tmp/tmpal6m4noc.c:92:9: warning: \u2018Y\u2019 redefined\n   92 | #define Y\n      |         ^\n/tmp/tmpal6m4noc.c:6:9: note: this is the location of the previous definition\n    6 | #define Y {}\n      |         ^\n/tmp/tmpal6m4noc.c:93:9: warning: \u2018X\u2019 redefined\n   93 | #define X {}\n      |         ^\n/tmp/tmpal6m4noc.c:5:9: note: this is the location of the previous definition\n    5 | #define X\n      |         ^\n/tmp/tmpal6m4noc.c:94:9: warning: \u2018o\u2019 redefined\n   94 | #define o }\n      |         ^\n/tmp/tmpal6m4noc.c:8:9: note: this is the location of the previous definition\n    8 | #define o {\n      |         ^\n/tmp/tmpal6m4noc.c:95:9: warning: \u2018C\u2019 redefined\n   95 | #define C {\n      |         ^\n/tmp/tmpal6m4noc.c:7:9: note: this is the location of the previous definition\n    7 | #define C  }\n      |         ^",
           "includes_removed": true
         },
         "provenance": {
@@ -876,7 +876,7 @@
           "precision": 0.875,
           "recall": 1.0
         },
-        "seconds": 5.198495187796652,
+        "seconds": 5.32409702707082,
         "cfgs": {
           "K": {
             "nodes": 10,
@@ -955,7 +955,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.154120821505785,
+        "seconds": 5.4021946201100945,
         "cfgs": {
           "K": {
             "nodes": 10,
@@ -1045,7 +1045,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.007371759042143822,
+        "seconds": 0.012693057768046856,
         "cfgs": {
           "A": {
             "nodes": 12,
@@ -1101,7 +1101,7 @@
             "-x",
             "c"
           ],
-          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmpqs5bjf8f.c:50:9: warning: \u2018v\u2019 redefined\n   50 | #define v(x )\n      |         ^\n/home/mjbommar/.cache/glaurung/tmp/tmpqs5bjf8f.c:7:9: note: this is the location of the previous definition\n    7 | #define v(jr) jr\n      |         ^",
+          "stderr": "/tmp/tmpsfy87h_h.c:50:9: warning: \u2018v\u2019 redefined\n   50 | #define v(x )\n      |         ^\n/tmp/tmpsfy87h_h.c:7:9: note: this is the location of the previous definition\n    7 | #define v(jr) jr\n      |         ^",
           "includes_removed": true
         },
         "provenance": {
@@ -1130,15 +1130,15 @@
             "origin": "source",
             "recovery_qualified": true,
             "diagnostic_count": 1,
-            "start": 2127,
-            "end": 2209
+            "start": 2097,
+            "end": 2179
           },
           "main": {
             "origin": "source",
             "recovery_qualified": true,
             "diagnostic_count": 1,
             "start": 1052,
-            "end": 2126
+            "end": 2096
           }
         }
       },
@@ -1163,7 +1163,7 @@
           "precision": 0.45454545454545453,
           "recall": 1.0
         },
-        "seconds": 5.487886578775942,
+        "seconds": 7.528900403529406,
         "cfgs": {
           "A": {
             "nodes": 12,
@@ -1261,7 +1261,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.372291059233248,
+        "seconds": 6.728843612596393,
         "cfgs": {
           "A": {
             "nodes": 12,
@@ -1327,7 +1327,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.00956658273935318,
+        "seconds": 0.01064404845237732,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -1354,7 +1354,7 @@
             "-x",
             "c"
           ],
-          "stderr": "/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:4:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n    4 | #endif   pqbd\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:10:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   10 | #endif   bpdq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:13:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   13 | #endif   pbdq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:16:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   16 | #endif   qbpb\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:19:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   19 | #endif   pbbq\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:26:10: warning: extra tokens at end of \u2018#else\u2019 directive [-Wendif-labels]\n   26 | #else    dpdp\n      |          ^~~~\n/home/mjbommar/.cache/glaurung/tmp/tmplvfpz7w4.c:152:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n  152 | #endif   qbpp\n      |          ^~~~",
+          "stderr": "/tmp/tmppu1rz5dt.c:4:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n    4 | #endif   pqbd\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:10:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   10 | #endif   bpdq\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:13:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   13 | #endif   pbdq\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:16:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   16 | #endif   qbpb\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:19:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n   19 | #endif   pbbq\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:26:10: warning: extra tokens at end of \u2018#else\u2019 directive [-Wendif-labels]\n   26 | #else    dpdp\n      |          ^~~~\n/tmp/tmppu1rz5dt.c:152:10: warning: extra tokens at end of \u2018#endif\u2019 directive [-Wendif-labels]\n  152 | #endif   qbpp\n      |          ^~~~",
           "includes_removed": true
         },
         "provenance": {
@@ -1378,7 +1378,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.478013013489544,
+        "seconds": 5.805482064373791,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -1402,7 +1402,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.403990942053497,
+        "seconds": 5.409226646646857,
         "cfgs": {
           "main": {
             "nodes": 1,
@@ -1460,7 +1460,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.0182386739179492,
+        "seconds": 0.016591964289546013,
         "cfgs": {
           "E": {
             "nodes": 3,
@@ -1674,15 +1674,15 @@
             "origin": "source",
             "recovery_qualified": true,
             "diagnostic_count": 2,
-            "start": 2784,
-            "end": 2954
+            "start": 2754,
+            "end": 2924
           },
           "pain": {
             "origin": "source",
             "recovery_qualified": true,
             "diagnostic_count": 1,
             "start": 945,
-            "end": 2783
+            "end": 2753
           },
           "ru": {
             "origin": "expansion-generated",
@@ -1724,7 +1724,7 @@
           "precision": 0.9285714285714286,
           "recall": 1.0
         },
-        "seconds": 5.461865711957216,
+        "seconds": 5.349638286978006,
         "cfgs": {
           "E": {
             "nodes": 4,
@@ -1851,7 +1851,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.520567409694195,
+        "seconds": 5.181535589508712,
         "cfgs": {
           "E": {
             "nodes": 3,
@@ -1981,7 +1981,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.011065837927162647,
+        "seconds": 0.013043341226875782,
         "cfgs": {
           "main": {
             "nodes": 259,
@@ -2037,7 +2037,7 @@
           "precision": 0.125,
           "recall": 1.0
         },
-        "seconds": 6.523410654626787,
+        "seconds": 6.495232709683478,
         "cfgs": {
           "C": {
             "nodes": 1,
@@ -2110,7 +2110,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 6.326220096088946,
+        "seconds": 6.620088644325733,
         "cfgs": {
           "main": {
             "nodes": 259,
@@ -2144,7 +2144,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.001012427732348442,
+        "seconds": 0.000998564064502716,
         "cfgs": {
           "main": {
             "nodes": 61,
@@ -2187,7 +2187,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.158114356920123,
+        "seconds": 5.574266088195145,
         "cfgs": {
           "main": {
             "nodes": 61,
@@ -2211,7 +2211,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.442561929114163,
+        "seconds": 5.482672506943345,
         "cfgs": {
           "main": {
             "nodes": 61,
@@ -2255,7 +2255,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.015057473443448544,
+        "seconds": 0.010531974025070667,
         "cfgs": {
           "C": {
             "nodes": 9,
@@ -2382,7 +2382,7 @@
           "precision": 0.6666666666666666,
           "recall": 1.0
         },
-        "seconds": 6.135888011194766,
+        "seconds": 5.395458740182221,
         "cfgs": {
           "C": {
             "nodes": 9,
@@ -2467,7 +2467,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.745749423280358,
+        "seconds": 5.589821194298565,
         "cfgs": {
           "C": {
             "nodes": 9,
@@ -2541,7 +2541,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.06310655642300844,
+        "seconds": 0.05576671287417412,
         "cfgs": {
           "main": {
             "nodes": 3,
@@ -2592,7 +2592,7 @@
           "precision": 0.3333333333333333,
           "recall": 1.0
         },
-        "seconds": 8.015176584012806,
+        "seconds": 5.61586197745055,
         "cfgs": {
           "O": {
             "nodes": 1,
@@ -2630,7 +2630,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.549814913421869,
+        "seconds": 5.5836632857099175,
         "cfgs": {
           "main": {
             "nodes": 3,
@@ -2664,7 +2664,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.0002447124570608139,
+        "seconds": 0.00027460046112537384,
         "cfgs": {
           "main": {
             "nodes": 11,
@@ -2709,7 +2709,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.222534927539527,
+        "seconds": 5.271597729995847,
         "cfgs": {
           "main": {
             "nodes": 11,
@@ -2733,7 +2733,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.4038302674889565,
+        "seconds": 5.479416949674487,
         "cfgs": {
           "main": {
             "nodes": 11,
@@ -2767,11 +2767,11 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 0.0008262302726507187,
+        "seconds": 0.0008047949522733688,
         "cfgs": {
           "main": {
-            "nodes": 59,
-            "edges": 86,
+            "nodes": 60,
+            "edges": 87,
             "entry_nodes": 1,
             "exit_nodes": 0,
             "has_single_entry": true
@@ -2810,7 +2810,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.351256104186177,
+        "seconds": 5.6762929931283,
         "cfgs": {
           "main": {
             "nodes": 60,
@@ -2834,7 +2834,7 @@
           "precision": 1.0,
           "recall": 1.0
         },
-        "seconds": 5.561996548436582,
+        "seconds": 5.370133441872895,
         "cfgs": {
           "main": {
             "nodes": 60,
@@ -2848,7 +2848,7 @@
         "diagnostics": "unavailable through pyjoern"
       },
       "prepared_shared_vj_ged": {
-        "main": 5.0
+        "main": 0.0
       }
     }
   ]

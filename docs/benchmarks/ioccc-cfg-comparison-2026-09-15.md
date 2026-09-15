@@ -16,9 +16,9 @@ that is made executable by the build procedure.
 
 | Provider/input | TP | FP | FN | Precision | Recall | Crashes | Total time |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Cindergraph automatic preparation | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 0.149 s |
-| Joern raw source | 44 | 28 | 0 | 0.611 | 1.000 | 0 | 86.744 s |
-| Joern identical prepared source | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 101.961 s |
+| Cindergraph automatic preparation | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 0.159 s |
+| Joern raw source | 44 | 28 | 0 | 0.611 | 1.000 | 0 | 85.715 s |
+| Joern identical prepared source | 44 | 0 | 0 | 1.000 | 1.000 | 0 | 84.490 s |
 
 The raw-source Joern false positives are macro identifiers interpreted as
 functions. They disappear when Joern receives the same preprocessed text as
