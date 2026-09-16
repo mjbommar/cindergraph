@@ -3,3 +3,22 @@ Copyright 2026 Michael Bommarito
 
 This project contains source-analysis code originally developed as part of
 Glaurung: https://github.com/mjbommar/glaurung
+
+Design and evaluation acknowledgements
+
+Cindergraph is an independent implementation whose design, documentation,
+testing, and interoperability work were informed by the following projects:
+
+- Tree-sitter (MIT): parser architecture and error-recovery reference;
+- Joern (Apache-2.0): code-property-graph and control-flow design reference,
+  and a comparison target for the narrow DecBench-facing CFG projection;
+- DecBench (MIT): evaluation methodology, fixtures, normalization behaviour,
+  and the interface used by the DecBench-adjacent compatibility path;
+- cfgutils (BSD-2-Clause): reference behaviour for the VJ-GED calculation used
+  by DecBench; and
+- Clang/LLVM (Apache-2.0 with LLVM Exceptions): compiler architecture,
+  semantic-analysis documentation, and an evaluation oracle.
+
+These acknowledgements describe design inspiration, behavioural references,
+evaluation, and interoperability. They do not imply endorsement by those
+projects or that Cindergraph implements their complete APIs or data models.
