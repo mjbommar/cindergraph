@@ -85,7 +85,7 @@ by how much consumer code they would delete.
 
 ## Status, 2026-09-17
 
-Fourteen of sixteen done, in three lanes on top of `cfdeacc` (0.1.0). Every
+Fifteen of sixteen done, in four lanes on top of `cfdeacc` (0.1.0). Every
 change is additive: no attribute, name or order moved, and the Axeyum
 consumer's results table is byte-identical before and after. Commits are on
 `main` unless a branch is named.
@@ -98,7 +98,7 @@ consumer's results table is byte-identical before and after. Commits are on
 | 4 | array declarators as structure | done | `a2c6c4b`: `element_type`, `array_bound`, `count` |
 | 5 | parameter declarations as fields | done | `a2c6c4b`: `type`, `pointer_depth`, `name` |
 | 6 | `line` and `column` on every node | done | `a2c6c4b` |
-| 7 | a consumer contract for external facts | **open** | no annotation form or API argument yet; the consumer's `// axeyum: capacity(dst) = dst_len` comment stays on its side. Needs a decision on form (comment grammar vs. `AnalysisSession(..., facts=...)`), not code. |
+| 7 | a consumer contract for external facts | done | branch `cg-facts-2026-09-17` (CG-FACTS), `b1c5376`: both forms, one grammar (`docs/design/external-facts-2026-09-17.md`). `// @cindergraph capacity(dst) = dst_len` / `strlen(s) = n` / `unroll = 8` comments above the function (`// axeyum:` is an alias) and `AnalysisSession(..., facts={...})` (also `export_graphs`, `export_path`, `native_graphs`) land as `facts`/`facts_source` on `param_decl`, `func_def` and the parameter's `ops` loads and stores; the API wins over a comment; every fact that cannot be attached is a `Diagnostic`. `csource::facts`, `test_external_facts.py` |
 | 8 | `__version__` | done | `00a0e72` |
 | 9 | spans are byte offsets, documented | done | `670530e` ("Export schema") |
 | 10 | source text handed to a path parameter | done | `00a0e72`: `ValueError` naming the parameter |
