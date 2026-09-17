@@ -49,9 +49,18 @@ pub(crate) struct FunctionResolution {
     declarations: Vec<SymbolDeclaration>,
     scopes: Vec<LexicalScope>,
     by_span: BTreeMap<Span, SymbolId>,
+    /// How many leading entries of `declarations` are the function's own
+    /// parameters; they are pushed first, so the parameters are exactly the
+    /// ids below this count.
+    parameters: u32,
 }
 
 impl FunctionResolution {
+    /// Whether `declaration` is one of the function's own parameters.
+    pub(crate) fn is_parameter(&self, declaration: &SymbolDeclaration) -> bool {
+        declaration.id.0 < self.parameters
+    }
+
     /// Declaration identity carried by this exact declared-name span.
     pub(crate) fn declaration_at(&self, span: Span) -> Option<&SymbolDeclaration> {
         self.by_span
@@ -333,6 +342,7 @@ pub(crate) fn resolve_function(
             SymbolKind::Value,
         );
     }
+    resolution.parameters = resolution.declarations.len() as u32;
 
     let mut stack = vec![(root, 0u32, None)];
     while let Some((node, inherited_scope, inherited_declarator)) = stack.pop() {

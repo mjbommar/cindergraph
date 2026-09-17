@@ -64,7 +64,33 @@ attribute, name or order changes, and the parity projection is untouched.
 - the export's ordering is documented as a contract (AST ids in preorder and
   ascending with span, edges grouped by parent with children in source order;
   CFG nodes entry-first, edges grouped by source) and pinned by tests in Rust
-  and Python.
+  and Python;
+- loop metadata for a bounded unroller (item 12): `for_stmt`, `while_stmt`
+  and `do_while_stmt` AST nodes, and the CFG `loop_header` (and its CDG/PDG
+  twins) they become, carry `loop_kind`, `bound_kind` (`constant`,
+  `parameter`, `runtime`, `none`), `bound_expr`, `induction`, `step` (`+1`,
+  `-1`, `+N`), `init_value` and, when constant, `bound_value`. `constant`
+  means the header fixes the trip count by itself (literal initializer, one
+  relational comparison of the induction variable against a literal, a
+  `++`/`--`/`+= literal` step, no other write to the variable); `parameter`
+  is the same shape against a function parameter the loop never assigns;
+  everything undecided is `runtime` --- every `while` and `do` included,
+  since nothing fixes their start value --- never a guess. The classifier is
+  `csource::export::loops`;
+- one parse per source (item 13) is documented as the way to consume:
+  `AnalysisSession` parses once and serves diagnostics and every export from
+  that parse, byte-identical to the module-level functions, which each parse
+  again (measured: four parser entries for `analyze` + three exports through
+  the free functions, one through a session). Pinned by
+  `python/tests/test_session_single_parse.py`;
+- a defect conformance corpus (item 15): `tests/fixtures/defects/` vendors
+  the twelve annotated defect/fix samples Axeyum's solver front end consumes,
+  plus one loop sample, and `python/tests/test_defect_conformance.py` asserts
+  for every function what a semantic consumer must see --- `op` on every
+  operator node, a resolved `type` on every reference to a parameter or
+  local, every `if` condition as a statement-level CFG `cond`, every loop
+  header classified, every `ops` operation typed. `FunctionResolution` can
+  now say whether a declaration is a parameter.
 
 ## 0.1.0 — 2026-09-15
 
