@@ -213,6 +213,14 @@ pub struct GranularityStats {
     /// Structural headers removed from `for (;;)` loops, which have no test
     /// expression and therefore no Joern CFG node.
     pub empty_for_headers_elided: u32,
+    /// Impossible false exits removed from syntactically constant-true loops
+    /// (`while (1)`, `do ... while (1)`, `for (...; 1; ...)`); the header and
+    /// its cycle stay.
+    pub constant_loop_exits_elided: u32,
+    /// Bare literal `if` tests elided while preserving their fork.
+    pub literal_if_tests_elided: u32,
+    /// Duplicate loop headers collapsed around a ternary in a loop test.
+    pub ternary_loop_branches_collapsed: u32,
 }
 
 /// Rewrite one function's S2 graph to Joern's expression granularity.
@@ -233,6 +241,7 @@ pub struct GranularityStats {
 /// deliberately not the general analysis graph.
 pub fn expression_granular(
     tree: &Tree,
+    text: &str,
     token_spans: &[Span],
     body: NodeId,
     cfg: &Cfg,
@@ -240,10 +249,17 @@ pub fn expression_granular(
     let mut stats = GranularityStats::default();
     let regions = collect(tree, token_spans, body, cfg, &mut stats);
     let empty_for_spans = empty_for_spans(tree, token_spans, body);
+    let constant_true_headers = constant_true_loop_headers(tree, text, token_spans, body, cfg);
+    let literal_if_tests = literal_if_test_nodes(tree, token_spans, body, cfg);
     let jumps = cfg.nodes().iter().any(|node| is_jump_node(node.kind()));
     // Staying free where neither half applies is deliberate: `Cfg`'s `PartialEq`
     // is over the edge *vector*, and rebuilding one through `Work` reorders it.
-    if regions.is_empty() && empty_for_spans.is_empty() && !jumps {
+    if regions.is_empty()
+        && empty_for_spans.is_empty()
+        && constant_true_headers.is_empty()
+        && literal_if_tests.is_empty()
+        && !jumps
+    {
         return (cfg.clone(), stats);
     }
     let mut work = Work::from_cfg(cfg);
@@ -256,6 +272,16 @@ pub fn expression_granular(
     elide_empty_for_headers(&mut work, &empty_for_spans, &mut stats);
     for region in &regions {
         elide(tree, &mut work, region, &mut stats);
+    }
+    for header in constant_true_headers {
+        if work.remove_false_edges(header) {
+            stats.constant_loop_exits_elided = stats.constant_loop_exits_elided.saturating_add(1);
+        }
+    }
+    for test in literal_if_tests {
+        if work.bypass(test) {
+            stats.literal_if_tests_elided = stats.literal_if_tests_elided.saturating_add(1);
+        }
     }
     elide_jumps(&mut work, &mut stats);
     (work.finish(cfg.entry(), cfg.exit()), stats)
@@ -306,6 +332,182 @@ fn elide_empty_for_headers(work: &mut Work, spans: &[Span], stats: &mut Granular
             stats.empty_for_headers_elided = stats.empty_for_headers_elided.saturating_add(1);
         }
     }
+}
+
+/// Loop headers whose false edge is impossible from the source text.
+///
+/// S2 deliberately gives every loop a conservative fall-through edge. That is
+/// useful while a condition is unknown, but it is a real over-approximation
+/// for `while (1)`, `do ... while (1)` and `for (...; 1; ...)`. Keep the
+/// header and its cycle and remove only the impossible false edge; when a
+/// reachable `break` supplies the loop's real exit, ordinary chain contraction
+/// then absorbs the header into the first body block, which is the shape
+/// Joern has. Ported from Glaurung `0266715f`, which measured the removal at
+/// +227 net exact cells over DecBench's 85,645-cell oracle.
+///
+/// A clause-less `for (;;)` is deliberately *not* in this set: its empty
+/// `ForCond` has no expression to be a literal, and
+/// [`elide_empty_for_headers`] already deletes that header the way Joern's
+/// measured graph does (`a_conditionless_for_has_no_structural_header`). The
+/// two rules therefore never both fire on one loop; see
+/// `docs/benchmarks/glaurung-parity-corrections-2026-09-17.md` for where they
+/// would have disagreed.
+fn constant_true_loop_headers(
+    tree: &Tree,
+    text: &str,
+    token_spans: &[Span],
+    body: NodeId,
+    cfg: &Cfg,
+) -> Vec<NodeId> {
+    let mut spans = BTreeSet::new();
+    for node in tree.arena().preorder(body) {
+        let Some(tag) = tag_of(tree, node) else {
+            continue;
+        };
+        if !matches!(
+            tag,
+            NodeTag::WhileStmt | NodeTag::DoWhileStmt | NodeTag::ForStmt
+        ) {
+            continue;
+        }
+        let condition = if tag == NodeTag::ForStmt {
+            tree.arena()
+                .children_iter(node)
+                .find(|child| tag_of(tree, *child) == Some(NodeTag::ForCond))
+                .and_then(|clause| {
+                    tree.arena()
+                        .children_iter(clause)
+                        .find(|child| tag_of(tree, *child).is_some_and(NodeTag::is_expression))
+                })
+        } else {
+            tree.arena()
+                .children_iter(node)
+                .find(|child| tag_of(tree, *child).is_some_and(NodeTag::is_expression))
+        };
+        let Some(condition) = condition else {
+            continue;
+        };
+        if integer_literal_is_nonzero(tree, text, token_spans, condition) {
+            if let Some(span) = tree.arena().span(condition, token_spans) {
+                spans.insert((span.lo, span.hi));
+            }
+        }
+    }
+    cfg.nodes()
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            node.kind() == NodeKind::LoopHeader && spans.contains(&(node.span().lo, node.span().hi))
+        })
+        .map(|(index, _)| NodeId::new(index as u32))
+        .collect()
+}
+
+/// Bare literal `if` tests, which Joern represents only as a fork.
+///
+/// Glaurung's fresh differential over `if (0)`, `if (1)` and nested literal
+/// tests (its `68b39f18`) confirms that Joern emits no literal node --- the
+/// same rule [`materializes`] applies to a literal operand. Its CFG still
+/// carries both arms: the fork moves to the predecessor, and NetworkX
+/// deduplicates arms that then name the same successor. This is a parity-view
+/// granularity rule, not constant folding, so it deliberately does not choose
+/// a feasible arm.
+fn literal_if_test_nodes(
+    tree: &Tree,
+    token_spans: &[Span],
+    body: NodeId,
+    cfg: &Cfg,
+) -> Vec<NodeId> {
+    let mut spans = BTreeSet::new();
+    for node in tree.arena().preorder(body) {
+        if tag_of(tree, node) != Some(NodeTag::IfStmt) {
+            continue;
+        }
+        let Some(condition) = tree
+            .arena()
+            .children_iter(node)
+            .find(|child| tag_of(tree, *child).is_some_and(NodeTag::is_expression))
+        else {
+            continue;
+        };
+        if is_bare_literal(tree, condition) {
+            if let Some(span) = tree.arena().span(condition, token_spans) {
+                spans.insert((span.lo, span.hi));
+            }
+        }
+    }
+    cfg.nodes()
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            node.kind() == NodeKind::Cond && spans.contains(&(node.span().lo, node.span().hi))
+        })
+        .map(|(index, _)| NodeId::new(index as u32))
+        .collect()
+}
+
+/// Whether `node` is a literal, through transparent parentheses.
+fn is_bare_literal(tree: &Tree, mut node: NodeId) -> bool {
+    for _ in 0..=tree.arena().len() {
+        match tag_of(tree, node) {
+            Some(NodeTag::ParenExpr) if tree.arena().child_count(node) == 1 => {
+                let Some(inner) = tree.arena().child(node, 0) else {
+                    return false;
+                };
+                node = inner;
+            }
+            Some(NodeTag::Literal) => return true,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Recognise a nonzero C integer literal through transparent parentheses.
+///
+/// This intentionally declines expressions and macros. A missed proof keeps
+/// the conservative edge; a guessed proof would delete feasible control flow.
+fn integer_literal_is_nonzero(
+    tree: &Tree,
+    text: &str,
+    token_spans: &[Span],
+    mut node: NodeId,
+) -> bool {
+    for _ in 0..=tree.arena().len() {
+        match tag_of(tree, node) {
+            Some(NodeTag::ParenExpr) if tree.arena().child_count(node) == 1 => {
+                let Some(inner) = tree.arena().child(node, 0) else {
+                    return false;
+                };
+                node = inner;
+            }
+            Some(NodeTag::Literal) => break,
+            _ => return false,
+        }
+    }
+    let Some(span) = tree.arena().span(node, token_spans) else {
+        return false;
+    };
+    let Some(raw) = text.get(span.range()) else {
+        return false;
+    };
+    let digits = raw.trim().trim_end_matches(['u', 'U', 'l', 'L']);
+    let (radix, digits) = if let Some(rest) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        (16, rest)
+    } else if let Some(rest) = digits
+        .strip_prefix("0b")
+        .or_else(|| digits.strip_prefix("0B"))
+    {
+        (2, rest)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (8, &digits[1..])
+    } else {
+        (10, digits)
+    };
+    u128::from_str_radix(digits, radix).is_ok_and(|value| value != 0)
 }
 
 /// Remove S2's conservative structural header from a short-circuit loop test.
@@ -374,7 +576,7 @@ pub fn expression_granular_cfgs(tree: &Tree, text: &str, functions: &[FunctionCf
         .iter()
         .map(
             |function| match bodies.get(&(function.span.lo, function.span.hi)) {
-                Some(&body) => expression_granular(tree, &token_spans, body, &function.cfg).0,
+                Some(&body) => expression_granular(tree, text, &token_spans, body, &function.cfg).0,
                 None => function.cfg.clone(),
             },
         )
@@ -399,6 +601,8 @@ enum Shape {
 #[derive(Debug, Clone)]
 struct Region {
     shape: Shape,
+    /// Exact extent of this operator expression.
+    span: Span,
     /// The AST operand nodes, in source order.
     operands: Vec<NodeId>,
     /// The CFG node each operand's evaluation ends at, parallel to `operands`.
@@ -526,6 +730,7 @@ fn resolve(
     let entry = evaluation_entry(tree, token_spans, index, operands[0]).unwrap_or(ends[0]);
     Some(Region {
         shape,
+        span: tree.arena().span(node, token_spans)?,
         operands,
         entry,
         ends,
@@ -690,6 +895,11 @@ fn nest(work: &mut Work, region: &Region, stats: &mut GranularityStats) {
 /// edge, because both of its predecessor's edges then name the operator node
 /// and [`Work::add_edge`] keeps one (bash `evalstring`).
 fn elide(tree: &Tree, work: &mut Work, region: &Region, stats: &mut GranularityStats) {
+    // Detect this before operand elision: bypassing a trivial ternary condition
+    // moves the header's predecessor relation onto the surviving arm/join and
+    // would make the original loop boundary ambiguous.
+    let ternary_loop_collapsed = region.shape == Shape::Conditional
+        && work.collapse_ternary_loop_header(region.ends[0], region.terminal, region.span);
     for (operand, end) in region.operands.iter().zip(region.ends.iter()) {
         if materializes(tree, *operand) {
             continue;
@@ -697,6 +907,27 @@ fn elide(tree: &Tree, work: &mut Work, region: &Region, stats: &mut GranularityS
         if work.bypass(*end) {
             stats.elided = stats.elided.saturating_add(1);
         }
+    }
+    // In `while (i < (x ? 14 : 8))`, S2's generic expression lowering leaves
+    // a synthetic LoopHeader branching before the nested conditional has been
+    // evaluated. Joern's CFG (and the semantic block shape) instead sends both
+    // entry and the loop-back edge to the expression's real first node. This
+    // holds for materializing casts, loads and calls too; those expressions
+    // must remain, while an entirely trivial ternary has no Joern operator
+    // node and its terminal is bypassed as well. Ported from Glaurung
+    // `f9a5cbaa`, where a broader rule without the span-containment check
+    // regressed 162 exact cells and the contained one changed exactly the
+    // nine it was written for.
+    if ternary_loop_collapsed {
+        if region
+            .operands
+            .iter()
+            .all(|operand| !materializes(tree, *operand))
+        {
+            let _ = work.bypass(region.terminal);
+        }
+        stats.ternary_loop_branches_collapsed =
+            stats.ternary_loop_branches_collapsed.saturating_add(1);
     }
 }
 
@@ -960,6 +1191,76 @@ impl Work {
         self.pred[dst.index()].retain(|node| *node != src);
     }
 
+    /// Collapse the redundant header around a ternary nested in a loop test.
+    ///
+    /// Fires only when the region's terminal is the `Stmt` node carrying
+    /// exactly the operator's span, the condition has one live predecessor
+    /// other than the terminal, that predecessor is a `LoopHeader` whose span
+    /// contains the operator's, and the header both reaches the condition and
+    /// still has its conservative false exit. Anything else --- a ternary at
+    /// the start of a loop *body*, an ordinary loop, a `?:` in a non-loop
+    /// test --- is left exactly as it was.
+    fn collapse_ternary_loop_header(
+        &mut self,
+        condition: NodeId,
+        terminal: NodeId,
+        span: Span,
+    ) -> bool {
+        if self.alive.get(condition.index()) != Some(&true)
+            || self.alive.get(terminal.index()) != Some(&true)
+            || self.kinds.get(terminal.index()) != Some(&NodeKind::Stmt)
+            || !self
+                .spans
+                .get(terminal.index())
+                .is_some_and(|spans| spans.as_slice() == [span])
+        {
+            return false;
+        }
+        let predecessors: Vec<NodeId> = self.pred[condition.index()]
+            .iter()
+            .copied()
+            .filter(|node| *node != terminal && self.alive[node.index()])
+            .collect();
+        if predecessors.len() != 1 {
+            return false;
+        }
+        let header = predecessors[0];
+        let header_span = self
+            .spans
+            .get(header.index())
+            .and_then(|spans| spans.first().copied());
+        if self.kinds.get(header.index()) != Some(&NodeKind::LoopHeader)
+            || !header_span.is_some_and(|outer| outer.lo <= span.lo && span.hi <= outer.hi)
+            || !self.succ[header.index()]
+                .iter()
+                .any(|out| out.dst == condition)
+            || !self.succ[header.index()]
+                .iter()
+                .any(|out| out.kind == EdgeKind::False)
+        {
+            return false;
+        }
+        self.remove_false_edges(header);
+        self.bypass(header)
+    }
+
+    /// Delete every impossible false arm of a proven constant-true test.
+    fn remove_false_edges(&mut self, src: NodeId) -> bool {
+        let removed: Vec<NodeId> = self.succ[src.index()]
+            .iter()
+            .filter(|out| out.kind == EdgeKind::False)
+            .map(|out| out.dst)
+            .collect();
+        if removed.is_empty() {
+            return false;
+        }
+        self.succ[src.index()].retain(|out| out.kind != EdgeKind::False);
+        for dst in removed {
+            self.pred[dst.index()].retain(|node| *node != src);
+        }
+        true
+    }
+
     /// Point `src`'s edge to `from` at `to` instead, keeping its kind.
     fn retarget(&mut self, src: NodeId, from: NodeId, to: NodeId) {
         let Some(out) = self.succ[src.index()]
@@ -1104,7 +1405,7 @@ mod tests {
             .expect("the function has a graph")
             .clone();
         let body = definition.body.expect("the body parsed");
-        let (after, stats) = expression_granular(tree, &spans, body, &function.cfg);
+        let (after, stats) = expression_granular(tree, text, &spans, body, &function.cfg);
         (function.cfg, after, stats)
     }
 
@@ -1830,6 +2131,179 @@ mod tests {
             2,
             "both transfers were blocks of their own before"
         );
+    }
+
+    #[test]
+    fn constant_true_loop_loses_only_its_impossible_false_exit() {
+        let text = "int f(int x) { while (1) { if (x) break; x--; } return x; }";
+        let (before, after, stats) = rewrite(text, "f");
+        let before_header = before
+            .nodes()
+            .iter()
+            .position(|node| node.kind() == NodeKind::LoopHeader)
+            .map(|index| NodeId::new(index as u32))
+            .expect("S2 emitted the loop header");
+        let after_header = after
+            .nodes()
+            .iter()
+            .position(|node| node.kind() == NodeKind::LoopHeader)
+            .map(|index| NodeId::new(index as u32))
+            .expect("the semantic loop node remains");
+        assert!(before
+            .successor_edges(before_header)
+            .iter()
+            .any(|edge| edge.kind == EdgeKind::False));
+        assert!(after
+            .successor_edges(after_header)
+            .iter()
+            .all(|edge| edge.kind != EdgeKind::False));
+        assert_eq!(stats.constant_loop_exits_elided, 1);
+        // Chain contraction then absorbs the header into the `if` block, which
+        // is the four-node shape Joern 4.0.150.4 gives the same loop spelled
+        // `for (;;)` (`a_conditionless_for_has_no_structural_header`).
+        assert_eq!(
+            projected(&after),
+            published(4, &[(0, 1), (1, 2), (1, 3), (2, 1)]),
+            "the false exit is gone and the header has merged into the test"
+        );
+    }
+
+    #[test]
+    fn constant_false_and_unknown_loops_keep_their_false_exits() {
+        for text in [
+            "int f(int x) { while (0) x--; return x; }",
+            "int f(int x) { while (x) x--; return x; }",
+        ] {
+            let (before, after, stats) = rewrite(text, "f");
+            assert_eq!(stats.constant_loop_exits_elided, 0, "{text}");
+            assert_eq!(before, after, "{text}");
+        }
+    }
+
+    #[test]
+    fn constant_true_empty_loop_keeps_its_cycle() {
+        let (_, after, stats) = rewrite("void f(void) { while (1) {} }", "f");
+        let header = after
+            .nodes()
+            .iter()
+            .position(|node| node.kind() == NodeKind::LoopHeader)
+            .map(|index| NodeId::new(index as u32))
+            .expect("the infinite loop remains represented");
+        assert!(after
+            .successor_edges(header)
+            .iter()
+            .any(|edge| edge.dst == header));
+        assert_eq!(stats.constant_loop_exits_elided, 1);
+    }
+
+    #[test]
+    fn nested_literal_if_tests_cost_no_nodes_but_keep_their_forks() {
+        let text = "void f(void) { if (1) { if (0) g(); } h(); }";
+        let (_, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.literal_if_tests_elided, 2);
+        assert_eq!(
+            projected(&after),
+            published(3, &[(0, 2), (1, 0), (1, 2)]),
+            "fresh Joern differential: entry forks to g() or h(), then g() reaches h()"
+        );
+    }
+
+    #[test]
+    fn a_variable_if_test_still_materializes() {
+        let text = "void f(int x) { if (x) g(); h(); }";
+        let (before, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.literal_if_tests_elided, 0);
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn value_only_ternary_in_a_loop_condition_has_one_final_branch() {
+        let text = "int f(int x, int i) { while (i < (x ? 14 : 8)) i++; return i; }";
+        let (_, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.ternary_loop_branches_collapsed, 1);
+        assert_eq!(
+            projected(&after),
+            published(4, &[(0, 2), (2, 0), (2, 1), (3, 2)]),
+            "fresh Joern differential: entry and back edge reach one branch"
+        );
+    }
+
+    #[test]
+    fn a_side_effecting_ternary_arm_keeps_the_expression_but_not_the_duplicate_header() {
+        let text = "int f(int x, int i) { while (i < (x ? g() : 8)) i++; return i; }";
+        let (before, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.ternary_loop_branches_collapsed, 1);
+        assert!(after.node_count() < before.node_count());
+        assert!(after
+            .nodes()
+            .iter()
+            .all(|node| node.kind() != NodeKind::LoopHeader));
+        assert!(
+            after
+                .nodes()
+                .iter()
+                .any(|node| node.kind() == NodeKind::Stmt),
+            "the call-bearing expression remains"
+        );
+    }
+
+    #[test]
+    fn ternary_loop_cast_compare_and_load_variants_keep_their_expression_nodes() {
+        for text in [
+            "int f(int x, int i, unsigned char b) { while (i < (x ? (unsigned int)b : 14)) i++; return i; }",
+            "int f(int i, unsigned char b) { while (i < ((b < 14) ? (unsigned int)b : 14)) i++; return i; }",
+            "int f(int i, unsigned char *p) { while (i < ((*p < 14) ? (unsigned int)*p : 14)) i++; return i; }",
+        ] {
+            let (before, after, stats) = rewrite(text, "f");
+            assert_eq!(stats.ternary_loop_branches_collapsed, 1, "{text}");
+            assert!(after.node_count() < before.node_count(), "{text}");
+            assert!(
+                after.nodes().iter().all(|node| node.kind() != NodeKind::LoopHeader),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_ternary_at_the_start_of_a_loop_body_is_not_a_loop_test() {
+        let text = "int f(int x, int i) { while (i < 10) { x ? g() : h(); i++; } return i; }";
+        let (before, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.ternary_loop_branches_collapsed, 0);
+        assert_eq!(
+            before
+                .nodes()
+                .iter()
+                .filter(|n| n.kind() == NodeKind::LoopHeader)
+                .count(),
+            1
+        );
+        assert_eq!(
+            after
+                .nodes()
+                .iter()
+                .filter(|n| n.kind() == NodeKind::LoopHeader)
+                .count(),
+            1
+        );
+    }
+
+    /// The clause-less spelling stays with `elide_empty_for_headers`: the two
+    /// rules must never both fire on one loop, and the projected bytes on a
+    /// loop with a reachable `break` are the same either way.
+    #[test]
+    fn a_conditionless_for_is_not_a_constant_true_header() {
+        let text = "int f(int limit) { int i = 0; for (;;) { \
+                    if (i >= limit) break; i++; } return i; }";
+        let (_, after, stats) = rewrite(text, "f");
+        assert_eq!(stats.empty_for_headers_elided, 1);
+        assert_eq!(stats.constant_loop_exits_elided, 0);
+        let (_, spelled_while, while_stats) = rewrite(
+            "int f(int limit) { int i = 0; while (1) { \
+             if (i >= limit) break; i++; } return i; }",
+            "f",
+        );
+        assert_eq!(while_stats.constant_loop_exits_elided, 1);
+        assert_eq!(projected(&after), projected(&spelled_while));
     }
 
     /// A function with no short-circuit at all must come back as the very same

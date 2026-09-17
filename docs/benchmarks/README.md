@@ -25,6 +25,10 @@ benchmark record.
   assigns every original mismatch to a root-cause class, records completed
   semantic repairs, and links the checked proof or correction that closes each
   graph.
+- [Porting Glaurung's four DecBench parity corrections, 2026-09-17](glaurung-parity-corrections-2026-09-17.md)
+  sizes each correction against the crate, settles the `for (;;)` rule on the
+  recorded Joern data, and measures the port against the recorded comparison
+  (bytes unchanged over all 930 functions; the shapes are not in the corpus).
 - [Post-remediation machine-readable comparison](data/joern-complete-2026-09-15.json)
   measures 894 exact graphs over the unchanged 930-function population.
 - [Difference-closure audit](data/joern-closure-audit-2026-09-15.json) maps all
