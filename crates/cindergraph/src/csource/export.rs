@@ -35,6 +35,9 @@
 
 use crate::csource::parse::tag::NodeTag;
 use crate::csource::parse::Tree;
+use crate::csource::semantic::expr_types::{
+    CType, ExpressionTyper, ExpressionTypes, Layer, ParameterFacts,
+};
 use crate::csource::semantic::AnalysisUnit;
 use crate::syntax::cfg::Cfg;
 use crate::syntax::diag::Parsed;
@@ -131,10 +134,28 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
             .map(|function| cfg_view(&function.name, &function.cfg, text))
             .collect(),
         Repr::Ast => {
-            let spans = tree.token_spans(text);
+            let spans = unit.token_spans();
             tree.functions(text)
                 .iter()
-                .map(|function| ast_view(&function.name, tree, function.node, &spans, text))
+                .map(|function| {
+                    let semantics = unit
+                        .functions()
+                        .iter()
+                        .position(|candidate| candidate.node == function.node)
+                        .and_then(|index| unit.expression_typer(index))
+                        .map(|typer| AstSemantics {
+                            typer,
+                            function_offset: function.span.lo,
+                        });
+                    ast_view_with(
+                        &function.name,
+                        tree,
+                        function.node,
+                        spans,
+                        text,
+                        semantics.as_ref(),
+                    )
+                })
                 .collect()
         }
         Repr::Ddg => unit
@@ -164,6 +185,7 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
 /// label so the label stays the census key a consumer groups by.
 pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
     let mut view = GraphView::new(name);
+    let lines = LineIndex::new(text);
     for (index, node) in cfg.nodes().iter().enumerate() {
         let kind = node.kind().name();
         let span = node.span();
@@ -173,9 +195,12 @@ pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
         } else {
             format!("{kind}\n{text_of}")
         };
+        let (line, column) = lines.position(span.lo);
         let mut exported = ExportNode::new(index as u32, label)
             .with("kind", kind)
-            .with("span", format!("{}:{}", span.lo, span.hi));
+            .with("span", format!("{}:{}", span.lo, span.hi))
+            .with("line", line.to_string())
+            .with("column", column.to_string());
         if let Some(info) = cfg.indirect_dispatch(NodeId::new(index as u32)) {
             let reasons = info
                 .reasons
@@ -213,6 +238,28 @@ pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
 /// covers, which is what makes an exported AST readable at all. Interior nodes
 /// are left to their tag, because their span is the union of their children's
 /// and repeating it at every level is noise.
+///
+/// # Node attributes
+///
+/// * `tag` --- the [`NodeTag`] name.
+/// * `span` --- `lo:hi`, **byte** offsets into the analysed source (the text
+///   after any dialect normalization), end exclusive. They are not character
+///   indices: slice the UTF-8 bytes, not a decoded string, or every span after
+///   the first multi-byte character is off.
+/// * `line`, `column` --- 1-based position of `span.lo`; the column counts
+///   bytes from the start of the line, so it agrees with `span` on every input
+///   and with an editor's column only on ASCII lines.
+/// * `op` --- on `binary_expr`, `assign_expr`, `unary_expr`, `cond_expr` and
+///   `inc_dec_suffix`: the operator token as written (`+`, `<<=`, `!`, `++`),
+///   `?:` for a conditional. A flat chain (`a + b - c` is one `binary_expr`
+///   with three operands; see `parse/tag.rs`) reports its first operator in
+///   `op` and every operator, comma-separated in source order, in `ops`.
+///   `ops` is present only on chains with more than one operator.
+///
+/// The one-shot [`export`] and [`export_unit`] paths add the semantic
+/// attributes (`type`, `operand_type`, declarator and parameter fields) that
+/// need the owning [`AnalysisUnit`]; this tree-only builder carries the
+/// syntactic ones above.
 pub fn ast_view(
     name: &str,
     tree: &Tree,
@@ -220,7 +267,20 @@ pub fn ast_view(
     token_spans: &[Span],
     text: &str,
 ) -> GraphView {
+    ast_view_with(name, tree, root, token_spans, text, None)
+}
+
+/// [`ast_view`] plus the semantic attributes `semantics` can answer.
+fn ast_view_with(
+    name: &str,
+    tree: &Tree,
+    root: NodeId,
+    token_spans: &[Span],
+    text: &str,
+    semantics: Option<&AstSemantics<'_>>,
+) -> GraphView {
     let arena = tree.arena();
+    let lines = LineIndex::new(text);
     let mut view = GraphView::new(name);
     // Dense output ids, assigned in preorder, so the export is stable and does
     // not leak arena indices that mean nothing outside this process.
@@ -239,12 +299,11 @@ pub fn ast_view(
         ids.push((node, next));
     }
     let dense = |node: NodeId| dense_of.get(node.index()).copied().flatten();
+    let tables = semantics.map(|semantics| semantics.expression_types(root));
 
     for (node, id) in &ids {
-        let tag = arena
-            .tag(*node)
-            .and_then(NodeTag::from_u16)
-            .map_or("?", |tag| tag.name());
+        let tag = arena.tag(*node).and_then(NodeTag::from_u16);
+        let tag_name = tag.map_or("?", |tag| tag.name());
         let leaf = arena.child_count(*node) == 0;
         let span = arena.span(*node, token_spans).unwrap_or_default();
         let text_of = if leaf {
@@ -253,15 +312,29 @@ pub fn ast_view(
             String::new()
         };
         let label = if text_of.is_empty() {
-            tag.to_string()
+            tag_name.to_string()
         } else {
-            format!("{tag}\n{text_of}")
+            format!("{tag_name}\n{text_of}")
         };
-        view.nodes.push(
-            ExportNode::new(*id, label)
-                .with("tag", tag)
-                .with("span", format!("{}:{}", span.lo, span.hi)),
-        );
+        let (line, column) = lines.position(span.lo);
+        let mut exported = ExportNode::new(*id, label)
+            .with("tag", tag_name)
+            .with("span", format!("{}:{}", span.lo, span.hi))
+            .with("line", line.to_string())
+            .with("column", column.to_string());
+        if let Some(tag) = tag {
+            let ops = operators_of(tree, *node, tag, token_spans, text);
+            if let Some(first) = ops.first() {
+                exported = exported.with("op", first.clone());
+                if ops.len() > 1 {
+                    exported = exported.with("ops", ops.join(","));
+                }
+            }
+            if let (Some(tables), Some(semantics)) = (tables.as_ref(), semantics) {
+                exported = semantics.decorate(exported, *node, tag, tables);
+            }
+        }
+        view.nodes.push(exported);
     }
     for (node, id) in &ids {
         for child in arena.children_iter(*node) {
@@ -271,6 +344,190 @@ pub fn ast_view(
         }
     }
     view
+}
+
+/// The operator tokens of `node`, in source order, as written.
+///
+/// A binary or assignment chain is flat (one node per precedence level, see
+/// `parse/tag.rs`), so its operators are the tokens in the gaps between
+/// consecutive children; a comment in a gap is trivia and never a token, so
+/// `a /* x */ + b` yields `+`. A prefix operator is the node's first token. A
+/// conditional has no single token and is reported as `?:`. Anything else has
+/// no operator and yields an empty list.
+fn operators_of(
+    tree: &Tree,
+    node: NodeId,
+    tag: NodeTag,
+    token_spans: &[Span],
+    text: &str,
+) -> Vec<String> {
+    let arena = tree.arena();
+    let lexeme = |raw: u32| -> Option<String> {
+        let span = token_spans.get(raw as usize)?;
+        text.get(span.lo as usize..span.hi as usize)
+            .map(str::to_owned)
+    };
+    match tag {
+        NodeTag::BinaryExpr | NodeTag::AssignExpr => {
+            let children: Vec<NodeId> = arena.children_iter(node).collect();
+            children
+                .windows(2)
+                .filter_map(|pair| {
+                    let (_, left_end) = arena.token_extent(pair[0])?;
+                    let (right_start, _) = arena.token_extent(pair[1])?;
+                    (left_end..right_start).find_map(lexeme)
+                })
+                .collect()
+        }
+        NodeTag::UnaryExpr | NodeTag::IncDecSuffix => arena
+            .token_extent(node)
+            .and_then(|(first, _)| lexeme(first))
+            .into_iter()
+            .collect(),
+        NodeTag::CondExpr => vec!["?:".to_owned()],
+        _ => Vec::new(),
+    }
+}
+
+/// Byte offset to 1-based line and byte column, built once per file.
+struct LineIndex {
+    /// Byte offset of the first byte of every line; line 1 starts at 0.
+    starts: Vec<u32>,
+}
+
+impl LineIndex {
+    fn new(text: &str) -> Self {
+        let mut starts = vec![0u32];
+        starts.extend(
+            text.bytes()
+                .enumerate()
+                .filter(|(_, byte)| *byte == b'\n')
+                .map(|(index, _)| index as u32 + 1),
+        );
+        Self { starts }
+    }
+
+    /// `(line, column)`, both 1-based, of byte offset `at`.
+    ///
+    /// The column is a byte count, which is what keeps it consistent with
+    /// `span` on a line with multi-byte characters. An offset past the end of
+    /// the text lands on the last line.
+    fn position(&self, at: u32) -> (u32, u32) {
+        let line = self.starts.partition_point(|start| *start <= at).max(1);
+        let start = self.starts[line - 1];
+        (line as u32, at.saturating_sub(start) + 1)
+    }
+}
+
+/// The semantic facts an owned [`AnalysisUnit`] lets the AST export publish.
+///
+/// Everything here is answered by the semantic layer, never re-derived from
+/// source text: expression types by [`ExpressionTyper`], declarator and
+/// parameter types by the structural type graph it reads.
+struct AstSemantics<'a> {
+    typer: ExpressionTyper<'a>,
+    function_offset: u32,
+}
+
+/// The per-function tables [`AstSemantics::decorate`] reads.
+struct AstSemanticTables {
+    expressions: ExpressionTypes,
+    parameters: std::collections::BTreeMap<NodeId, ParameterFacts>,
+}
+
+impl AstSemantics<'_> {
+    fn expression_types(&self, root: NodeId) -> AstSemanticTables {
+        AstSemanticTables {
+            expressions: self.typer.compute(root),
+            parameters: self.typer.parameters(root, self.function_offset),
+        }
+    }
+
+    /// Adds the semantic attributes for `node` to its export.
+    ///
+    /// * Expression nodes (`name_ref`, `literal`, `paren_expr`, `comma_expr`,
+    ///   `unary_expr`, `binary_expr`, `cast_expr`, `cond_expr`, `assign_expr`,
+    ///   `postfix_expr`, `sizeof_type`, `alignof_type`, `compound_literal`,
+    ///   `stmt_expr`, `builtin_expr`, `label_addr`) carry `type`: the C type of
+    ///   the expression after lvalue conversion, integer promotion and the
+    ///   usual arithmetic conversions, or `unknown`. A `binary_expr` or
+    ///   `assign_expr` whose operator converts its operands also carries
+    ///   `operand_type`, the common type the operands of `op` are converted to
+    ///   (for a shift, the promoted left operand; for a plain `=`, the
+    ///   assigned-to type); a chain carries `operand_types`, one per operator.
+    ///   `&&` and `||` convert nothing and carry no operand type.
+    /// * `declarator` carries `name` and, when the structural layer resolved
+    ///   the declaration, `type` (the written type); an array declarator adds
+    ///   `element_type`, `array_bound` (`constant`, `runtime`, `incomplete` or
+    ///   `star`) and, for a constant bound, `count`.
+    /// * `param_decl` carries `type` (the adjusted parameter type: arrays and
+    ///   functions become pointers), `pointer_depth`, and `name` when the
+    ///   parameter has one.
+    fn decorate(
+        &self,
+        mut node: ExportNode,
+        id: NodeId,
+        tag: NodeTag,
+        tables: &AstSemanticTables,
+    ) -> ExportNode {
+        match tag {
+            NodeTag::Declarator => {
+                let facts = self.typer.declarator(id);
+                if let Some(name) = facts.name {
+                    node = node.with("name", name);
+                }
+                if let Some(declared) = facts.declared {
+                    node = node.with("type", declared.render());
+                    if let Some(Layer::Array(bound)) = declared.layers.first() {
+                        let kind = match bound.as_str() {
+                            "" => "incomplete",
+                            "*" => "star",
+                            digits if digits.bytes().all(|byte| byte.is_ascii_digit()) => {
+                                "constant"
+                            }
+                            _ => "runtime",
+                        };
+                        node = node.with("array_bound", kind);
+                        if kind == "constant" {
+                            node = node.with("count", bound.clone());
+                        }
+                        if let Some(element) = declared.clone().pointee() {
+                            node = node.with("element_type", element.render());
+                        }
+                    }
+                }
+                node
+            }
+            NodeTag::ParamDecl => match tables.parameters.get(&id) {
+                Some(facts) => {
+                    node = node
+                        .with("type", facts.adjusted.render())
+                        .with("pointer_depth", facts.adjusted.pointer_depth().to_string());
+                    if let Some(name) = &facts.name {
+                        node = node.with("name", name.clone());
+                    }
+                    node
+                }
+                None => node,
+            },
+            _ => {
+                let Some(ty) = tables.expressions.type_of(id) else {
+                    return node;
+                };
+                node = node.with("type", ty.render());
+                if let Some(operands) = tables.expressions.operand_types_of(id) {
+                    if let Some(first) = operands.first() {
+                        node = node.with("operand_type", first.render());
+                    }
+                    if operands.len() > 1 {
+                        let rendered: Vec<String> = operands.iter().map(CType::render).collect();
+                        node = node.with("operand_types", rendered.join(","));
+                    }
+                }
+                node
+            }
+        }
+    }
 }
 
 /// One function's data-dependence graph as a view.
@@ -287,6 +544,11 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
     use crate::csource::dataflow::DataFlow;
 
     let mut view = GraphView::new(&flow.name);
+    let lines = LineIndex::new(text);
+    let position = |span: Span| {
+        let (line, column) = lines.position(span.lo);
+        (line.to_string(), column.to_string())
+    };
     let def_count = flow.definitions.len() as u32;
     let use_count = flow.uses.len() as u32;
     let memory_def_start = def_count + use_count;
@@ -313,6 +575,8 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
                 "span",
                 format!("{}:{}", definition.span.lo, definition.span.hi),
             )
+            .with("line", position(definition.span).0)
+            .with("column", position(definition.span).1)
             .with("text", source),
         );
     }
@@ -333,6 +597,8 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
             .with("unresolved", if unresolved { "true" } else { "false" })
             .with("cfg_node", use_.node.to_string())
             .with("span", format!("{}:{}", use_.span.lo, use_.span.hi))
+            .with("line", position(use_.span).0)
+            .with("column", position(use_.span).1)
             .with("text", source),
         );
     }
@@ -360,6 +626,8 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
                 "span",
                 format!("{}:{}", definition.span.lo, definition.span.hi),
             )
+            .with("line", position(definition.span).0)
+            .with("column", position(definition.span).1)
             .with("text", snippet(text, definition.span)),
         );
     }
@@ -378,6 +646,8 @@ pub fn ddg_view(flow: &crate::csource::dataflow::DataFlow, text: &str) -> GraphV
             .with("precision", use_.precision.name())
             .with("cfg_node", use_.node.to_string())
             .with("span", format!("{}:{}", use_.span.lo, use_.span.hi))
+            .with("line", position(use_.span).0)
+            .with("column", position(use_.span).1)
             .with("text", snippet(text, use_.span)),
         );
     }
@@ -415,11 +685,13 @@ pub fn cdg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
     let cdg = ControlDependence::of(cfg);
     let post = cdg.post_dominators();
     let mut view = GraphView::new(name);
+    let lines = LineIndex::new(text);
 
     for (index, node) in cfg.nodes().iter().enumerate() {
         let id = index as u32;
         let kind = node.kind().name();
         let span = node.span();
+        let (line, column) = lines.position(span.lo);
         let source = snippet(text, span);
         let label = if source.is_empty() {
             kind.to_string()
@@ -429,7 +701,9 @@ pub fn cdg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
         let mut export = ExportNode::new(id, label)
             .with("kind", kind)
             .with("depth", cdg.depth(id).to_string())
-            .with("span", format!("{}:{}", span.lo, span.hi));
+            .with("span", format!("{}:{}", span.lo, span.hi))
+            .with("line", line.to_string())
+            .with("column", column.to_string());
         if let Some(parent) = post.immediate(id) {
             export = export.with("ipdom", parent.to_string());
         }
@@ -1008,5 +1282,426 @@ int classify(int a, int b, int n)
             .0;
         assert_eq!(views.len(), 1);
         assert!(!views[0].nodes.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod semantic_attribute_tests {
+    //! Pins for the attributes the 2026-09-16 consumer list asked for: the
+    //! operator, the resolved C type, declarator and parameter structure,
+    //! and line/column coordinates. Each test names the rule it pins.
+
+    use super::*;
+
+    /// The AST of the first function in `text`, as (nodes, children-by-id).
+    fn ast(text: &str) -> GraphView {
+        let mut views = export(text, Repr::Ast).into_parts().0;
+        assert!(!views.is_empty(), "no function parsed from {text:?}");
+        views.remove(0)
+    }
+
+    fn attr<'a>(node: &'a ExportNode, key: &str) -> Option<&'a str> {
+        node.attrs
+            .iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// The first node whose tag is `tag` and whose source text is `source`.
+    fn node<'a>(view: &'a GraphView, text: &str, tag: &str, source: &str) -> &'a ExportNode {
+        view.nodes
+            .iter()
+            .find(|node| {
+                attr(node, "tag") == Some(tag)
+                    && attr(node, "span").is_some_and(|span| {
+                        let (lo, hi) = span.split_once(':').expect("lo:hi");
+                        text.get(lo.parse::<usize>().unwrap()..hi.parse::<usize>().unwrap())
+                            == Some(source)
+                    })
+            })
+            .unwrap_or_else(|| panic!("no {tag} node covering {source:?}"))
+    }
+
+    fn type_of(text: &str, tag: &str, source: &str) -> String {
+        let view = ast(text);
+        attr(node(&view, text, tag, source), "type")
+            .unwrap_or_else(|| panic!("{tag} {source:?} has no type"))
+            .to_owned()
+    }
+
+    fn operand_type_of(text: &str, source: &str) -> String {
+        let view = ast(text);
+        attr(node(&view, text, "binary_expr", source), "operand_type")
+            .unwrap_or_else(|| panic!("binary_expr {source:?} has no operand_type"))
+            .to_owned()
+    }
+
+    // ---- item 1: the operator ----------------------------------------------
+
+    #[test]
+    fn the_operator_is_a_token_and_survives_a_comment_between_operands() {
+        let text = "int f(int a, int b) { return a /* x */ + b; }";
+        let view = ast(text);
+        assert_eq!(
+            attr(node(&view, text, "binary_expr", "a /* x */ + b"), "op"),
+            Some("+")
+        );
+    }
+
+    #[test]
+    fn every_operator_bearing_node_reports_its_operator() {
+        let text = "int f(int a, int b) { a <<= 2; b = !a; a = b ? 1 : 2; a++; return a - b; }";
+        let view = ast(text);
+        assert_eq!(
+            attr(node(&view, text, "assign_expr", "a <<= 2"), "op"),
+            Some("<<=")
+        );
+        assert_eq!(attr(node(&view, text, "unary_expr", "!a"), "op"), Some("!"));
+        assert_eq!(
+            attr(node(&view, text, "cond_expr", "b ? 1 : 2"), "op"),
+            Some("?:")
+        );
+        assert_eq!(
+            attr(node(&view, text, "inc_dec_suffix", "++"), "op"),
+            Some("++")
+        );
+        assert_eq!(
+            attr(node(&view, text, "binary_expr", "a - b"), "op"),
+            Some("-")
+        );
+        // A node without an operator has no `op` attribute at all.
+        assert_eq!(attr(node(&view, text, "name_ref", "a"), "op"), None);
+    }
+
+    #[test]
+    fn a_flat_chain_lists_every_operator_in_source_order() {
+        let text = "int f(int a, int b, int c) { return a + b - c; }";
+        let view = ast(text);
+        let chain = node(&view, text, "binary_expr", "a + b - c");
+        assert_eq!(attr(chain, "op"), Some("+"));
+        assert_eq!(attr(chain, "ops"), Some("+,-"));
+        let single = ast("int f(int a, int b) { return a + b; }");
+        assert!(single.nodes.iter().all(|node| attr(node, "ops").is_none()));
+    }
+
+    // ---- item 2: the resolved C type ----------------------------------------
+
+    #[test]
+    fn integer_promotion_widens_narrow_operands_to_int() {
+        // C17 6.3.1.1p2: unsigned short + int computes in int.
+        let text = "int f(unsigned short s, int i) { return s + i; }";
+        assert_eq!(type_of(text, "binary_expr", "s + i"), "int");
+        assert_eq!(operand_type_of(text, "s + i"), "int");
+        assert_eq!(type_of(text, "name_ref", "s"), "unsigned short");
+        // Two narrow operands promote separately: unsigned char + unsigned
+        // short is int, not unsigned anything.
+        let text = "int f(unsigned char c, unsigned short s) { return c + s; }";
+        assert_eq!(type_of(text, "binary_expr", "c + s"), "int");
+        let text = "int f(unsigned short s) { return -s; }";
+        assert_eq!(type_of(text, "unary_expr", "-s"), "int");
+    }
+
+    #[test]
+    fn same_rank_mixed_signedness_goes_unsigned() {
+        // C17 6.3.1.8p1: int with unsigned int converts to unsigned int.
+        let text = "int f(int i, unsigned int u) { return i + u; }";
+        assert_eq!(type_of(text, "binary_expr", "i + u"), "unsigned int");
+        assert_eq!(operand_type_of(text, "i + u"), "unsigned int");
+    }
+
+    #[test]
+    fn a_wider_signed_type_absorbs_a_narrower_unsigned_one() {
+        // C17 6.3.1.8p1 under LP64: long can represent every unsigned int.
+        let text = "long f(long l, unsigned int u) { return l * u; }";
+        assert_eq!(type_of(text, "binary_expr", "l * u"), "long");
+        // ...but not every unsigned long: long long with unsigned long is
+        // unsigned long long, the unsigned counterpart of the signed type.
+        let text = "long f(long long l, unsigned long u) { return l * u; }";
+        assert_eq!(type_of(text, "binary_expr", "l * u"), "unsigned long long");
+    }
+
+    #[test]
+    fn a_comparison_is_int_and_its_operands_convert() {
+        // The consumer's own example: int < size_t compares in unsigned long
+        // and yields int.
+        let text = "typedef unsigned long size_t;\nint f(int i, size_t n) { return i < n; }";
+        assert_eq!(type_of(text, "binary_expr", "i < n"), "int");
+        assert_eq!(operand_type_of(text, "i < n"), "unsigned long");
+        assert_eq!(type_of(text, "name_ref", "n"), "unsigned long");
+    }
+
+    #[test]
+    fn a_shift_takes_the_promoted_left_operand() {
+        let text = "int f(unsigned short s, unsigned long n) { return s << n; }";
+        assert_eq!(type_of(text, "binary_expr", "s << n"), "int");
+        assert_eq!(operand_type_of(text, "s << n"), "int");
+        let text = "int f(unsigned int u, int i) { return u >> i; }";
+        assert_eq!(type_of(text, "binary_expr", "u >> i"), "unsigned int");
+    }
+
+    #[test]
+    fn a_cast_has_the_named_type() {
+        let text = "int f(unsigned short s, char *p) { return (unsigned char)s + (int)*p; }";
+        assert_eq!(
+            type_of(text, "cast_expr", "(unsigned char)s"),
+            "unsigned char"
+        );
+        assert_eq!(type_of(text, "cast_expr", "(int)*p"), "int");
+        assert_eq!(type_of(text, "unary_expr", "*p"), "char");
+        let text = "typedef unsigned int u32;\nint f(int i) { return (const u32 *)&i; }";
+        assert_eq!(
+            type_of(text, "cast_expr", "(const u32 *)&i"),
+            "const unsigned int *"
+        );
+        assert_eq!(type_of(text, "unary_expr", "&i"), "int *");
+    }
+
+    #[test]
+    fn a_conditional_converts_both_arms() {
+        let text = "int f(int n, unsigned long m, short s) { return n < 0 ? -n : m; }";
+        assert_eq!(
+            type_of(text, "cond_expr", "n < 0 ? -n : m"),
+            "unsigned long"
+        );
+        let text = "int f(int n, short s) { return n ? s : 'c'; }";
+        assert_eq!(type_of(text, "cond_expr", "n ? s : 'c'"), "int");
+        let text = "int f(int n, char *p) { return n ? p : 0; }";
+        assert_eq!(type_of(text, "cond_expr", "n ? p : 0"), "char *");
+    }
+
+    #[test]
+    fn literal_suffixes_and_ranges_decide_the_literal_type() {
+        // C17 6.4.4.1p5.
+        let text = "int f(void) { return 1 + 1u + 1UL + 0xffffffff + 2147483648 + 1.5f + 'c'; }";
+        assert_eq!(type_of(text, "literal", "1"), "int");
+        assert_eq!(type_of(text, "literal", "1u"), "unsigned int");
+        assert_eq!(type_of(text, "literal", "1UL"), "unsigned long");
+        // Hex without a suffix that does not fit int becomes unsigned int...
+        assert_eq!(type_of(text, "literal", "0xffffffff"), "unsigned int");
+        // ...where the same value in decimal becomes long.
+        assert_eq!(type_of(text, "literal", "2147483648"), "long");
+        assert_eq!(type_of(text, "literal", "1.5f"), "float");
+        assert_eq!(type_of(text, "literal", "'c'"), "int");
+    }
+
+    #[test]
+    fn unknown_is_the_answer_and_never_a_guess() {
+        // An undeclared name, a call with no visible declaration, a name from
+        // a header that was not included, and an enum under arithmetic.
+        let text = "int f(uint32_t x, enum e v) { return g(x) + y + x + v; }";
+        assert_eq!(type_of(text, "name_ref", "y"), "unknown");
+        assert_eq!(type_of(text, "postfix_expr", "g(x)"), "unknown");
+        assert_eq!(type_of(text, "name_ref", "x"), "unknown");
+        assert_eq!(type_of(text, "name_ref", "v"), "enum e");
+        assert_eq!(type_of(text, "binary_expr", "g(x) + y + x + v"), "unknown");
+        // A pointer to an unresolved type is still known to be a pointer.
+        let text = "int f(uint32_t *p) { return p + 1; }";
+        assert_eq!(type_of(text, "name_ref", "p"), "unknown *");
+        assert_eq!(type_of(text, "binary_expr", "p + 1"), "unknown *");
+        // sizeof has type size_t only when that typedef is visible.
+        assert_eq!(
+            type_of(
+                "int f(int x) { return sizeof x; }",
+                "unary_expr",
+                "sizeof x"
+            ),
+            "unknown"
+        );
+        assert_eq!(
+            type_of(
+                "typedef unsigned long size_t; int f(int x) { return sizeof x; }",
+                "unary_expr",
+                "sizeof x"
+            ),
+            "unsigned long"
+        );
+    }
+
+    #[test]
+    fn pointers_arrays_members_and_assignments_are_typed() {
+        let text = concat!(
+            "struct point { int x; unsigned short y; };\n",
+            "int f(unsigned char *dst, struct point *pt, int arr[], unsigned short s) {\n",
+            "  unsigned int table[16]; const char *name = \"ab\\n\";\n",
+            "  dst[1] += s; pt->y = pt->x + arr[2]; s <<= 3; table[0] = dst - dst;\n",
+            "  return name[0] + (dst + 1)[0]; }",
+        );
+        assert_eq!(type_of(text, "name_ref", "table"), "unsigned int[16]");
+        assert_eq!(type_of(text, "postfix_expr", "table[0]"), "unsigned int");
+        assert_eq!(type_of(text, "name_ref", "arr"), "int *");
+        assert_eq!(type_of(text, "postfix_expr", "pt->y"), "unsigned short");
+        assert_eq!(type_of(text, "postfix_expr", "arr[2]"), "int");
+        assert_eq!(type_of(text, "postfix_expr", "name[0]"), "char");
+        assert_eq!(type_of(text, "binary_expr", "dst + 1"), "unsigned char *");
+        assert_eq!(type_of(text, "literal", "\"ab\\n\""), "char[4]");
+        // ptrdiff_t is not visible, so a pointer difference is unknown.
+        assert_eq!(type_of(text, "binary_expr", "dst - dst"), "unknown");
+        let view = ast(text);
+        let compound = node(&view, text, "assign_expr", "dst[1] += s");
+        assert_eq!(attr(compound, "type"), Some("unsigned char"));
+        assert_eq!(attr(compound, "operand_type"), Some("int"));
+        let shift = node(&view, text, "assign_expr", "s <<= 3");
+        assert_eq!(attr(shift, "type"), Some("unsigned short"));
+        assert_eq!(attr(shift, "operand_type"), Some("int"));
+        let plain = node(&view, text, "assign_expr", "pt->y = pt->x + arr[2]");
+        assert_eq!(attr(plain, "operand_type"), Some("unsigned short"));
+    }
+
+    #[test]
+    fn a_logical_operator_converts_nothing() {
+        let text = "int f(int a, unsigned long b) { return a && b; }";
+        let view = ast(text);
+        let and = node(&view, text, "binary_expr", "a && b");
+        assert_eq!(attr(and, "type"), Some("int"));
+        assert_eq!(attr(and, "operand_type"), None);
+    }
+
+    #[test]
+    fn a_chain_reports_one_operand_type_per_operator() {
+        let text = "long f(long lg, unsigned short s, unsigned int u) { return lg + s - u; }";
+        let view = ast(text);
+        let chain = node(&view, text, "binary_expr", "lg + s - u");
+        assert_eq!(attr(chain, "ops"), Some("+,-"));
+        assert_eq!(attr(chain, "operand_type"), Some("long"));
+        assert_eq!(attr(chain, "operand_types"), Some("long,long"));
+        assert_eq!(attr(chain, "type"), Some("long"));
+    }
+
+    #[test]
+    fn the_tree_only_builder_carries_no_semantic_attributes() {
+        let text = "int f(int a) { return a + 1; }";
+        let tree = crate::csource::parse::parse(text).into_parts().0;
+        let spans = tree.token_spans(text);
+        let function = &tree.functions(text)[0];
+        let view = ast_view(&function.name, &tree, function.node, &spans, text);
+        assert!(view.nodes.iter().all(|node| attr(node, "type").is_none()));
+        assert!(view.nodes.iter().any(|node| attr(node, "op") == Some("+")));
+    }
+
+    // ---- item 4: array declarators ------------------------------------------
+
+    #[test]
+    fn an_array_declarator_exports_its_element_type_and_count() {
+        let text =
+            "int f(int n) { unsigned int table[16]; char vla[n]; int rows[2][3]; return 0; }";
+        let view = ast(text);
+        let table = node(&view, text, "declarator", "table[16]");
+        assert_eq!(attr(table, "name"), Some("table"));
+        assert_eq!(attr(table, "type"), Some("unsigned int[16]"));
+        assert_eq!(attr(table, "element_type"), Some("unsigned int"));
+        assert_eq!(attr(table, "count"), Some("16"));
+        assert_eq!(attr(table, "array_bound"), Some("constant"));
+        let vla = node(&view, text, "declarator", "vla[n]");
+        assert_eq!(attr(vla, "element_type"), Some("char"));
+        assert_eq!(attr(vla, "array_bound"), Some("runtime"));
+        assert_eq!(attr(vla, "count"), None);
+        let rows = node(&view, text, "declarator", "rows[2][3]");
+        assert_eq!(attr(rows, "type"), Some("int[2][3]"));
+        assert_eq!(attr(rows, "element_type"), Some("int[3]"));
+        assert_eq!(attr(rows, "count"), Some("2"));
+        // A scalar declarator has a type and no array fields.
+        let text = "int f(void) { long x = 1; return x; }";
+        let view = ast(text);
+        let scalar = node(&view, text, "declarator", "x");
+        assert_eq!(attr(scalar, "type"), Some("long"));
+        assert_eq!(attr(scalar, "element_type"), None);
+    }
+
+    #[test]
+    fn an_array_of_an_unresolved_type_keeps_its_shape() {
+        let text = "int f(void) { uint32_t table[16]; return 0; }";
+        let view = ast(text);
+        let table = node(&view, text, "declarator", "table[16]");
+        assert_eq!(attr(table, "type"), Some("unknown[16]"));
+        assert_eq!(attr(table, "element_type"), Some("unknown"));
+        assert_eq!(attr(table, "count"), Some("16"));
+    }
+
+    // ---- item 5: parameters as fields ---------------------------------------
+
+    #[test]
+    fn a_parameter_exports_type_pointer_depth_and_name() {
+        let text = "typedef unsigned long size_t;\nint f(unsigned char *dst, size_t dst_len, const char **names, int arr[], void (*cb)(int), int) { return 0; }";
+        let view = ast(text);
+        let dst = node(&view, text, "param_decl", "unsigned char *dst");
+        assert_eq!(attr(dst, "type"), Some("unsigned char *"));
+        assert_eq!(attr(dst, "pointer_depth"), Some("1"));
+        assert_eq!(attr(dst, "name"), Some("dst"));
+        let len = node(&view, text, "param_decl", "size_t dst_len");
+        assert_eq!(attr(len, "type"), Some("unsigned long"));
+        assert_eq!(attr(len, "pointer_depth"), Some("0"));
+        let names = node(&view, text, "param_decl", "const char **names");
+        assert_eq!(attr(names, "type"), Some("const char **"));
+        assert_eq!(attr(names, "pointer_depth"), Some("2"));
+        // An array parameter is adjusted to a pointer (C17 6.7.6.3p7).
+        let arr = node(&view, text, "param_decl", "int arr[]");
+        assert_eq!(attr(arr, "type"), Some("int *"));
+        assert_eq!(attr(arr, "pointer_depth"), Some("1"));
+        // An unnamed parameter has a type and no name.
+        let unnamed = node(&view, text, "param_decl", "int");
+        assert_eq!(attr(unnamed, "type"), Some("int"));
+        assert_eq!(attr(unnamed, "name"), None);
+        let void = ast("int g(void) { return 0; }");
+        let void_param = void
+            .nodes
+            .iter()
+            .find(|node| attr(node, "tag") == Some("param_decl"))
+            .expect("a void parameter");
+        assert_eq!(attr(void_param, "type"), Some("void"));
+    }
+
+    // ---- item 6: line and column ---------------------------------------------
+
+    #[test]
+    fn every_node_carries_a_one_based_line_and_byte_column() {
+        let text = "/* \u{2014} */\nint f(int a)\n{\n\treturn a + 1;\n}\n";
+        let view = ast(text);
+        for node in &view.nodes {
+            assert!(attr(node, "line").is_some(), "{node:?}");
+            assert!(attr(node, "column").is_some(), "{node:?}");
+        }
+        let root = &view.nodes[0];
+        assert_eq!(attr(root, "line"), Some("2"));
+        assert_eq!(attr(root, "column"), Some("1"));
+        let sum = node(&view, text, "binary_expr", "a + 1");
+        assert_eq!(attr(sum, "line"), Some("4"));
+        // The tab is one byte, so `return` starts at column 2 and `a` at 9.
+        assert_eq!(attr(sum, "column"), Some("9"));
+        // The line and column agree with the byte span, not a char index:
+        // the em dash on line 1 is three bytes and shifts nothing after it.
+        let (lo, _) = attr(sum, "span").unwrap().split_once(':').unwrap();
+        let lo: usize = lo.parse().unwrap();
+        let line = text.as_bytes()[..lo]
+            .iter()
+            .filter(|b| **b == b'\n')
+            .count()
+            + 1;
+        let col = lo
+            - text.as_bytes()[..lo]
+                .iter()
+                .rposition(|b| *b == b'\n')
+                .map_or(0, |i| i + 1)
+            + 1;
+        assert_eq!((line, col), (4, 9));
+    }
+
+    #[test]
+    fn cfg_and_dependence_nodes_carry_line_and_column_too() {
+        let text = "int f(int a)\n{\n  if (a) return 1;\n  return 0;\n}\n";
+        for repr in [Repr::Cfg, Repr::Cdg, Repr::Pdg, Repr::Ddg] {
+            let views = export(text, repr).into_parts().0;
+            for node in &views[0].nodes {
+                assert!(attr(node, "line").is_some(), "{}: {node:?}", repr.name());
+                assert!(attr(node, "column").is_some(), "{}: {node:?}", repr.name());
+            }
+        }
+        let cfg = export(text, Repr::Cfg).into_parts().0.remove(0);
+        let cond = cfg
+            .nodes
+            .iter()
+            .find(|node| attr(node, "kind") == Some("cond"))
+            .expect("a cond node");
+        assert_eq!(attr(cond, "line"), Some("3"));
+        assert_eq!(attr(cond, "column"), Some("7"));
     }
 }
