@@ -126,6 +126,15 @@ pub struct FunctionCfg {
     pub cfg: Cfg,
     /// How many `&&`, `||` and `?:` operators were expanded into forks.
     pub short_circuits: u32,
+    /// Nodes that exist only because a `&&`, `||` or `?:` was expanded
+    /// (`REQ-CFG-6`): the tests and arms of those operators, and a nested
+    /// operator's own join node inside a larger expression. Ascending. The
+    /// node the whole statement, condition or `return` ends at is never here,
+    /// so a consumer that wants statement-level control flow can collapse
+    /// exactly these into the node they flow into. A node is listed only when
+    /// every span it covers is such an operand; a node coalescing operand and
+    /// statement spans is not.
+    pub expression_internal: Vec<NodeId>,
 }
 
 /// Build the control-flow graph of one function definition.
@@ -327,6 +336,9 @@ struct Emitter<'a> {
     diagnostics: Diagnostics,
     /// How many short-circuit operators have been expanded.
     short_circuits: u32,
+    /// Spans of the nodes a short-circuit expansion placed for its operands,
+    /// recorded at the one place that knows: the expansion itself.
+    expression_internal: std::collections::BTreeSet<Span>,
     /// The span to attribute a node the arena gave no extent to.
     fallback: Span,
 }
@@ -356,6 +368,7 @@ impl<'a> Emitter<'a> {
             steps: nodes.saturating_mul(STEPS_PER_NODE).max(1024),
             diagnostics: Diagnostics::new(),
             short_circuits: 0,
+            expression_internal: std::collections::BTreeSet::new(),
             fallback: Span::empty_at(func.span.lo),
         }
     }
@@ -460,6 +473,19 @@ impl<'a> Emitter<'a> {
         for diagnostic in reported.iter() {
             diagnostics.push(diagnostic.clone());
         }
+        let expression_internal = cfg
+            .nodes()
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| {
+                !node.spans().is_empty()
+                    && node
+                        .spans()
+                        .iter()
+                        .all(|span| self.expression_internal.contains(span))
+            })
+            .map(|(index, _)| NodeId::new(index as u32))
+            .collect();
         Parsed::new(
             FunctionCfg {
                 name: func.name.clone(),
@@ -468,6 +494,7 @@ impl<'a> Emitter<'a> {
                 name_span: func.name_span,
                 cfg,
                 short_circuits: self.short_circuits,
+                expression_internal,
             },
             diagnostics,
         )

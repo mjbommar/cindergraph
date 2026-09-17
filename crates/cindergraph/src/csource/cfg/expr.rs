@@ -127,6 +127,12 @@ impl Emitter<'_> {
             return;
         };
         if let Some(kind) = logical_kind(self.tree, node, tag) {
+            // With no terminal of its own the operator's join is a node inside
+            // whatever statement contains it; that is the one join node that
+            // is expression-internal.
+            if matches!(terminal, Terminal::None) {
+                self.note_expression_internal(node);
+            }
             let terminal = terminal.or_stmt(self.span(node));
             self.expand_short_circuit(node, kind, terminal);
             return;
@@ -180,6 +186,11 @@ impl Emitter<'_> {
             return;
         }
         self.short_circuits = self.short_circuits.saturating_add(1);
+        // Every operand gets a node of its own below; none of them is the
+        // node the enclosing statement ends at.
+        for operand in &operands {
+            self.note_expression_internal(*operand);
+        }
         let mut tasks: Vec<Task> = Vec::with_capacity(operands.len() * 4);
         match kind {
             ScKind::Cond => {
@@ -236,6 +247,18 @@ impl Emitter<'_> {
             tasks.push(Task::Emit(flow));
         }
         self.push_all(&tasks);
+    }
+
+    /// Record that the node placed for `node` is expression-internal.
+    ///
+    /// A node the arena gave no extent falls back to the function's span,
+    /// which a statement-level node can share; that span is never recorded,
+    /// so a recovered parse errs toward "statement-level".
+    fn note_expression_internal(&mut self, node: NodeId) {
+        let span = self.span(node);
+        if span != self.fallback {
+            self.expression_internal.insert(span);
+        }
     }
 
     /// Queue `terminal`'s node, if it has one.

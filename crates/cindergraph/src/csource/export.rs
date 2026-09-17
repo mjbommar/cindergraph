@@ -131,7 +131,11 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
         Repr::Cfg => unit
             .functions()
             .iter()
-            .map(|function| cfg_view(&function.name, &function.cfg, text))
+            .map(|function| {
+                let mut view = cfg_view(&function.name, &function.cfg, text);
+                mark_expression_internal(&mut view, &function.expression_internal);
+                view
+            })
             .collect(),
         Repr::Ast => {
             let spans = unit.token_spans();
@@ -166,14 +170,39 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
         Repr::Cdg => unit
             .functions()
             .iter()
-            .map(|function| cdg_view(&function.name, &function.cfg, text))
+            .map(|function| {
+                let mut view = cdg_view(&function.name, &function.cfg, text);
+                mark_expression_internal(&mut view, &function.expression_internal);
+                view
+            })
             .collect(),
         Repr::Pdg => unit
             .functions()
             .iter()
             .zip(unit.dataflows())
-            .map(|(function, flow)| pdg_view(&function.name, &function.cfg, flow, text))
+            .map(|(function, flow)| {
+                let mut view = pdg_view(&function.name, &function.cfg, flow, text);
+                mark_expression_internal(&mut view, &function.expression_internal);
+                view
+            })
             .collect(),
+    }
+}
+
+/// Adds `expr_internal` to every node of a view over the CFG node set.
+///
+/// `true` marks a node that exists only because a `&&`, `||` or `?:` was
+/// expanded into control flow ([`crate::csource::cfg::FunctionCfg::expression_internal`]);
+/// a consumer enumerating statement-level paths collapses those into the node
+/// they flow to. The value is written on every node, like `back` on edges, so
+/// a reader never has to distinguish "absent" from "false".
+fn mark_expression_internal(view: &mut GraphView, internal: &[NodeId]) {
+    for node in view.nodes.iter_mut() {
+        let flagged = internal.binary_search(&NodeId::new(node.id)).is_ok();
+        node.attrs.push((
+            "expr_internal".to_owned(),
+            if flagged { "true" } else { "false" }.to_owned(),
+        ));
     }
 }
 
@@ -1703,5 +1732,161 @@ mod semantic_attribute_tests {
             .expect("a cond node");
         assert_eq!(attr(cond, "line"), Some("3"));
         assert_eq!(attr(cond, "column"), Some("7"));
+    }
+}
+
+#[cfg(test)]
+mod expression_internal_tests {
+    //! Item 11 of the 2026-09-16 list: which CFG nodes exist only because a
+    //! short-circuit or conditional operator was expanded.
+
+    use super::*;
+
+    fn attr<'a>(node: &'a ExportNode, key: &str) -> Option<&'a str> {
+        node.attrs
+            .iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// `(kind, source, expr_internal)` for every node of the first CFG.
+    fn census(text: &str, repr: Repr) -> Vec<(String, String, String)> {
+        let views = export(text, repr).into_parts().0;
+        views[0]
+            .nodes
+            .iter()
+            .map(|node| {
+                let (lo, hi) = attr(node, "span").unwrap().split_once(':').unwrap();
+                let source = text
+                    .get(lo.parse::<usize>().unwrap()..hi.parse::<usize>().unwrap())
+                    .unwrap_or("")
+                    .to_owned();
+                (
+                    attr(node, "kind").unwrap().to_owned(),
+                    source,
+                    attr(node, "expr_internal")
+                        .expect("every CFG node carries expr_internal")
+                        .to_owned(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_operands_of_a_logical_and_in_an_if_are_internal_and_the_test_is_not() {
+        let text = "int f(int idx, unsigned u) { if (idx <= 16 && u != 0) return 1; return 0; }";
+        let nodes = census(text, Repr::Cfg);
+        let internal: Vec<&str> = nodes
+            .iter()
+            .filter(|(_, _, flag)| flag == "true")
+            .map(|(_, source, _)| source.as_str())
+            .collect();
+        assert_eq!(internal, ["idx <= 16", "u != 0"], "{nodes:#?}");
+        let whole = nodes
+            .iter()
+            .find(|(_, source, _)| source == "idx <= 16 && u != 0")
+            .expect("the statement-level test node");
+        assert_eq!(whole.0, "cond");
+        assert_eq!(whole.2, "false");
+        // Entry, exit and the returns are statement-level.
+        assert!(nodes
+            .iter()
+            .filter(|(kind, _, _)| kind != "cond" && kind != "stmt")
+            .all(|(_, _, flag)| flag == "false"));
+    }
+
+    #[test]
+    fn the_arms_of_a_conditional_initializer_are_internal_and_the_declaration_is_not() {
+        let text = "int f(int n) { int idx = n < 0 ? -n : n; return idx; }";
+        let nodes = census(text, Repr::Cfg);
+        let internal: Vec<(&str, &str)> = nodes
+            .iter()
+            .filter(|(_, _, flag)| flag == "true")
+            .map(|(kind, source, _)| (kind.as_str(), source.as_str()))
+            .collect();
+        // The consumer's "four nodes": the test, the two arms, and the
+        // operator's own join, which sits ahead of the declaration's node.
+        assert_eq!(
+            internal,
+            [
+                ("cond", "n < 0"),
+                ("stmt", "-n"),
+                ("stmt", "n"),
+                ("stmt", "n < 0 ? -n : n")
+            ],
+            "{nodes:#?}"
+        );
+        let declaration = nodes
+            .iter()
+            .find(|(_, source, _)| source == "int idx = n < 0 ? -n : n;")
+            .expect("the declaration's own node");
+        assert_eq!(declaration.2, "false");
+    }
+
+    #[test]
+    fn a_nested_operator_join_inside_a_larger_expression_is_internal() {
+        // `a && b` here is not the statement's terminal, so its join node is
+        // one more node inside the statement.
+        let text = "int f(int a, int b) { int x = (a && b) + 1; return x; }";
+        let nodes = census(text, Repr::Cfg);
+        let internal: Vec<&str> = nodes
+            .iter()
+            .filter(|(_, _, flag)| flag == "true")
+            .map(|(_, source, _)| source.as_str())
+            .collect();
+        assert_eq!(internal, ["a", "b", "a && b"], "{nodes:#?}");
+    }
+
+    #[test]
+    fn a_function_without_short_circuits_has_no_internal_node() {
+        let text = "int f(int a) { if (a) return 1; return a + 1; }";
+        for repr in [Repr::Cfg, Repr::Cdg, Repr::Pdg] {
+            let nodes = census(text, repr);
+            assert!(!nodes.is_empty());
+            assert!(
+                nodes.iter().all(|(_, _, flag)| flag == "false"),
+                "{}: {nodes:#?}",
+                repr.name()
+            );
+        }
+    }
+
+    #[test]
+    fn the_flag_is_the_same_on_every_view_over_the_cfg_node_set() {
+        let text = "int f(int idx, unsigned u) { if (idx <= 16 && u != 0) return 1; return 0; }";
+        let cfg = census(text, Repr::Cfg);
+        assert_eq!(census(text, Repr::Cdg), cfg);
+        assert_eq!(
+            census(text, Repr::Pdg)
+                .iter()
+                .map(|(_, source, flag)| (source.clone(), flag.clone()))
+                .collect::<Vec<_>>(),
+            cfg.iter()
+                .map(|(_, source, flag)| (source.clone(), flag.clone()))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn the_function_cfg_lists_the_same_nodes_the_export_flags() {
+        let text = "int f(int a, int b, int c) { return a && b && c; }";
+        let unit = AnalysisUnit::new(text);
+        let function = &unit.functions()[0];
+        // `a`, `b`, `c` and the chain's join; the `return` node is not.
+        assert_eq!(
+            function.expression_internal.len(),
+            4,
+            "{:?}",
+            function.expression_internal
+        );
+        assert!(function.expression_internal.windows(2).all(|w| w[0] < w[1]));
+        let view = &export_unit(&unit, Repr::Cfg)[0];
+        for node in &view.nodes {
+            let listed = function.expression_internal.contains(&NodeId::new(node.id));
+            assert_eq!(
+                attr(node, "expr_internal"),
+                Some(if listed { "true" } else { "false" })
+            );
+        }
     }
 }
