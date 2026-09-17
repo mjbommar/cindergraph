@@ -253,7 +253,8 @@ class AnalysisSession:
         """Serialize graphs without rebuilding this session's analysis.
 
         Args:
-            repr: ``"ast"``, ``"cfg"``, ``"ddg"``, ``"cdg"`` or ``"pdg"``.
+            repr: ``"ast"``, ``"cfg"``, ``"ddg"``, ``"cdg"``, ``"pdg"`` or
+                ``"ops"``.
             format: ``"dot"``, ``"graphml"``, ``"json"``, ``"mermaid"`` or
                 ``"text"``.
         """
@@ -1173,6 +1174,9 @@ def export_graphs(
     A native alternative to ``joern-export`` for AST, CFG, CDG, DDG and PDG
     representations in DOT, GraphML, JSON or Mermaid. This is Cindergraph's
     own graph model, not a Joern code-property graph or JIL representation.
+    ``repr="ops"`` has no Joern counterpart: it is the function's evaluation
+    lowered to typed operations with C's implicit conversions written out
+    (see the export schema in ``docs/reference/source-python.md``).
 
     ``repr="cfg"`` exports the *general* control-flow graph, never the
     parity one -- the graph a person would draw, with real successors,

@@ -444,7 +444,7 @@ assert graph["directed"]
 assert "nodes" in graph and "edges" in graph
 ```
 
-Representations: `cfg`, `ast`, `ddg`, `cdg`, `pdg`. Formats: `dot`, `graphml`,
+Representations: `cfg`, `ast`, `ddg`, `cdg`, `pdg`, `ops`. Formats: `dot`, `graphml`,
 `json`, `mermaid`. Inspect `EXPORT_REPRS` and `EXPORT_FORMATS` for canonical
 choices. Export returns `(function name, text)` pairs in source order, preserving
 duplicate names. JSON uses node-link data with an `edges` key and allows parallel
@@ -526,6 +526,105 @@ into the node it flows to gives statement-level control flow), and the
 `cdg` and `pdg` nodes are the CFG's node set with the same ids and carry
 `expr_internal` too, plus `depth`, `ipdom` and `reaches_exit`.
 
+`ops` nodes are the function's evaluation lowered to typed operations, in
+evaluation order, with C's implicit conversions written out. It is the input a
+solver front end wants: a consumer reads operations and their value inputs
+instead of walking the AST and re-implementing promotion, the usual
+arithmetic conversions and assignment conversion itself.
+
+```python
+source = "unsigned short s = 3;\nvoid bump(void) { unsigned short t = s; t += 2; }"
+(name, body), = cg.export_graphs(source, repr="ops", format="json")
+ops = json.loads(body)["nodes"]
+by_kind_op = [(op["kind"], op["op"], op["type"]) for op in ops]
+assert by_kind_op == [
+    ("unknown", "initialize", "unknown"),          # `t = s`: s is file-scope
+    ("load", "t", "unsigned short"),
+    ("const", "2", "int"),
+    ("convert", "promotion", "int"),                 # t promoted to int
+    ("binary", "+", "int"),                          # the add happens in int
+    ("convert", "assignment", "unsigned short"),     # and narrows back
+    ("store", "=", "unsigned short"),
+]
+assert ops[3]["from"] == "unsigned short" and ops[3]["to"] == "int"
+assert ops[4]["inputs"] == "3,2" and ops[4]["operand_type"] == "int"
+assert ops[0]["reason"] == "unsupported_form"
+```
+
+Every `ops` node carries:
+
+- `kind`: `const`, `load`, `store`, `binary`, `compare`, `unary`, `convert`,
+  `select`, `call`, `branch`, `return`, `sequence`, `bound` or `unknown`.
+- `op`: the C operator for `binary`, `compare` and `unary` (`+`, `<<`, `<`,
+  `-`, `!`, `~`; also `&` for address-of and `decay` for array-to-pointer);
+  the literal as written for `const` (`1u`, `0x10`); the variable name for a
+  scalar `load`, and `*`, `[]` or `.` for a load through a pointer, an index
+  or a member; `=` for every `store`; `?:` for `select`; the callee for
+  `call`; `if`, `while`, `do_while`, `for`, `switch` or `goto` for `branch`;
+  `return`; `,` for `sequence`; `capture` or `read` for a VLA `bound`; the
+  conversion kind for `convert`; and the declined root's purpose
+  (`initialize`, `return`, `discard`, `control`, `for_clause`,
+  `indirect_dispatch`) for `unknown`.
+- `type`: the C type of the operation's value, spelled as the `ast` export
+  spells `type`, with the same `unknown` rule (a header typedef such as
+  `size_t` in an unpreprocessed file, a call with no visible declaration, a
+  file-scope object); `void` for a `branch` or `return`. A `binary`,
+  `compare` or `store` also carries `operand_type`, the type the computation
+  happens in --- for a `compare` the `type` is `int` and the operands were
+  converted to `operand_type`.
+- `inputs`: comma-separated ids of the operations whose values this one
+  consumes, in operand order (left before right; condition, then-arm,
+  else-arm for `select`; address operands then the value for a projected
+  `store`; arguments for `call`). Every input id is smaller than the
+  consumer's. The `edges` list carries the same relation, one edge per input
+  from producer to consumer with `index` as the operand position. `&&` and
+  `||` have three inputs: left, right, and the language-defined value on the
+  edge that bypasses the right operand (`0` for `&&`, `1` for `||`).
+- `block`: the `cfg` node id the operation executes in, so `ops` and `cfg`
+  for the same function join on it. Empty on an `unknown` no CFG node covers.
+- `root`: the id of the expression root (initializer, return, condition,
+  statement) the operation belongs to. Empty on `unknown`.
+- `guarded_by`: empty when the operation executes whenever its block does;
+  otherwise `<id>:true` or `<id>:false` (comma-separated when nested) naming
+  the `compare`/`load`/... operation whose truth value admits it: the arms of
+  `?:` and the right operand of `&&`/`||`.
+- `span`, `line`, `column` as everywhere.
+
+`convert` nodes add `from` and `to`, and `op` names the conversion:
+`promotion` (C17 §6.3.1.1p2: a type narrower than `int` becomes `int`, whether
+it feeds an arithmetic operator, a unary `-`/`+`/`~`, or a shift count),
+`usual_arithmetic` (§6.3.1.8: the common type of an arithmetic or relational
+operator's operands; written after the promotion when both apply, so
+`unsigned short + long` is two conversions), or `assignment` (§6.5.16.1p2 and
+§6.8.6.4p3: the value stored, initialized or returned takes the destination's
+type). A conversion appears only when the types differ and the destination is
+known; a `convert` whose `from` is `unknown` says the destination is known
+and the source is not. Compound assignments and increments are expanded
+(`s += 2` is load, promotion, `binary +`, assignment conversion, store; `x++`
+adds a `const 1`), so the arithmetic type is never implicit. `cast` is
+reserved for explicit casts and does not appear yet: the lowering has no cast
+rule, so a root containing a cast is an `unknown`. `call` arguments carry no
+conversions (`argument_conversions` is `unknown`): callee parameter types are
+not resolved.
+
+`load` and `store` nodes add `access` (`scalar`, `deref`, `element` or
+`member`), `name` and `declared` (the `lo:hi` span of the declaration name,
+which identifies the object when two scopes reuse a name) for a scalar or a
+projection that bottoms out in a named object, and `member` for a member
+access. A projected `load`'s inputs are the evaluated base (and index), never
+the object itself.
+
+`unknown` nodes carry `reason`: `unsupported_form` (a cast, `sizeof` as an
+operand, a file-scope object, a non-integer literal, a call through a
+function pointer, an assignment to a non-place), `unsequenced_effects` (two
+side effects with no ordering proof between them), `braced_initializer`, or
+`unplaced`. The root's whole expression is the `span`. An `unknown` is placed
+where the root sits in source order, and the contract is that nothing the
+lowering could not express is omitted: a function whose `ops` list has no
+`unknown` is fully covered. A `discard`ed value (an expression statement, a
+`for` clause) has no completion operation of its own; its effects are
+operations already.
+
 **Ordering.** Determinism is a contract: the same input always serializes to
 the same bytes. Beyond that, the AST export promises document order: node ids
 are assigned in preorder, so a node's id is smaller than every descendant's
@@ -535,7 +634,10 @@ a parent the edges appear in the children's source order --- so reading an
 operator's operands in edge order is reading them left to right. CFG, CDG and
 PDG nodes are in construction order (entry first, exit second); CFG edges are
 grouped by source node and stable within a group. DDG nodes are the
-definitions, then the uses, then memory definitions and uses.
+definitions, then the uses, then memory definitions and uses. `ops` nodes are
+in evaluation order: roots in source order, and within a root every operation
+after the operations that produce its inputs; `edges` are grouped by consumer
+in ascending consumer id, in operand order within a consumer.
 
 `cg.source_cfg.parity_cfgs(code)` returns the separately defined parity shape.
 `cfgs_from_decompiled()` adapts it to NetworkX. Install the optional `graphs`

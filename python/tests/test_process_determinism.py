@@ -25,7 +25,7 @@ for path in files:
     code = path.read_text(encoding="utf-8")
     values = [cg.analyze(code).to_dict(), cg.data_flow(code),
               cg.call_summaries(code), cg.control_dependence(code)]
-    for representation in ("ast", "cfg", "ddg", "cdg", "pdg"):
+    for representation in ("ast", "cfg", "ddg", "cdg", "pdg", "ops"):
         for format in ("json", "graphml", "dot", "mermaid"):
             values.append(cg.export_graphs(code, repr=representation, format=format))
     # Do not sort keys: dictionary insertion order is part of what is tested.
