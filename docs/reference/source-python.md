@@ -129,6 +129,70 @@ UTF-8 byte offsets all results address, and `diagnostics` is a tuple of the same
 typed `Diagnostic` objects used by reports. An unknown dialect raises
 `ValueError`; Cindergraph never silently guesses one from the text.
 
+External facts --- what a solver front end needs that the source does not
+say --- are attached to the snapshot the same way, and the session is where
+their diagnostics are read:
+
+```python
+import json
+
+annotated = """
+// @cindergraph capacity(dst) = dst_len
+// @cindergraph unroll = 8
+int fill(unsigned char *dst, unsigned long dst_len, const char *name) {
+    dst[0] = name[0];
+    return 0;
+}
+"""
+with_facts = cg.AnalysisSession(annotated, facts={"fill": {"strlen": {"name": 16}}})
+assert not with_facts.diagnostics
+(name, body), = with_facts.export_graphs(repr="ast", format="json")
+nodes = json.loads(body)["nodes"]
+root, = [n for n in nodes if n["tag"] == "func_def"]
+assert (root["facts"], root["facts_source"]) == ("unroll=8", "comment")
+by_name = {n["name"]: n for n in nodes if n["tag"] == "param_decl"}
+assert (by_name["dst"]["facts"], by_name["dst"]["facts_source"]) == ("capacity=dst_len", "comment")
+assert (by_name["name"]["facts"], by_name["name"]["facts_source"]) == ("strlen=16", "api")
+assert "facts" not in by_name["dst_len"]
+
+wrong = cg.AnalysisSession(annotated, facts={"fill": {"capacity": {"dsx": "dst_len"}}})
+assert [d.message for d in wrong.diagnostics] == [
+    "capacity(dsx): `dsx` is not a parameter of `fill`"
+]
+```
+
+A fact is `capacity(p) = v` (how many bytes pointer parameter `p` points
+at), `strlen(p) = v` (the length of the NUL-terminated string `p` points
+at, without the terminator) or `unroll = v` (how far a bounded unroller may
+unroll the function's loops); `v` is the name of a scalar parameter of the
+same function or a decimal integer literal (`unroll` takes a literal only).
+The two front doors are one grammar: a `// @cindergraph <fact>` line comment
+above the function (an optional colon after the marker is allowed, and
+`// axeyum:` is accepted as an alias so the vendored consumer samples under
+`tests/fixtures/defects/` work unchanged), or the `facts=` argument,
+`{function: {"capacity": {parameter: value}, "strlen": {parameter: value},
+"unroll": value}}` with values as `str` or `int`. A comment attaches to the
+next function definition; the region it may sit in runs from the end of the
+previous top-level declaration, definition or directive, so `// expect:`
+lines, blank lines and block comments in between do not break the
+attachment, and only `//` line comments are read (a block comment is prose).
+When both front doors give the same key, **the API wins** and the node's
+`facts_source` says so; that is not a diagnostic. Everything that cannot be
+attached is a `Diagnostic` of severity `error` --- a parameter the function
+does not have, as target or as value; a `capacity`/`strlen` target whose
+type is known not to be a pointer (an `unknown` type is accepted: a header
+typedef this snapshot never saw may well be a pointer); a value parameter
+known to be a pointer; a non-literal `unroll`; a second comment for the same
+key (the first stays); a marked comment that does not parse or that no
+function definition follows; a `facts=` function name the source does not
+define exactly once. The diagnostic's span is the comment line, or the
+function's name for an API fact. `export_graphs`, `export_path` and
+`native_graphs` take the same `facts=`; having no diagnostics channel, they
+raise `ValueError` for an API fact they cannot attach, and drop comment-fact
+diagnostics with the parser's, as documented above. The decision and its
+reasons are in
+[`../design/external-facts-2026-09-17.md`](../design/external-facts-2026-09-17.md).
+
 External calls are similarly explicit snapshot policy:
 
 ```python
@@ -535,7 +599,14 @@ Common to every node of every representation: `span`, `line`, `column`.
   constant bound, `count` (the outermost dimension).
 - `param_decl`: `type` (the adjusted parameter type: an array or function
   parameter is a pointer, C17 §6.7.6.3), `pointer_depth`, and `name` when the
-  parameter has one.
+  parameter has one; and, when the consumer attached external facts to the
+  parameter (see "Reuse one analysis snapshot"), `facts` --- `kind=value`
+  pairs, comma-separated, `capacity` before `strlen`, the value a parameter
+  name or the digits of a literal (`capacity=dst_len`, `capacity=256,strlen=n`)
+  --- and `facts_source`, one entry per fact in the same order, each
+  `comment` or `api`. Absent when nothing was attached.
+- `func_def` (the root): `facts` and `facts_source` in the same form for the
+  function-level fact `unroll` (`unroll=8`). Absent when nothing was attached.
 - `for_stmt`, `while_stmt`, `do_while_stmt`: the loop metadata a bounded
   unroller needs, decided from the loop's own text and never guessed.
   `loop_kind` (`for`, `while`, `do_while`) and `bound_kind` are always
@@ -671,7 +742,19 @@ not resolved.
 which identifies the object when two scopes reuse a name) for a scalar or a
 projection that bottoms out in a named object, and `member` for a member
 access. A projected `load`'s inputs are the evaluated base (and index), never
-the object itself.
+the object itself. A `load` or `store` whose `declared` is a parameter with
+external facts carries the parameter's `facts` and `facts_source`, exactly as
+its `param_decl` does, so a solver front end reads the capacity obligation
+beside the access; `dst[i]` on a pointer parameter is an `element` store
+whose base input is the scalar `load` of `dst`, and that load is where the
+facts are.
+
+```python
+source = "// @cindergraph capacity(p) = n\nint at(char *p, unsigned long n) { return p[n - 1]; }"
+(name, body), = cg.export_graphs(source, repr="ops", format="json")
+load_p, = [op for op in json.loads(body)["nodes"] if op["kind"] == "load" and op.get("name") == "p"]
+assert (load_p["facts"], load_p["facts_source"]) == ("capacity=n", "comment")
+```
 
 `unknown` nodes carry `reason`: `unsupported_form` (a cast, `sizeof` as an
 operand, a file-scope object, a non-integer literal, a call through a

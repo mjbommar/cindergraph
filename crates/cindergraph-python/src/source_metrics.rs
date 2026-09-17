@@ -33,6 +33,7 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
+use cindergraph::csource::facts::ExternalFacts;
 use cindergraph::csource::metrics::{self, FunctionMetrics, SourceReport};
 use cindergraph::csource::parse::parse;
 use cindergraph::csource::semantic::{AnalysisOptions, AnalysisUnit, InputDialect};
@@ -48,6 +49,115 @@ fn input_dialect(name: Option<&str>) -> PyResult<InputDialect> {
         other => Err(pyo3::exceptions::PyValueError::new_err(format!(
             "unknown dialect {other:?}; expected ordinary, preprocessed, or decompiled"
         ))),
+    }
+}
+
+/// Read a `facts=` argument: `{function: {"capacity": {parameter: value},
+/// "strlen": {parameter: value}, "unroll": value}}`, where a value is a
+/// parameter name (`str`) or an integer (`int`, or a `str` of digits).
+///
+/// This checks the *shape* of the argument and raises `ValueError` on a key
+/// or type it does not define. Whether a fact can be attached to the parsed
+/// function is decided when the analysis unit is built, and reported as a
+/// diagnostic (or, by the one-shot functions, re-raised: see
+/// [`raise_refused_api_facts`]).
+fn external_facts(facts: Option<&Bound<'_, PyAny>>) -> PyResult<ExternalFacts> {
+    use pyo3::exceptions::PyValueError;
+    use pyo3::types::{PyInt, PyString};
+
+    let mut out = ExternalFacts::new();
+    let Some(facts) = facts else {
+        return Ok(out);
+    };
+    if facts.is_none() {
+        return Ok(out);
+    }
+    let value_of = |what: &str, value: &Bound<'_, PyAny>| -> PyResult<String> {
+        if let Ok(text) = value.cast::<PyString>() {
+            return Ok(text.to_str()?.to_owned());
+        }
+        if let Ok(int) = value.cast::<PyInt>() {
+            let n: u128 = int.extract().map_err(|_| {
+                PyValueError::new_err(format!(
+                    "facts: {what} must be a non-negative integer or a parameter name"
+                ))
+            })?;
+            return Ok(n.to_string());
+        }
+        Err(PyValueError::new_err(format!(
+            "facts: {what} must be a parameter name (str) or an integer, not {}",
+            value.get_type().name()?
+        )))
+    };
+    let functions = facts.cast::<PyDict>().map_err(|_| {
+        PyValueError::new_err("facts must be a dict of {function name: {kind: ...}}")
+    })?;
+    for (function, entry) in functions.iter() {
+        let function: String = function
+            .extract()
+            .map_err(|_| PyValueError::new_err("facts: every key must be a function name (str)"))?;
+        let entry = entry.cast::<PyDict>().map_err(|_| {
+            PyValueError::new_err(format!(
+                "facts[{function:?}] must be a dict with keys \"capacity\", \"strlen\" and/or \"unroll\""
+            ))
+        })?;
+        let input = out.function(function.clone());
+        for (kind, value) in entry.iter() {
+            let kind: String = kind.extract().map_err(|_| {
+                PyValueError::new_err(format!("facts[{function:?}]: every key must be a str"))
+            })?;
+            match kind.as_str() {
+                "capacity" | "strlen" => {
+                    let by_parameter = value.cast::<PyDict>().map_err(|_| {
+                        PyValueError::new_err(format!(
+                            "facts[{function:?}][{kind:?}] must be a dict of {{parameter: value}}"
+                        ))
+                    })?;
+                    for (parameter, value) in by_parameter.iter() {
+                        let parameter: String = parameter.extract().map_err(|_| {
+                            PyValueError::new_err(format!(
+                                "facts[{function:?}][{kind:?}]: every key must be a parameter name (str)"
+                            ))
+                        })?;
+                        let value = value_of(
+                            &format!("facts[{function:?}][{kind:?}][{parameter:?}]"),
+                            &value,
+                        )?;
+                        if kind == "capacity" {
+                            input.capacity(parameter, value);
+                        } else {
+                            input.strlen(parameter, value);
+                        }
+                    }
+                }
+                "unroll" => {
+                    let value = value_of(&format!("facts[{function:?}][\"unroll\"]"), &value)?;
+                    input.unroll(value);
+                }
+                other => {
+                    return Err(PyValueError::new_err(format!(
+                        "facts[{function:?}]: unknown fact kind {other:?}; expected \"capacity\", \"strlen\" or \"unroll\""
+                    )))
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The one-shot functions have no diagnostics channel, so an API fact they
+/// could not attach becomes the `ValueError` a bad argument deserves rather
+/// than an export that quietly lacks it. A session keeps them as diagnostics.
+fn raise_refused_api_facts(unit: &AnalysisUnit) -> PyResult<()> {
+    match unit.refused_api_facts() {
+        [] => Ok(()),
+        refused => Err(pyo3::exceptions::PyValueError::new_err(
+            refused
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect::<Vec<_>>()
+                .join("; "),
+        )),
     }
 }
 
@@ -542,14 +652,17 @@ pub fn normalize_py(py: Python<'_>, text: &str, dialect: &str) -> PyResult<Strin
 /// source order. A list rather than a dict, because two definitions in one
 /// file can carry the same name after recovery.
 #[pyfunction]
-#[pyo3(name = "export_graphs")]
+#[pyo3(name = "export_graphs", signature = (text, repr, format, *, facts=None))]
 pub fn export_graphs_py<'py>(
     py: Python<'py>,
     text: &str,
     repr: &str,
     format: &str,
+    facts: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let unit = py.detach(|| AnalysisUnit::new(text));
+    let facts = external_facts(facts)?;
+    let unit = py.detach(|| AnalysisUnit::with_facts(text, AnalysisOptions::default(), &facts));
+    raise_refused_api_facts(&unit)?;
     export_graphs_dict(py, &unit, repr, format)
 }
 
@@ -911,9 +1024,16 @@ fn native_graphs_list<'py>(
 
 /// Return Rust-backed graph views without serializing or importing NetworkX.
 #[pyfunction]
-#[pyo3(name = "native_graphs", signature = (text, *, repr="cfg"))]
-fn native_graphs_py<'py>(py: Python<'py>, text: &str, repr: &str) -> PyResult<Bound<'py, PyList>> {
-    let unit = py.detach(|| AnalysisUnit::new(text));
+#[pyo3(name = "native_graphs", signature = (text, *, repr="cfg", facts=None))]
+fn native_graphs_py<'py>(
+    py: Python<'py>,
+    text: &str,
+    repr: &str,
+    facts: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyList>> {
+    let facts = external_facts(facts)?;
+    let unit = py.detach(|| AnalysisUnit::with_facts(text, AnalysisOptions::default(), &facts));
+    raise_refused_api_facts(&unit)?;
     native_graphs_list(py, &unit, repr)
 }
 
@@ -1477,23 +1597,26 @@ struct PyAnalysisSession {
 #[pymethods]
 impl PyAnalysisSession {
     #[new]
-    #[pyo3(signature = (text, *, dialect=None, external_calls=None))]
+    #[pyo3(signature = (text, *, dialect=None, external_calls=None, facts=None))]
     fn new(
         py: Python<'_>,
         text: String,
         dialect: Option<&str>,
         external_calls: Option<&str>,
+        facts: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let dialect = input_dialect(dialect)?;
         let external_calls = external_call_policy(external_calls)?;
+        let facts = external_facts(facts)?;
         Ok(Self {
             unit: py.detach(|| {
-                AnalysisUnit::with_options(
+                AnalysisUnit::with_facts(
                     text,
                     AnalysisOptions {
                         dialect,
                         external_calls,
                     },
+                    &facts,
                 )
             }),
         })

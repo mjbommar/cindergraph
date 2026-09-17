@@ -34,6 +34,7 @@
 //! boundary instead of indexing the string directly.
 
 use crate::csource::cfg::FunctionCfg;
+use crate::csource::facts::{self, FunctionFacts};
 use crate::csource::parse::tag::NodeTag;
 use crate::csource::parse::Tree;
 use crate::csource::semantic::expr_types::{
@@ -162,15 +163,18 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
             tree.functions(text)
                 .iter()
                 .map(|function| {
-                    let semantics = unit
+                    let index = unit
                         .functions()
                         .iter()
-                        .position(|candidate| candidate.node == function.node)
-                        .and_then(|index| unit.expression_typer(index))
-                        .map(|typer| AstSemantics {
-                            typer,
-                            function_offset: function.span.lo,
-                        });
+                        .position(|candidate| candidate.node == function.node);
+                    let semantics =
+                        index
+                            .and_then(|index| unit.expression_typer(index))
+                            .map(|typer| AstSemantics {
+                                typer,
+                                function_offset: function.span.lo,
+                            });
+                    let function_facts = index.and_then(|index| unit.facts().get(index));
                     ast_view_with(
                         &function.name,
                         tree,
@@ -178,6 +182,7 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
                         spans,
                         text,
                         semantics.as_ref(),
+                        function_facts,
                     )
                 })
                 .collect()
@@ -217,7 +222,7 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
             .enumerate()
             .map(|(index, (function, plan))| {
                 let typer = unit.expression_typer(index);
-                ops::ops_view(
+                let mut view = ops::ops_view(
                     &function.name,
                     text,
                     tree,
@@ -225,9 +230,52 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
                     function,
                     plan,
                     typer.as_ref(),
-                )
+                );
+                if let Some(function_facts) = unit.facts().get(index) {
+                    mark_access_facts(&mut view, function_facts);
+                }
+                view
             })
             .collect(),
+    }
+}
+
+/// Adds `facts` and `facts_source` to every `ops` load or store of a
+/// parameter that carries external facts, so a solver front end reads the
+/// capacity obligation beside the access it constrains.
+///
+/// The join is on `declared`, the span of the declaration name, which is the
+/// same span [`crate::csource::facts::ParameterFactSet::declaration`] holds;
+/// a local that shadows the parameter's name has a different declaration and
+/// is left alone.
+fn mark_access_facts(view: &mut GraphView, function_facts: &FunctionFacts) {
+    if function_facts.parameters.is_empty() {
+        return;
+    }
+    for node in &mut view.nodes {
+        let is_access = node
+            .attrs
+            .iter()
+            .any(|(key, value)| key == "kind" && (value == "load" || value == "store"));
+        if !is_access {
+            continue;
+        }
+        let Some(declared) = node
+            .attrs
+            .iter()
+            .find(|(key, _)| key == "declared")
+            .map(|(_, value)| value.clone())
+        else {
+            continue;
+        };
+        let attached = declared
+            .split_once(':')
+            .and_then(|(lo, hi)| Some(Span::new(lo.parse().ok()?, hi.parse().ok()?)))
+            .and_then(|span| function_facts.parameter_declared(span));
+        if let Some((values, sources)) = attached.and_then(|set| facts::attributes(&set.facts)) {
+            node.attrs.push(("facts".to_owned(), values));
+            node.attrs.push(("facts_source".to_owned(), sources));
+        }
     }
 }
 
@@ -392,10 +440,11 @@ pub fn ast_view(
     token_spans: &[Span],
     text: &str,
 ) -> GraphView {
-    ast_view_with(name, tree, root, token_spans, text, None)
+    ast_view_with(name, tree, root, token_spans, text, None, None)
 }
 
-/// [`ast_view`] plus the semantic attributes `semantics` can answer.
+/// [`ast_view`] plus the semantic attributes `semantics` can answer and the
+/// external facts `function_facts` attaches to the function's nodes.
 fn ast_view_with(
     name: &str,
     tree: &Tree,
@@ -403,6 +452,7 @@ fn ast_view_with(
     token_spans: &[Span],
     text: &str,
     semantics: Option<&AstSemantics<'_>>,
+    function_facts: Option<&FunctionFacts>,
 ) -> GraphView {
     let arena = tree.arena();
     let lines = LineIndex::new(text);
@@ -468,6 +518,18 @@ fn ast_view_with(
             {
                 for (key, value) in facts.attributes() {
                     exported = exported.with(key, value);
+                }
+            }
+            if let Some(function_facts) = function_facts {
+                let attached = match tag {
+                    NodeTag::FuncDef if *node == root => Some(function_facts.function.as_slice()),
+                    NodeTag::ParamDecl => function_facts
+                        .parameter(*node)
+                        .map(|set| set.facts.as_slice()),
+                    _ => None,
+                };
+                if let Some((values, sources)) = attached.and_then(facts::attributes) {
+                    exported = exported.with("facts", values).with("facts_source", sources);
                 }
             }
         }
@@ -2305,5 +2367,287 @@ mod loop_metadata_tests {
             .map(|node| attr(node, "bound_kind").unwrap())
             .collect();
         assert_eq!(kinds, vec!["constant", "runtime"]);
+    }
+}
+
+#[cfg(test)]
+mod external_facts_tests {
+    //! Item 7 of `docs/improvement-list-2026-09-16.md`: facts a consumer
+    //! attaches through a comment or the API land on `param_decl`,
+    //! `func_def` and the `ops` accesses, and every fact that cannot be
+    //! attached is a diagnostic.
+
+    use super::*;
+    use crate::csource::facts::ExternalFacts;
+    use crate::csource::semantic::AnalysisOptions;
+    use crate::syntax::graph_export::ExportNode;
+
+    const SOURCE: &str = "\
+#include <string.h>
+// @cindergraph capacity(dst) = dst_len
+// axeyum: capacity(src) = 256
+// @cindergraph strlen(src) = n
+// @cindergraph unroll = 4
+int copy(char *dst, unsigned long dst_len, const char *src, unsigned long n) {
+    unsigned long i;
+    for (i = 0; i < n; i++) dst[i] = src[i];
+    return 0;
+}
+";
+
+    fn attr<'a>(node: &'a ExportNode, key: &str) -> Option<&'a str> {
+        node.attrs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// `(name, facts, facts_source)` of every AST node carrying facts.
+    fn ast_facts(unit: &AnalysisUnit) -> Vec<(String, String, String)> {
+        export_unit(unit, Repr::Ast)[0]
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                let facts = attr(node, "facts")?;
+                let name = attr(node, "name").unwrap_or_else(|| attr(node, "tag").unwrap());
+                Some((
+                    name.to_owned(),
+                    facts.to_owned(),
+                    attr(node, "facts_source").unwrap().to_owned(),
+                ))
+            })
+            .collect()
+    }
+
+    fn messages(unit: &AnalysisUnit) -> Vec<String> {
+        unit.diagnostics()
+            .iter()
+            .map(|d| d.message.clone())
+            .collect()
+    }
+
+    #[test]
+    fn comment_facts_land_on_param_decl_and_func_def() {
+        let unit = AnalysisUnit::new(SOURCE);
+        assert!(messages(&unit).is_empty(), "{:?}", messages(&unit));
+        assert_eq!(
+            ast_facts(&unit),
+            vec![
+                (
+                    "func_def".to_owned(),
+                    "unroll=4".to_owned(),
+                    "comment".to_owned()
+                ),
+                (
+                    "dst".to_owned(),
+                    "capacity=dst_len".to_owned(),
+                    "comment".to_owned()
+                ),
+                (
+                    "src".to_owned(),
+                    "capacity=256,strlen=n".to_owned(),
+                    "comment,comment".to_owned()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn ops_accesses_of_a_parameter_with_facts_carry_them() {
+        let unit = AnalysisUnit::new(SOURCE);
+        let view = &export_unit(&unit, Repr::Ops)[0];
+        let accesses: Vec<(u32, &str, &str, Option<&str>)> = view
+            .nodes
+            .iter()
+            .filter(|node| matches!(attr(node, "kind"), Some("load" | "store")))
+            .map(|node| {
+                (
+                    node.id,
+                    attr(node, "kind").unwrap(),
+                    attr(node, "name").unwrap_or(""),
+                    attr(node, "facts"),
+                )
+            })
+            .collect();
+        // `dst[i] = src[i]`: the scalar loads of the two pointers carry the
+        // facts; the loads of `i` and `n` do not.
+        let dst = accesses
+            .iter()
+            .find(|(_, kind, name, _)| *kind == "load" && *name == "dst")
+            .unwrap();
+        assert_eq!(dst.3, Some("capacity=dst_len"), "{accesses:?}");
+        let src = accesses
+            .iter()
+            .find(|(_, kind, name, _)| *kind == "load" && *name == "src")
+            .unwrap();
+        assert_eq!(src.3, Some("capacity=256,strlen=n"), "{accesses:?}");
+        assert!(
+            accesses
+                .iter()
+                .all(|(_, _, name, facts)| (*name == "dst" || *name == "src") == facts.is_some()),
+            "{accesses:?}"
+        );
+        // The element store through `dst` is a projection over the loaded
+        // pointer value: it names no object itself, and its inputs lead to
+        // the load that carries the obligation.
+        let store = view
+            .nodes
+            .iter()
+            .find(|node| {
+                attr(node, "kind") == Some("store") && attr(node, "access") == Some("element")
+            })
+            .unwrap();
+        assert_eq!(attr(store, "name"), None);
+        let inputs: Vec<u32> = attr(store, "inputs")
+            .unwrap()
+            .split(',')
+            .map(|id| id.parse().unwrap())
+            .collect();
+        assert!(inputs.contains(&dst.0), "{inputs:?} lacks load {}", dst.0);
+    }
+
+    #[test]
+    fn api_facts_land_the_same_way_and_win_over_comments() {
+        let mut facts = ExternalFacts::new();
+        facts
+            .function("copy")
+            .capacity("dst", "n")
+            .strlen("dst", "4")
+            .unroll("9");
+        let unit = AnalysisUnit::with_facts(SOURCE, AnalysisOptions::default(), &facts);
+        assert!(messages(&unit).is_empty(), "{:?}", messages(&unit));
+        assert_eq!(
+            ast_facts(&unit),
+            vec![
+                (
+                    "func_def".to_owned(),
+                    "unroll=9".to_owned(),
+                    "api".to_owned()
+                ),
+                (
+                    "dst".to_owned(),
+                    "capacity=n,strlen=4".to_owned(),
+                    "api,api".to_owned()
+                ),
+                (
+                    "src".to_owned(),
+                    "capacity=256,strlen=n".to_owned(),
+                    "comment,comment".to_owned()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn every_unattachable_fact_is_a_diagnostic_and_absent_from_the_export() {
+        let source = "\
+// @cindergraph capacity(dsx) = n
+// @cindergraph capacity(dst) = m
+// @cindergraph capacity(n) = 4
+// @cindergraph capacity(dst) = src
+// @cindergraph unroll = n
+// @cindergraph size(dst) = 4
+// @cindergraph strlen(src) = 1
+// @cindergraph strlen(src) = 2
+int f(char *dst, const char *src, unsigned long n) { return 0; }
+// @cindergraph unroll = 2
+int g(void);
+// @cindergraph unroll = 3
+";
+        let mut facts = ExternalFacts::new();
+        facts.function("h").unroll("1");
+        facts.function("f").capacity("nope", "1");
+        let unit = AnalysisUnit::with_facts(source, AnalysisOptions::default(), &facts);
+        let found = messages(&unit);
+        let expected = [
+            "capacity(dsx): `dsx` is not a parameter of `f`",
+            "capacity(dst): `m` is neither a parameter of `f` nor a decimal literal",
+            "capacity(n): `n` is not a pointer parameter of `f`",
+            "capacity(dst): `src` is a pointer parameter, not a scalar",
+            "unroll: the bound must be a decimal literal, found `n`",
+            "malformed fact comment: unknown fact kind \"size\"",
+            "duplicate fact `strlen(src)` for `f`; the first one stays",
+            "fact comment is not followed by a function definition",
+            "facts name function `h`, which the source does not define",
+            "capacity(nope): `nope` is not a parameter of `f`",
+        ];
+        for needle in expected {
+            assert!(
+                found.iter().any(|m| m.contains(needle)),
+                "missing {needle:?} in {found:#?}"
+            );
+        }
+        // Two dangling comments (after `g` and at the end of the file).
+        assert_eq!(
+            found
+                .iter()
+                .filter(|m| m.contains("not followed by a function definition"))
+                .count(),
+            2,
+            "{found:#?}"
+        );
+        assert_eq!(found.len(), expected.len() + 1, "{found:#?}");
+        // Only the valid fact survives.
+        assert_eq!(
+            ast_facts(&unit),
+            vec![(
+                "src".to_owned(),
+                "strlen=1".to_owned(),
+                "comment".to_owned()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_duplicate_definition_refuses_api_facts_by_name() {
+        let source = "int f(char *p) { return 0; }\nint f(char *p) { return 1; }\n";
+        let mut facts = ExternalFacts::new();
+        facts.function("f").capacity("p", "8");
+        let unit = AnalysisUnit::with_facts(source, AnalysisOptions::default(), &facts);
+        assert!(
+            messages(&unit)
+                .iter()
+                .any(|m| m.contains("defines 2 times")),
+            "{:?}",
+            messages(&unit)
+        );
+        assert!(unit.facts().iter().all(|f| f.is_empty()));
+    }
+
+    #[test]
+    fn a_shadowing_local_does_not_inherit_the_parameter_facts() {
+        let source = "\
+// @cindergraph capacity(p) = n
+int f(char *p, unsigned long n) { { char *q = p; char *p = q; return p[0]; } }
+";
+        let unit = AnalysisUnit::new(source);
+        let view = &export_unit(&unit, Repr::Ops)[0];
+        let loads: Vec<(u32, Option<&str>)> = view
+            .nodes
+            .iter()
+            .filter(|node| {
+                attr(node, "name") == Some("p")
+                    && matches!(attr(node, "kind"), Some("load" | "store"))
+            })
+            .map(|node| (node.id, attr(node, "facts")))
+            .collect();
+        // `q = p` loads the parameter; `p = q` stores and `p[0]` loads the local.
+        assert_eq!(loads.len(), 3, "{loads:?}");
+        assert_eq!(loads[0].1, Some("capacity=n"));
+        assert_eq!(loads[1].1, None);
+        assert_eq!(loads[2].1, None);
+    }
+
+    #[test]
+    fn the_export_without_facts_is_byte_identical_to_before() {
+        let plain = "int f(char *p, unsigned long n) { return p[n - 1]; }\n";
+        for repr in Repr::ALL {
+            for view in export(plain, repr).into_parts().0 {
+                for node in &view.nodes {
+                    assert!(attr(node, "facts").is_none());
+                    assert!(attr(node, "facts_source").is_none());
+                }
+            }
+        }
     }
 }

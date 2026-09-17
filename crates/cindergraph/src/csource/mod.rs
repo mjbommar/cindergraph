@@ -8,6 +8,7 @@ pub mod cfg;
 pub mod dataflow;
 pub(crate) mod eval;
 pub mod export;
+pub mod facts;
 pub mod lex;
 pub mod metrics;
 pub mod normalize;
