@@ -11,6 +11,7 @@ those analyses raises. See ``docs/reference/source-python.md`` for the contract.
 
 from __future__ import annotations
 
+import errno
 import warnings
 from collections import Counter
 from dataclasses import dataclass
@@ -107,8 +108,43 @@ def _read(path: Path, is_decompilation: bool, strict: bool) -> source.SourceRepo
     return report
 
 
-def _single_file(path: str | Path) -> Path:
-    result = Path(path).expanduser().resolve()
+def _path_argument(argument: str | Path, parameter: str, function: str) -> Path:
+    """``argument`` as a path, or a ``ValueError`` naming it when it is C text.
+
+    These adapters take a *path*, as pyjoern's did. Passing source text
+    instead used to surface as ``OSError: File name too long`` from pathlib,
+    which names neither the argument nor the mistake. A string that cannot be
+    a path on any platform (it contains a newline or a NUL) or that the
+    filesystem rejects as a name is reported for what it is.
+    """
+    if isinstance(argument, str) and ("\n" in argument or "\0" in argument):
+        raise ValueError(
+            f"{function}() expects {parameter} to be a path to a file or "
+            f"directory, not C source text; got a {len(argument)}-character "
+            f"string starting {argument[:24]!r}. Pass the path, or use "
+            "cindergraph.analyze(text) for text."
+        )
+    path = Path(argument).expanduser()
+    try:
+        resolved = path.resolve()
+        # A non-strict resolve() does not fail on a name the filesystem
+        # cannot hold; stat() does, and a missing file is left for the
+        # caller's own FileNotFoundError.
+        resolved.stat()
+    except OSError as error:
+        if error.errno != errno.ENAMETOOLONG:
+            return path.resolve()
+        raise ValueError(
+            f"{function}() expects {parameter} to be a path to a file or "
+            f"directory, not C source text; got a {len(str(argument))}-"
+            f"character string starting {str(argument)[:24]!r}. Pass the "
+            "path, or use cindergraph.analyze(text) for text."
+        ) from error
+    return resolved
+
+
+def _single_file(path: str | Path, parameter: str, function: str) -> Path:
+    result = _path_argument(path, parameter, function)
     if result.is_dir():
         raise ValueError(
             "This call requires a single file; use parse_source for a directory"
@@ -170,7 +206,8 @@ def fast_cfgs_from_source(
 
     Raises:
         OSError: The file cannot be read.
-        ValueError: The path is a directory.
+        ValueError: The path is a directory, or ``filepath`` is C source text
+            rather than a path.
         SourceParseError: Strict mode encountered diagnostics.
         NotImplementedError: A requested option has no supported implementation.
         ImportError: NetworkX is missing; install ``cindergraph[graphs]``.
@@ -181,7 +218,13 @@ def fast_cfgs_from_source(
         raise NotImplementedError(
             "No in-process timeout; run in a worker process to enforce a deadline"
         )
-    return _graphs(_read(_single_file(filepath), is_decompilation, strict))
+    return _graphs(
+        _read(
+            _single_file(filepath, "filepath", "fast_cfgs_from_source"),
+            is_decompilation,
+            strict,
+        )
+    )
 
 
 def parse_source(
@@ -213,7 +256,8 @@ def parse_source(
     Raises:
         OSError: Any selected file cannot be read.
         SourceParseError: Strict mode encountered diagnostics.
-        ValueError: Duplicate definitions prevent unambiguous metadata/CFG pairing.
+        ValueError: Duplicate definitions prevent unambiguous metadata/CFG pairing,
+            or ``source_path`` is C source text rather than a path.
         NotImplementedError: An unsupported analysis or metadata mode was requested.
         ImportError: Graphs were requested but NetworkX is missing.
     """
@@ -221,7 +265,7 @@ def parse_source(
         raise NotImplementedError(
             "Use no_metadata=False, no_ddg=True, no_ast=True; Joern AST/DDG analysis is unsupported"
         )
-    path = Path(source_path).expanduser().resolve()
+    path = _path_argument(source_path, "source_path", "parse_source")
     directory = path.is_dir()
     paths = sorted({*path.rglob("*.c"), *path.rglob("*.h")}) if directory else [path]
     result: dict[str | tuple[str, str], Function] = {}
@@ -276,7 +320,7 @@ def parse_callgraph(
         ImportError: NetworkX is missing.
     """
     nx = _networkx()
-    path = _single_file(source_path)
+    path = _single_file(source_path, "source_path", "parse_callgraph")
     report = _read(path, is_decompilation, strict)
     _require_unique_definitions(report, path)
     graph = nx.DiGraph(path=report.name, diagnostics=report.diagnostics)

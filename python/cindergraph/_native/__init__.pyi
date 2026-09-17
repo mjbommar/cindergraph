@@ -122,5 +122,6 @@ class _CSource:
     @staticmethod
     def parity_cfgs(text: Any) -> Any: ...
 
+__version__: str
 source: _Source
 csource: _CSource
