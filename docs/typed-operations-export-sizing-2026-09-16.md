@@ -153,3 +153,31 @@ module.
 What this export therefore cannot yet show, because the lowering cannot: casts,
 `sizeof` as an operand, file-scope objects, non-integer literals, calls through
 function pointers, braced initializers. Each is an `unknown` with its reason.
+
+## Outcome (2026-09-17)
+
+`export_graphs(repr="ops")` landed on this design (`export/ops.rs`); the
+schema is in [the Python reference](reference/source-python.md#export-schema).
+Against the brief:
+
+- **Met**: per-function operations in evaluation order with `id`, `kind`,
+  `op`, `type`, `inputs`, `block`, `root`, `guarded_by`, `span`/`line`/
+  `column`; `convert` operations with `from`, `to` and the kind
+  (`promotion`, `usual_arithmetic`, `assignment`); `unsigned short s;
+  s += 2` shows promotion, the add in `int`, and the assignment back; every
+  declined root is an `unknown` with a `reason`; byte-identical re-export;
+  header typedefs, file-scope objects and undeclared callees stay `unknown`.
+- **Not met, by the lowering, not the export**: `cast` conversions. The plan
+  has no cast rule, so a root containing a cast is `unknown
+  (unsupported_form)`; the consumer's `07_signed_overflow.c` and
+  `08_dead_branch.c` have five such roots, all casts. Adding a cast rule to
+  `lower_scalar_expression` is the next slice, and the `cast` kind is
+  reserved for it.
+- **Not modelled**: call argument conversions (callee parameter types are not
+  resolved; the `call` carries `argument_conversions: unknown`), and the
+  discarded value of an expression statement, which has no completion
+  operation because it has no consumer.
+
+`DeclinedReason::Unplaced` is defensive: it fires only when the CFG builder
+returned a partial graph (its step budget) and an operation inside the body
+has no covering node. No fixture triggers it.
