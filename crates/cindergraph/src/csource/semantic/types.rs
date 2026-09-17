@@ -114,6 +114,14 @@ pub(crate) struct Qualifiers {
 }
 
 impl Qualifiers {
+    /// No qualifiers, as a constant.
+    pub(crate) const NONE: Qualifiers = Qualifiers {
+        is_const: false,
+        is_volatile: false,
+        is_restrict: false,
+        is_atomic: false,
+    };
+
     fn is_empty(self) -> bool {
         self == Self::default()
     }
@@ -374,6 +382,43 @@ impl FunctionTypes {
         self.records
             .get(record.0 as usize)
             .map(|record| record.kind)
+    }
+
+    /// The record `kind name` visible at `at`, by the same scoping rule the
+    /// declaration resolver uses.
+    pub(crate) fn visible_record(&self, kind: RecordKind, name: &str, at: u32) -> Option<RecordId> {
+        self.named_records
+            .get(&(kind, name.to_owned()))?
+            .iter()
+            .rev()
+            .find_map(|binding| {
+                (binding.introduced <= at && at < binding.scope_hi).then_some(binding.record)
+            })
+    }
+
+    /// How `record` is spelled: `struct name`, or the bare keyword for an
+    /// anonymous definition.
+    pub(crate) fn record_spelling(&self, record: RecordId) -> String {
+        let keyword = match self.records.get(record.0 as usize).map(|r| r.kind) {
+            Some(RecordKind::Union) => "union",
+            _ => "struct",
+        };
+        self.named_records
+            .iter()
+            .find(|(_, bindings)| bindings.iter().any(|binding| binding.record == record))
+            .map_or_else(
+                || keyword.to_owned(),
+                |((_, name), _)| format!("{keyword} {name}"),
+            )
+    }
+
+    /// The declared type of `member` in `record`.
+    pub(crate) fn record_member_type(&self, record: RecordId, member: &str) -> Option<TypeId> {
+        self.records
+            .get(record.0 as usize)?
+            .members
+            .get(member)
+            .copied()
     }
 
     pub(crate) fn type_is_array(&self, ty: TypeId) -> bool {

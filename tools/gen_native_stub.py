@@ -101,7 +101,7 @@ def render() -> str:
         if not names:
             lines.append("    pass")
         lines.append("")
-    lines.extend(["source: _Source", "csource: _CSource", ""])
+    lines.extend(["__version__: str", "source: _Source", "csource: _CSource", ""])
     return "\n".join(lines)
 
 

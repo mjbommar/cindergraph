@@ -15,6 +15,7 @@ use crate::syntax::diag::Diagnostics;
 use crate::syntax::ids::Span;
 
 pub(crate) mod declarations;
+pub(crate) mod expr_types;
 pub(crate) mod types;
 
 use declarations::{resolve_function, FunctionResolution, TranslationUnitSymbols};
@@ -245,6 +246,19 @@ impl AnalysisUnit {
     /// Structural declared types aligned with [`AnalysisUnit::functions`].
     pub(crate) fn types(&self) -> &[FunctionTypes] {
         &self.types
+    }
+
+    /// An expression typer over the function at `index` in
+    /// [`AnalysisUnit::functions`], or `None` when there is no such function.
+    pub(crate) fn expression_typer(&self, index: usize) -> Option<expr_types::ExpressionTyper<'_>> {
+        Some(expr_types::ExpressionTyper {
+            tree: &self.tree,
+            text: &self.source,
+            token_spans: &self.token_spans,
+            resolution: self.resolutions.get(index)?,
+            types: self.types.get(index)?,
+            symbols: &self.symbols,
+        })
     }
 
     /// Executable semantic operations aligned with the function table.
