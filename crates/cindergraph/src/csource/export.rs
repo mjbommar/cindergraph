@@ -33,18 +33,20 @@
 //! through a checked helper and produces an empty label for an invalid UTF-8
 //! boundary instead of indexing the string directly.
 
+use crate::csource::cfg::FunctionCfg;
 use crate::csource::parse::tag::NodeTag;
 use crate::csource::parse::Tree;
 use crate::csource::semantic::expr_types::{
     CType, ExpressionTyper, ExpressionTypes, Layer, ParameterFacts,
 };
 use crate::csource::semantic::AnalysisUnit;
-use crate::syntax::cfg::Cfg;
+use crate::syntax::cfg::{Cfg, NodeKind};
 use crate::syntax::diag::Parsed;
 use crate::syntax::dominance::ControlDependence;
 use crate::syntax::graph_export::{ExportEdge, ExportNode, GraphView};
 use crate::syntax::ids::{NodeId, Span};
 
+mod loops;
 mod ops;
 
 /// How long a source snippet in a node label may get, in characters.
@@ -147,9 +149,11 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
         Repr::Cfg => unit
             .functions()
             .iter()
-            .map(|function| {
+            .enumerate()
+            .map(|(index, function)| {
                 let mut view = cfg_view(&function.name, &function.cfg, text);
                 mark_expression_internal(&mut view, &function.expression_internal);
+                mark_loops(&mut view, unit, index, function);
                 view
             })
             .collect(),
@@ -186,9 +190,11 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
         Repr::Cdg => unit
             .functions()
             .iter()
-            .map(|function| {
+            .enumerate()
+            .map(|(index, function)| {
                 let mut view = cdg_view(&function.name, &function.cfg, text);
                 mark_expression_internal(&mut view, &function.expression_internal);
+                mark_loops(&mut view, unit, index, function);
                 view
             })
             .collect(),
@@ -196,9 +202,11 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
             .functions()
             .iter()
             .zip(unit.dataflows())
-            .map(|(function, flow)| {
+            .enumerate()
+            .map(|(index, (function, flow))| {
                 let mut view = pdg_view(&function.name, &function.cfg, flow, text);
                 mark_expression_internal(&mut view, &function.expression_internal);
+                mark_loops(&mut view, unit, index, function);
                 view
             })
             .collect(),
@@ -237,6 +245,48 @@ fn mark_expression_internal(view: &mut GraphView, internal: &[NodeId]) {
             "expr_internal".to_owned(),
             if flagged { "true" } else { "false" }.to_owned(),
         ));
+    }
+}
+
+/// Adds the loop metadata ([`loops`]) to every `loop_header` node of a view
+/// over the CFG node set of `function`, the function at `index` in the unit.
+///
+/// A `loop_header`'s span is the loop's condition (or the whole statement
+/// when it has none), which is exactly the key [`loops::loops_by_header_span`]
+/// returns, so the join is by span and never by position. Parameter bounds
+/// are resolved through the unit's declaration resolution; without it a name
+/// bound would be `runtime`.
+fn mark_loops(view: &mut GraphView, unit: &AnalysisUnit, index: usize, function: &FunctionCfg) {
+    let resolution = unit.resolutions().get(index);
+    let is_parameter = resolution.map(|resolution| {
+        move |name: &str, offset: u32| {
+            resolution
+                .resolve_at(name, offset)
+                .is_some_and(|declaration| resolution.is_parameter(declaration))
+        }
+    });
+    let is_parameter: Option<loops::IsParameter<'_>> = is_parameter
+        .as_ref()
+        .map(|predicate| predicate as &dyn Fn(&str, u32) -> bool);
+    let facts = loops::loops_by_header_span(
+        unit.tree(),
+        function.node,
+        unit.token_spans(),
+        unit.source(),
+        is_parameter,
+    );
+    for (position, node) in function.cfg.nodes().iter().enumerate() {
+        if node.kind() != NodeKind::LoopHeader {
+            continue;
+        }
+        let Some(facts) = facts.get(&node.span()) else {
+            continue;
+        };
+        if let Some(exported) = view.nodes.get_mut(position) {
+            for (key, value) in facts.attributes() {
+                exported.attrs.push((key.to_owned(), value));
+            }
+        }
     }
 }
 
@@ -324,6 +374,11 @@ pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
 ///   with three operands; see `parse/tag.rs`) reports its first operator in
 ///   `op` and every operator, comma-separated in source order, in `ops`.
 ///   `ops` is present only on chains with more than one operator.
+/// * `loop_kind`, `bound_kind`, `bound_expr`, `induction`, `step`,
+///   `init_value`, `bound_value` --- on `for_stmt`, `while_stmt` and
+///   `do_while_stmt`, what a bounded unroller needs ([`loops`]). Here, with
+///   no declaration resolution, a bound that is a name is `runtime`; the
+///   unit-owned paths classify a function parameter as `parameter`.
 ///
 /// The one-shot [`export`] and [`export_unit`] paths add the semantic
 /// attributes (`type`, `operand_type`, declarator and parameter fields) that
@@ -369,6 +424,11 @@ fn ast_view_with(
     }
     let dense = |node: NodeId| dense_of.get(node.index()).copied().flatten();
     let tables = semantics.map(|semantics| semantics.expression_types(root));
+    let is_parameter = semantics
+        .map(|semantics| move |name: &str, offset: u32| semantics.is_parameter(name, offset));
+    let is_parameter: Option<loops::IsParameter<'_>> = is_parameter
+        .as_ref()
+        .map(|predicate| predicate as &dyn Fn(&str, u32) -> bool);
 
     for (node, id) in &ids {
         let tag = arena.tag(*node).and_then(NodeTag::from_u16);
@@ -401,6 +461,13 @@ fn ast_view_with(
             }
             if let (Some(tables), Some(semantics)) = (tables.as_ref(), semantics) {
                 exported = semantics.decorate(exported, *node, tag, tables);
+            }
+            if let Some(facts) =
+                loops::loop_facts(tree, root, *node, tag, token_spans, text, is_parameter)
+            {
+                for (key, value) in facts.attributes() {
+                    exported = exported.with(key, value);
+                }
             }
         }
         view.nodes.push(exported);
@@ -505,6 +572,15 @@ struct AstSemanticTables {
 }
 
 impl AstSemantics<'_> {
+    /// Whether `name`, referenced at byte `offset`, resolves to one of the
+    /// function's own parameters.
+    fn is_parameter(&self, name: &str, offset: u32) -> bool {
+        self.typer
+            .resolution
+            .resolve_at(name, offset)
+            .is_some_and(|declaration| self.typer.resolution.is_parameter(declaration))
+    }
+
     fn expression_types(&self, root: NodeId) -> AstSemanticTables {
         AstSemanticTables {
             expressions: self.typer.compute(root),
@@ -2061,5 +2137,172 @@ mod ordering_contract_tests {
                 assert_eq!(write(a, Format::Json), write(b, Format::Json));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod loop_metadata_tests {
+    //! Item 12 of `docs/improvement-list-2026-09-16.md`: the loop header
+    //! carries what a bounded unroller needs, on the AST loop statement and
+    //! on the CFG `loop_header` node alike, and refuses to guess.
+
+    use super::*;
+    use crate::syntax::graph_export::ExportNode;
+
+    fn attr<'a>(node: &'a ExportNode, key: &str) -> Option<&'a str> {
+        node.attrs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// The loop attributes of every AST loop statement and every CFG
+    /// `loop_header` of the first function, in source order, as
+    /// `(bound_kind, induction, step, bound_value, bound_expr)`.
+    fn loops(text: &str, repr: Repr) -> Vec<Vec<(String, String)>> {
+        let unit = AnalysisUnit::new(text);
+        let view = &export_unit(&unit, repr)[0];
+        view.nodes
+            .iter()
+            .filter(|node| match repr {
+                Repr::Ast => matches!(
+                    attr(node, "tag"),
+                    Some("for_stmt" | "while_stmt" | "do_while_stmt")
+                ),
+                _ => attr(node, "kind") == Some("loop_header"),
+            })
+            .map(|node| {
+                node.attrs
+                    .iter()
+                    .filter(|(k, _)| {
+                        matches!(
+                            k.as_str(),
+                            "loop_kind"
+                                | "bound_kind"
+                                | "bound_expr"
+                                | "induction"
+                                | "step"
+                                | "init_value"
+                                | "bound_value"
+                        )
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn pairs(items: &[(&str, &str)]) -> Vec<(String, String)> {
+        items
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn a_literal_bound_for_loop_is_constant_sixteen_step_plus_one() {
+        let text = "int f(void){ int s = 0, i; for (i = 0; i < 16; i++) s += i; return s; }";
+        let expected = pairs(&[
+            ("loop_kind", "for"),
+            ("bound_kind", "constant"),
+            ("bound_expr", "i < 16"),
+            ("induction", "i"),
+            ("step", "+1"),
+            ("init_value", "0"),
+            ("bound_value", "16"),
+        ]);
+        assert_eq!(loops(text, Repr::Ast), vec![expected.clone()]);
+        assert_eq!(loops(text, Repr::Cfg), vec![expected]);
+    }
+
+    #[test]
+    fn a_parameter_bound_the_body_leaves_alone_is_parameter() {
+        let text = "int f(int n){ int s = 0, i; for (i = 0; i <= n; i++) s += i; return s; }";
+        let expected = pairs(&[
+            ("loop_kind", "for"),
+            ("bound_kind", "parameter"),
+            ("bound_expr", "i <= n"),
+            ("induction", "i"),
+            ("step", "+1"),
+            ("init_value", "0"),
+        ]);
+        assert_eq!(loops(text, Repr::Ast), vec![expected.clone()]);
+        assert_eq!(loops(text, Repr::Cfg), vec![expected]);
+    }
+
+    #[test]
+    fn a_local_bound_is_not_a_parameter() {
+        // Same shape, but `n` is a local: the resolver says so, and the
+        // classification is `runtime`, not a guess from the name.
+        let text = "int f(void){ int n = 3, s = 0, i; for (i = 0; i <= n; i++) s += i; return s; }";
+        let [only] = &loops(text, Repr::Ast)[..] else {
+            panic!("one loop")
+        };
+        assert!(
+            only.contains(&("bound_kind".to_owned(), "runtime".to_owned())),
+            "{only:?}"
+        );
+    }
+
+    #[test]
+    fn a_while_loop_names_its_induction_and_step_but_is_runtime() {
+        let text = "unsigned f(unsigned u){ while (u > 0) { u--; } return u; }";
+        let expected = pairs(&[
+            ("loop_kind", "while"),
+            ("bound_kind", "runtime"),
+            ("bound_expr", "u > 0"),
+            ("induction", "u"),
+            ("step", "-1"),
+        ]);
+        assert_eq!(loops(text, Repr::Ast), vec![expected.clone()]);
+        assert_eq!(loops(text, Repr::Cfg), vec![expected]);
+    }
+
+    #[test]
+    fn a_body_that_assigns_the_bound_variable_is_runtime() {
+        let text = "int f(int n){ int s = 0, i; for (i = 0; i <= n; i++) { s += i; n = n - 1; } return s; }";
+        let expected = pairs(&[
+            ("loop_kind", "for"),
+            ("bound_kind", "runtime"),
+            ("bound_expr", "i <= n"),
+            ("induction", "i"),
+            ("step", "+1"),
+            ("init_value", "0"),
+        ]);
+        assert_eq!(loops(text, Repr::Ast), vec![expected.clone()]);
+        assert_eq!(loops(text, Repr::Cfg), vec![expected]);
+    }
+
+    #[test]
+    fn the_cdg_and_pdg_carry_the_same_loop_attributes_as_the_cfg() {
+        let text = "int f(int n){ int s = 0, i; for (i = 0; i < 16; i++) s += i; \
+                    do { n--; } while (n > 0); for (;;) { break; } return s; }";
+        let cfg = loops(text, Repr::Cfg);
+        assert_eq!(cfg.len(), 3, "{cfg:?}");
+        assert_eq!(loops(text, Repr::Cdg), cfg);
+        assert_eq!(loops(text, Repr::Pdg), cfg);
+        assert_eq!(loops(text, Repr::Ast), cfg);
+        assert_eq!(
+            cfg[2],
+            pairs(&[("loop_kind", "for"), ("bound_kind", "none")])
+        );
+    }
+
+    #[test]
+    fn the_tree_only_builder_classifies_without_parameters() {
+        // No resolver: a literal bound is still constant, a name bound is
+        // runtime rather than a guess.
+        let text = "int f(int n){ int i; for (i = 0; i < 16; i++) {} for (i = 0; i < n; i++) {} return i; }";
+        let tree = crate::csource::parse::parse(text).into_parts().0;
+        let spans = tree.token_spans(text);
+        let function = &tree.functions(text)[0];
+        let view = ast_view(&function.name, &tree, function.node, &spans, text);
+        let kinds: Vec<&str> = view
+            .nodes
+            .iter()
+            .filter(|node| attr(node, "tag") == Some("for_stmt"))
+            .map(|node| attr(node, "bound_kind").unwrap())
+            .collect();
+        assert_eq!(kinds, vec!["constant", "runtime"]);
     }
 }
