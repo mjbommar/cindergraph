@@ -46,7 +46,14 @@ int greet(const char *name, int times)
 @pytest.mark.core
 def test_the_choice_lists_come_from_rust():
     """A format added in Rust must appear here without a second edit."""
-    assert set(cindergraph.source.EXPORT_REPRS) == {"cfg", "ast", "ddg", "cdg", "pdg"}
+    assert set(cindergraph.source.EXPORT_REPRS) == {
+        "cfg",
+        "ast",
+        "ddg",
+        "cdg",
+        "pdg",
+        "ops",
+    }
     assert set(cindergraph.source.EXPORT_FORMATS) == {
         "dot",
         "graphml",

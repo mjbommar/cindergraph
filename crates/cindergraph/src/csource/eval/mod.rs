@@ -116,6 +116,12 @@ pub(crate) enum ProjectionBaseOperand {
 }
 
 impl ProjectionBaseOperand {
+    /// How many evaluated values this base contributes to an operation's
+    /// inputs, in the order [`Self::scalars`] lists them.
+    pub(crate) fn scalar_count(&self) -> usize {
+        self.scalars().len()
+    }
+
     fn scalars(&self) -> Vec<ScalarOperand> {
         match self {
             Self::Value(value) => vec![value.clone()],
@@ -547,6 +553,57 @@ pub(crate) struct EvaluationOp {
     pub(crate) kind: TypeValueOp,
 }
 
+/// Why an expression root produced no operations.
+///
+/// The plan cannot lower every scalar form yet; a consumer that reads the
+/// plan as "everything that executes" must be told where it is silent, or
+/// it will read silence as absence. Each declined root keeps its purpose and
+/// span so an export can stand an explicit unknown operation in its place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeclinedReason {
+    /// A form `lower_scalar_expression` has no rule for: a cast, `sizeof`
+    /// as an operand, a file-scope object, a non-integer literal, a call
+    /// through a local function pointer, an assignment to a non-place.
+    UnsupportedForm,
+    /// Two side effects with no dependency, short-circuit or
+    /// mutual-exclusion proof between them.
+    UnsequencedEffects,
+    /// A braced initializer: aggregate destinations are not scalar roots.
+    BracedInitializer,
+    /// At least one lowered operation had no CFG node to be placed in.
+    Unplaced,
+}
+
+impl DeclinedReason {
+    /// Stable lowercase spelling for serialized exports.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::UnsupportedForm => "unsupported_form",
+            Self::UnsequencedEffects => "unsequenced_effects",
+            Self::BracedInitializer => "braced_initializer",
+            Self::Unplaced => "unplaced",
+        }
+    }
+}
+
+/// One expression root the plan declined to lower.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DeclinedRoot {
+    pub(crate) purpose: EvaluationPurpose,
+    pub(crate) expression: Span,
+    /// The innermost CFG node covering the expression, when there is one.
+    pub(crate) cfg_node: Option<u32>,
+    pub(crate) reason: DeclinedReason,
+}
+
+impl EvaluationOp {
+    /// The source span this operation is diagnosed at: the occurrence for a
+    /// leaf read, the whole expression for a compound operation.
+    pub(crate) fn span(&self) -> Span {
+        operation_span(&self.kind)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EvaluationValue {
     id: ValueId,
@@ -565,6 +622,7 @@ pub(crate) struct EvaluationPlan {
     unsequenced_roots: Vec<Span>,
     ambiguous_size_names: Vec<Span>,
     lowered_formations: Vec<Span>,
+    declined: Vec<DeclinedRoot>,
 }
 
 impl EvaluationPlan {
@@ -610,6 +668,8 @@ impl EvaluationPlan {
                 inputs: form_inputs,
             });
         }
+        let mut declined = Vec::new();
+        let mut root_of_evaluation = BTreeMap::new();
         for (purpose, expression) in ordinary_expression_roots(tree, token_spans, root, resolution)
         {
             let evaluation = EvaluationId(next_evaluation);
@@ -625,10 +685,15 @@ impl EvaluationPlan {
                 Ok(lowered) => lowered,
                 Err(ScalarRootFailure::UnsequencedEffects) => {
                     plan.unsequenced_roots.push(expression);
+                    declined.push((purpose, expression, DeclinedReason::UnsequencedEffects));
                     continue;
                 }
-                Err(ScalarRootFailure::Unsupported) => continue,
+                Err(ScalarRootFailure::Unsupported) => {
+                    declined.push((purpose, expression, DeclinedReason::UnsupportedForm));
+                    continue;
+                }
             };
+            root_of_evaluation.insert(evaluation, (purpose, expression));
             next_evaluation += 1;
             kinds.append(&mut operations);
             kinds.push(TypeValueOp::FinishExpression {
@@ -637,6 +702,9 @@ impl EvaluationPlan {
                 expression,
                 value,
             });
+        }
+        for (purpose, expression) in braced_initializer_roots(tree, token_spans, root, resolution) {
+            declined.push((purpose, expression, DeclinedReason::BracedInitializer));
         }
         for node in arena.preorder(root) {
             if arena.tag(node) != Some(NodeTag::UnaryExpr.as_u16())
@@ -676,14 +744,33 @@ impl EvaluationPlan {
             .map(|(index, node)| (node.span(), index as u32))
             .collect::<Vec<_>>();
         placement_index.sort_by_key(|(span, index)| (span.hi.saturating_sub(span.lo), *index));
-        let placed = kinds
+        let mut unplaced_evaluations = BTreeSet::new();
+        let mut placed = Vec::with_capacity(kinds.len());
+        for kind in kinds {
+            match cfg_node_for_span(&placement_index, operation_span(&kind), body_start) {
+                Some(cfg_node) => placed.push((cfg_node, kind)),
+                None => {
+                    unplaced_evaluations.extend(operation_evaluation(&kind));
+                }
+            }
+        }
+        // A root with an unplaced operation is incomplete; keep the placed
+        // operations (dataflow consumes them today) but say so.
+        for evaluation in &unplaced_evaluations {
+            if let Some((purpose, expression)) = root_of_evaluation.get(evaluation) {
+                declined.push((*purpose, *expression, DeclinedReason::Unplaced));
+            }
+        }
+        declined.sort_by_key(|(_, expression, _)| (expression.lo, expression.hi));
+        plan.declined = declined
             .into_iter()
-            .filter_map(|kind| {
-                let cfg_node =
-                    cfg_node_for_span(&placement_index, operation_span(&kind), body_start)?;
-                Some((cfg_node, kind))
+            .map(|(purpose, expression, reason)| DeclinedRoot {
+                purpose,
+                expression,
+                cfg_node: cfg_node_for_span(&placement_index, expression, body_start),
+                reason,
             })
-            .collect::<Vec<_>>();
+            .collect();
         let mut expression_result = BTreeMap::new();
         let mut formed_slot_value = BTreeMap::new();
         let mut produced_expression = BTreeMap::new();
@@ -845,6 +932,24 @@ impl EvaluationPlan {
 
     pub(crate) fn unsequenced_roots(&self) -> &[Span] {
         &self.unsequenced_roots
+    }
+
+    /// Expression roots that produced no operations, with the reason, in
+    /// source order.
+    pub(crate) fn declined_roots(&self) -> &[DeclinedRoot] {
+        &self.declined
+    }
+
+    /// Conditional evaluation regions, indexed by `GuardId`.
+    pub(crate) fn guards(&self) -> &[EvaluationGuard] {
+        &self.guards
+    }
+
+    /// The scalar operand a leaf value stands for, when it has one.
+    pub(crate) fn value_scalar(&self, value: ValueId) -> Option<&ScalarOperand> {
+        self.values
+            .get(value.0 as usize)
+            .and_then(|value| value.scalar.as_ref())
     }
 
     #[cfg(test)]
@@ -1854,6 +1959,56 @@ fn ordinary_expression_roots(
                 }
             }
             _ => {}
+        }
+    }
+    roots
+}
+
+/// Declarations initialized by a braced list, which
+/// [`ordinary_expression_roots`] deliberately skips.
+fn braced_initializer_roots(
+    tree: &Tree,
+    token_spans: &[Span],
+    root: NodeId,
+    resolution: &FunctionResolution,
+) -> Vec<(EvaluationPurpose, Span)> {
+    let arena = tree.arena();
+    let mut roots = Vec::new();
+    for node in arena.preorder(root) {
+        if arena.tag(node) != Some(NodeTag::Decl.as_u16()) {
+            continue;
+        }
+        let mut declaration = None;
+        for child in arena.children_iter(node) {
+            match arena.tag(child).and_then(NodeTag::from_u16) {
+                Some(NodeTag::Declarator) => {
+                    declaration = arena.preorder(child).find_map(|inner| {
+                        (arena.tag(inner) == Some(NodeTag::DeclName.as_u16()))
+                            .then(|| arena.span(inner, token_spans))
+                            .flatten()
+                    });
+                }
+                Some(NodeTag::Initializer) => {
+                    let list = arena.children_iter(child).find_map(|inner| {
+                        (arena.tag(inner) == Some(NodeTag::InitList.as_u16()))
+                            .then(|| arena.span(inner, token_spans))
+                            .flatten()
+                    });
+                    if let (Some(declaration), Some(expression)) = (declaration, list) {
+                        roots.push((
+                            EvaluationPurpose::Initialize {
+                                place: resolution
+                                    .declaration_at(declaration)
+                                    .filter(|symbol| symbol.kind == SymbolKind::Value)
+                                    .map(|symbol| PlaceId::from(symbol.id)),
+                                declaration,
+                            },
+                            expression,
+                        ));
+                    }
+                }
+                _ => {}
+            }
         }
     }
     roots
@@ -4183,10 +4338,12 @@ mod tests {
             .find(|operation| matches!(operation.kind, TypeValueOp::FormBound { .. }))
             .expect("bound formation");
         assert_eq!(formation.inputs, [computes[3].output]);
-        assert!(operations.iter().all(|operation| operation
-            .inputs
-            .iter()
-            .all(|input| input.0 < operation.output.0)));
+        assert!(operations.iter().all(|operation| {
+            operation
+                .inputs
+                .iter()
+                .all(|input| input.0 < operation.output.0)
+        }));
     }
 
     #[test]

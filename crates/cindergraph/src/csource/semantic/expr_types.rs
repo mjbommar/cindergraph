@@ -236,6 +236,13 @@ impl CType {
         base_qualifiers: Qualifiers::NONE,
     };
 
+    /// `void`: the type of an operation that produces no value.
+    pub(crate) const VOID: CType = CType {
+        layers: Vec::new(),
+        base: Base::Void,
+        base_qualifiers: Qualifiers::NONE,
+    };
+
     fn scalar(base: Base) -> Self {
         CType {
             layers: Vec::new(),
@@ -244,15 +251,15 @@ impl CType {
         }
     }
 
-    fn int(kind: IntKind) -> Self {
+    pub(crate) fn int(kind: IntKind) -> Self {
         Self::scalar(Base::Int(kind))
     }
 
-    fn is_unknown(&self) -> bool {
+    pub(crate) fn is_unknown(&self) -> bool {
         self.layers.is_empty() && self.base == Base::Unknown
     }
 
-    fn as_int(&self) -> Option<IntKind> {
+    pub(crate) fn as_int(&self) -> Option<IntKind> {
         match (&self.base, self.layers.is_empty()) {
             (Base::Int(kind), true) => Some(*kind),
             _ => None,
@@ -266,11 +273,11 @@ impl CType {
         }
     }
 
-    fn is_arithmetic(&self) -> bool {
+    pub(crate) fn is_arithmetic(&self) -> bool {
         self.as_int().is_some() || self.as_float().is_some()
     }
 
-    fn is_pointer(&self) -> bool {
+    pub(crate) fn is_pointer(&self) -> bool {
         matches!(self.layers.first(), Some(Layer::Pointer(_)))
     }
 
@@ -287,7 +294,7 @@ impl CType {
     /// The result of lvalue conversion: the same type without its top-level
     /// qualifiers (C17 §6.3.2.1p2). Array element qualifiers are not
     /// top-level and stay.
-    fn unqualified(mut self) -> Self {
+    pub(crate) fn unqualified(mut self) -> Self {
         match self.layers.first_mut() {
             Some(Layer::Pointer(qualifiers)) => *qualifiers = Qualifiers::default(),
             Some(_) => {}
@@ -298,7 +305,7 @@ impl CType {
 
     /// The array-to-pointer conversion, C17 §6.3.2.1p3; other types are
     /// returned unchanged.
-    fn decayed(mut self) -> Self {
+    pub(crate) fn decayed(mut self) -> Self {
         if let Some(Layer::Array(_)) = self.layers.first() {
             self.layers[0] = Layer::Pointer(Qualifiers::default());
         }
@@ -323,7 +330,7 @@ impl CType {
 
     /// Integer promotion applied to an arithmetic type; anything else is
     /// unknown. An enum is unknown here on purpose (see [`Base::Enum`]).
-    fn promoted(&self) -> CType {
+    pub(crate) fn promoted(&self) -> CType {
         if let Some(kind) = self.as_int() {
             CType::int(kind.promoted())
         } else if let Some(kind) = self.as_float() {
@@ -420,7 +427,7 @@ fn qualifier_suffix(qualifiers: Qualifiers) -> String {
 
 /// The usual arithmetic conversions on two arithmetic types (C17 §6.3.1.8),
 /// or `Unknown` when either operand is not arithmetic.
-fn usual_arithmetic(left: &CType, right: &CType) -> CType {
+pub(crate) fn usual_arithmetic(left: &CType, right: &CType) -> CType {
     match (left.as_float(), right.as_float()) {
         (Some(a), Some(b)) => return CType::scalar(Base::Float(a.max(b))),
         (Some(a), None) if right.as_int().is_some() => return CType::scalar(Base::Float(a)),
@@ -442,6 +449,12 @@ pub(crate) struct ExpressionTypes {
     /// For binary and assignment chains, the type the operands of each
     /// operator are converted to, one entry per operator in source order.
     operand_types: BTreeMap<NodeId, Vec<CType>>,
+    /// For binary chains, the type of the value after each operator, one
+    /// entry per operator in source order; the last is the node's type. A
+    /// chain is one node, so the inner prefixes (`a + b` in `a + b - c`) have
+    /// no node of their own to carry a type, and an evaluation consumer that
+    /// lowers the chain one operator at a time reads them here.
+    chain_results: BTreeMap<NodeId, Vec<CType>>,
 }
 
 impl ExpressionTypes {
@@ -451,6 +464,10 @@ impl ExpressionTypes {
 
     pub(crate) fn operand_types_of(&self, node: NodeId) -> Option<&[CType]> {
         self.operand_types.get(&node).map(Vec::as_slice)
+    }
+
+    pub(crate) fn chain_results_of(&self, node: NodeId) -> Option<&[CType]> {
+        self.chain_results.get(&node).map(Vec::as_slice)
     }
 }
 
@@ -526,16 +543,21 @@ impl ExpressionTyper<'_> {
                 let ops = self.gap_operators(&children);
                 let mut acc = child(0);
                 let mut operand_types = Vec::with_capacity(ops.len());
+                let mut results = Vec::with_capacity(ops.len());
                 for (index, op) in ops.iter().enumerate() {
                     let rhs = child(index + 1);
                     let (result, operand) = self.binary(op, &acc, &rhs, offset);
                     if let Some(operand) = operand {
                         operand_types.push(operand);
                     }
+                    results.push(result.clone());
                     acc = result;
                 }
                 if !operand_types.is_empty() {
                     out.operand_types.insert(node, operand_types);
+                }
+                if !results.is_empty() {
+                    out.chain_results.insert(node, results);
                 }
                 acc
             }
@@ -616,7 +638,13 @@ impl ExpressionTyper<'_> {
     /// The type of `op` applied to `left` and `right`, and the type the
     /// operands are converted to for it (`None` when the operator converts
     /// nothing: `&&` and `||` test each operand on its own).
-    fn binary(&self, op: &str, left: &CType, right: &CType, offset: u32) -> (CType, Option<CType>) {
+    pub(crate) fn binary(
+        &self,
+        op: &str,
+        left: &CType,
+        right: &CType,
+        offset: u32,
+    ) -> (CType, Option<CType>) {
         let int = CType::int(IntKind::Int);
         match op {
             "*" | "/" => {
@@ -1116,7 +1144,7 @@ impl ExpressionTyper<'_> {
 
 impl CType {
     /// The result type of a function type, or unknown.
-    fn pointee_function(mut self) -> CType {
+    pub(crate) fn pointee_function(mut self) -> CType {
         match self.layers.first() {
             Some(Layer::Function) => {
                 self.layers.remove(0);
@@ -1151,6 +1179,64 @@ impl ExpressionTyper<'_> {
             .and_then(|span| self.types.type_of_declaration(span))
             .map(|id| self.declared_type(id));
         DeclaratorFacts { name, declared }
+    }
+
+    /// The adjusted, lvalue-converted type of the object declared at the
+    /// declaration-name span `declaration` --- what a read of it yields and
+    /// what a store to it converts to --- or unknown when the structural
+    /// layer did not resolve it. This is the same lookup [`Self::name_ref`]
+    /// makes for a resolved name.
+    pub(crate) fn declared_type_at(&self, declaration: Span) -> CType {
+        self.types
+            .adjusted_type_of_declaration(declaration)
+            .map_or(CType::UNKNOWN, |id| self.declared_type(id).unqualified())
+    }
+
+    /// The return type of the function definition at `root`, read from its
+    /// declaration specifiers and the pointer operators before its name with
+    /// the same word rule an unnamed parameter uses, after lvalue conversion.
+    /// A shape that rule does not cover (a function returning a function or
+    /// array pointer) is unknown.
+    pub(crate) fn return_type_of_function(&self, root: NodeId) -> CType {
+        let arena = self.tree.arena();
+        let mut words: Vec<&str> = Vec::new();
+        let mut offset = 0u32;
+        let word_at = |raw: u32| -> Option<&str> {
+            let span = self.token_spans.get(raw as usize)?;
+            self.text
+                .get(span.lo as usize..span.hi as usize)
+                .map(str::trim)
+                .filter(|word| !word.is_empty())
+        };
+        for child in arena.children_iter(root) {
+            match arena.tag(child).and_then(NodeTag::from_u16) {
+                Some(NodeTag::DeclSpecifiers) => {
+                    let Some((start, end)) = arena.token_extent(child) else {
+                        return CType::UNKNOWN;
+                    };
+                    offset = self
+                        .token_spans
+                        .get(start as usize)
+                        .map_or(0, |span| span.lo);
+                    words.extend((start..end).filter_map(word_at));
+                }
+                Some(NodeTag::Declarator) => {
+                    let Some((start, _)) = arena.token_extent(child) else {
+                        return CType::UNKNOWN;
+                    };
+                    let Some((name_start, _)) = arena
+                        .preorder(child)
+                        .find(|node| arena.tag(*node) == Some(NodeTag::DeclName.as_u16()))
+                        .and_then(|name| arena.token_extent(name))
+                    else {
+                        return CType::UNKNOWN;
+                    };
+                    words.extend((start..name_start).filter_map(word_at));
+                }
+                _ => {}
+            }
+        }
+        self.type_from_words(&words, offset).unqualified()
     }
 
     /// Name, adjusted type and pointer depth of every `param_decl` under
@@ -1327,7 +1413,7 @@ fn builtin_base(words: &[&str]) -> Option<Base> {
 }
 
 /// The type of an integer constant, C17 §6.4.4.1p5, under LP64 widths.
-fn integer_literal(text: &str) -> CType {
+pub(crate) fn integer_literal(text: &str) -> CType {
     let lower = text.to_ascii_lowercase();
     // Split the digit run from the suffix by radix first: a hex literal's last
     // digit can be a letter that would otherwise read as a suffix.

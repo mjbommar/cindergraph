@@ -45,6 +45,8 @@ use crate::syntax::dominance::ControlDependence;
 use crate::syntax::graph_export::{ExportEdge, ExportNode, GraphView};
 use crate::syntax::ids::{NodeId, Span};
 
+mod ops;
+
 /// How long a source snippet in a node label may get, in characters.
 ///
 /// Long enough to identify the statement, short enough that a Graphviz node
@@ -66,11 +68,22 @@ pub enum Repr {
     /// The program-dependence graph: control and data dependence on one node
     /// set, which is the graph a slice is taken from.
     Pdg,
+    /// The typed operations: each function's evaluation lowering as a list of
+    /// operations with C types, explicit conversions, value inputs and CFG
+    /// positions. Nodes are operations and edges are value flow.
+    Ops,
 }
 
 impl Repr {
     /// Every representation, in declaration order, for a CLI choice list.
-    pub const ALL: [Repr; 5] = [Repr::Cfg, Repr::Ast, Repr::Ddg, Repr::Cdg, Repr::Pdg];
+    pub const ALL: [Repr; 6] = [
+        Repr::Cfg,
+        Repr::Ast,
+        Repr::Ddg,
+        Repr::Cdg,
+        Repr::Pdg,
+        Repr::Ops,
+    ];
 
     /// This representation's stable lowercase name, as a CLI accepts it.
     pub const fn name(self) -> &'static str {
@@ -80,6 +93,7 @@ impl Repr {
             Repr::Ddg => "ddg",
             Repr::Cdg => "cdg",
             Repr::Pdg => "pdg",
+            Repr::Ops => "ops",
         }
     }
 
@@ -91,6 +105,7 @@ impl Repr {
             Repr::Ddg => "data_dependence_graph",
             Repr::Cdg => "control_dependence_graph",
             Repr::Pdg => "program_dependence_graph",
+            Repr::Ops => "typed_operations",
         }
     }
 
@@ -102,6 +117,7 @@ impl Repr {
             "ddg" | "dataflow" | "data-flow" => Some(Repr::Ddg),
             "cdg" | "control" | "control-dependence" => Some(Repr::Cdg),
             "pdg" | "program-dependence" => Some(Repr::Pdg),
+            "ops" | "operations" | "typed-operations" | "typed_operations" => Some(Repr::Ops),
             _ => None,
         }
     }
@@ -184,6 +200,24 @@ pub fn export_unit(unit: &AnalysisUnit, repr: Repr) -> Vec<GraphView> {
                 let mut view = pdg_view(&function.name, &function.cfg, flow, text);
                 mark_expression_internal(&mut view, &function.expression_internal);
                 view
+            })
+            .collect(),
+        Repr::Ops => unit
+            .functions()
+            .iter()
+            .zip(unit.evaluations())
+            .enumerate()
+            .map(|(index, (function, plan))| {
+                let typer = unit.expression_typer(index);
+                ops::ops_view(
+                    &function.name,
+                    text,
+                    tree,
+                    unit.token_spans(),
+                    function,
+                    plan,
+                    typer.as_ref(),
+                )
             })
             .collect(),
     }
@@ -900,10 +934,11 @@ int greet(const char *name, int times)
             .nodes
             .iter()
             .any(|node| node.attrs.iter().any(|(k, v)| k == "kind" && v == "entry")));
-        assert!(view.nodes.iter().any(|node| node
-            .attrs
-            .iter()
-            .any(|(k, v)| k == "kind" && v == "loop_header")));
+        assert!(view.nodes.iter().any(|node| {
+            node.attrs
+                .iter()
+                .any(|(k, v)| k == "kind" && v == "loop_header")
+        }));
         assert!(view
             .edges
             .iter()
@@ -1076,14 +1111,16 @@ mod ddg_tests {
         let source = "struct S{int x;};int f(int v){struct S s;s.x=v;return s.x;}";
         let views = export(source, Repr::Ddg).into_parts().0;
         let view = &views[0];
-        assert!(view.nodes.iter().any(|node| node
-            .attrs
-            .iter()
-            .any(|(key, value)| key == "role" && value == "memory_definition")));
-        assert!(view.nodes.iter().any(|node| node
-            .attrs
-            .iter()
-            .any(|(key, value)| key == "role" && value == "memory_use")));
+        assert!(view.nodes.iter().any(|node| {
+            node.attrs
+                .iter()
+                .any(|(key, value)| key == "role" && value == "memory_definition")
+        }));
+        assert!(view.nodes.iter().any(|node| {
+            node.attrs
+                .iter()
+                .any(|(key, value)| key == "role" && value == "memory_use")
+        }));
         assert!(view.edges.iter().any(|edge| {
             edge.label == "s.x" && edge.attrs.iter().any(|(key, _)| key == "use_region")
         }));
@@ -1305,6 +1342,7 @@ int classify(int a, int b, int n)
                 ("ddg", "data_dependence_graph"),
                 ("cdg", "control_dependence_graph"),
                 ("pdg", "program_dependence_graph"),
+                ("ops", "typed_operations"),
             ]
         );
     }

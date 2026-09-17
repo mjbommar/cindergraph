@@ -36,6 +36,26 @@ attribute, name or order changes, and the parity projection is untouched.
   because a `&&`, `||` or `?:` was expanded, recorded by the emitter that
   expands them; CFG, CDG and PDG exports write `expr_internal` on every node
   so a consumer can collapse to statement-level control flow;
+- `export_graphs(repr="ops")` (item 3): each function's evaluation lowering
+  (`csource::eval::EvaluationPlan`, Milestone B) as a list of typed
+  operations in evaluation order --- `const`, `load`, `store`, `binary`,
+  `compare`, `unary`, `select`, `call`, `branch`, `return`, `sequence`,
+  `bound`, `convert`, `unknown` --- each with its result C type, value
+  `inputs`, CFG `block`, `root`, `guarded_by`, and byte span, plus `name`
+  and `declared` on loads and stores. Types come from the same
+  `semantic::expr_types` resolver the AST export reads, joined by span, and
+  C's implicit conversions are written out as `convert` operations
+  (`promotion`, `usual_arithmetic`, `assignment`, with `from` and `to`):
+  `unsigned short s; s += 2` shows the promotion to `int`, the add in `int`
+  and the assignment conversion back. Every root the lowering declines is an
+  `unknown` operation carrying its `reason` (`unsupported_form`,
+  `unsequenced_effects`, `braced_initializer`, `unplaced`), never a gap; a
+  cast is such a root today, so `cast` conversions cannot appear yet. The
+  sizing behind the design is
+  [`docs/typed-operations-export-sizing-2026-09-16.md`](docs/typed-operations-export-sizing-2026-09-16.md).
+  Underneath, `EvaluationPlan` now records its declined roots and
+  `ExpressionTypes` keeps the result type of every prefix of a flat binary
+  chain;
 - `cindergraph.__version__`, read from the extension's crate version, the
   same string the wheel's metadata carries;
 - `parse_source`, `fast_cfgs_from_source` and `parse_callgraph` raise a
