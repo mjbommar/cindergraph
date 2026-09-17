@@ -455,6 +455,88 @@ matters; GraphML labels are not a lossless source representation.
 Legal tabs and line endings in graph text are emitted as character references
 so XML whitespace normalization does not alter them.
 
+### Export schema
+
+Every representation is a node-link document: `nodes` (each with an integer
+`id`, a `label`, and string attributes) and `edges` (each with `source`,
+`target`, a `label`, and string attributes). Attribute values are strings in
+every format, including numbers and booleans (`"16"`, `"true"`); parse what you
+need. Attributes are only ever added between versions; an attribute listed
+here keeps its name and meaning.
+
+**Spans are byte offsets.** `span` is `lo:hi`, byte offsets into the analysed
+source text (after any dialect normalization), end exclusive. They are not
+character indices: slice the UTF-8 *bytes* (`source.encode("utf-8")[lo:hi]`),
+not a decoded `str`, or every span after the first multi-byte character is
+off. `line` and `column` are 1-based and computed from `lo`; the column counts
+bytes from the start of the line, so it agrees with `span` on every input and
+with an editor's column only on ASCII lines.
+
+Common to every node of every representation: `span`, `line`, `column`.
+
+`ast` nodes:
+
+- `tag`: the syntax-node kind (`func_def`, `binary_expr`, `name_ref`, ...).
+- `op`: on `binary_expr`, `assign_expr`, `unary_expr`, `cond_expr` and
+  `inc_dec_suffix`, the operator token as written (`+`, `<<=`, `!`, `++`),
+  `?:` for a conditional. A comment between operands is trivia and never
+  changes it. A binary or assignment *chain* is one flat node per precedence
+  level (`a + b - c` is one `binary_expr` with three operands); it reports its
+  first operator in `op` and every operator, comma-separated in source order,
+  in `ops`. `ops` appears only on chains with more than one operator.
+- `type`: on expression nodes (`name_ref`, `literal`, `paren_expr`,
+  `comma_expr`, `unary_expr`, `binary_expr`, `cast_expr`, `cond_expr`,
+  `assign_expr`, `postfix_expr`, `sizeof_type`, `alignof_type`,
+  `compound_literal`, `stmt_expr`, `builtin_expr`, `label_addr`), the C type
+  of the expression after lvalue conversion, integer promotion and the usual
+  arithmetic conversions (C17 §6.3.1.1, §6.3.1.8), spelled canonically
+  (`unsigned int`, `unsigned char *`, `const char *`, `int[16]`,
+  `struct point *`, `char[4]` for a string literal). Where the type cannot be
+  established it is `unknown` --- an undeclared name, a call with no visible
+  declaration, a typedef from a header that was not included (`size_t`,
+  `uint32_t` in an unpreprocessed file), a `_Complex` operand, an enum under
+  arithmetic --- never a guess. A pointer or array over an unresolved base
+  keeps its shape (`unknown *`, `unknown[16]`). The one platform assumption is
+  LP64 widths for the rule "the signed type can represent every value of the
+  unsigned type" (`long` with `unsigned int` is `long`); everything else
+  follows from rank alone.
+- `operand_type`: on `binary_expr` and `assign_expr` whose operator converts
+  its operands, the common type the operands are converted to for `op` --- the
+  consumer's `int < size_t` compares as `unsigned long` and has `type` `int`.
+  For a shift it is the promoted left operand; for a plain `=` the assigned-to
+  type; for a compound assignment the type the computation happens in. A
+  chain carries `operand_types`, one per operator. `&&` and `||` convert
+  nothing and carry no operand type.
+- `declarator`: `name`; `type` (the written declared type) when the semantic
+  layer resolved the declaration (locals, parameters, typedefs; not a
+  function's own declarator or a record member); for an array, `element_type`,
+  `array_bound` (`constant`, `runtime`, `incomplete` or `star`) and, for a
+  constant bound, `count` (the outermost dimension).
+- `param_decl`: `type` (the adjusted parameter type: an array or function
+  parameter is a pointer, C17 §6.7.6.3), `pointer_depth`, and `name` when the
+  parameter has one.
+
+`cfg` nodes: `kind` (`entry`, `exit`, `stmt`, `cond`, `loop_header`, ...),
+`expr_internal` (`true` on a node that exists only because a `&&`, `||` or
+`?:` was expanded into control flow: the tests and arms of those operators and
+a nested operator's own join inside a larger expression; `false` on the node
+the statement, condition or `return` ends at, so collapsing every `true` node
+into the node it flows to gives statement-level control flow), and the
+`dispatch_*` attributes on an indirect dispatch. `cfg` edges: `kind`, `back`.
+`cdg` and `pdg` nodes are the CFG's node set with the same ids and carry
+`expr_internal` too, plus `depth`, `ipdom` and `reaches_exit`.
+
+**Ordering.** Determinism is a contract: the same input always serializes to
+the same bytes. Beyond that, the AST export promises document order: node ids
+are assigned in preorder, so a node's id is smaller than every descendant's
+and ids ascend with `span`; a parent's children have ascending, non-overlapping
+spans; the `edges` list is grouped by parent in ascending parent id, and within
+a parent the edges appear in the children's source order --- so reading an
+operator's operands in edge order is reading them left to right. CFG, CDG and
+PDG nodes are in construction order (entry first, exit second); CFG edges are
+grouped by source node and stable within a group. DDG nodes are the
+definitions, then the uses, then memory definitions and uses.
+
 `cg.source_cfg.parity_cfgs(code)` returns the separately defined parity shape.
 `cfgs_from_decompiled()` adapts it to NetworkX. Install the optional `graphs`
 extra to use NetworkX adapters; ordinary analysis does not require NetworkX.

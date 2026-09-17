@@ -212,6 +212,12 @@ fn mark_expression_internal(view: &mut GraphView, internal: &[NodeId]) {
 /// whose nodes read `stmt` eleven times tells a reader nothing. Edge labels
 /// carry the edge kind; a back edge is marked in an attribute rather than the
 /// label so the label stays the census key a consumer groups by.
+///
+/// Every node carries `kind`, `span` (`lo:hi`, **byte** offsets into the
+/// analysed source, end exclusive --- slice bytes, not a decoded string) and
+/// the 1-based `line` and byte `column` of `lo`. The unit-owned export path
+/// ([`export_unit`]) adds `expr_internal`; see
+/// [`crate::csource::cfg::FunctionCfg::expression_internal`].
 pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
     let mut view = GraphView::new(name);
     let lines = LineIndex::new(text);
@@ -1887,6 +1893,135 @@ mod expression_internal_tests {
                 attr(node, "expr_internal"),
                 Some(if listed { "true" } else { "false" })
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod ordering_contract_tests {
+    //! Item 14 of the 2026-09-16 list: the order the AST export is written
+    //! in is a contract (docs/reference/source-python.md, "Ordering").
+
+    use super::*;
+
+    const SOURCE: &str = "/* \u{2014} */\nint f(int a, unsigned b, int c)\n{\n  int t[4];\n  if (a /* x */ + b - c > 0 && t[1]) { t[0] = a ? b : c; }\n  return (a << 2) | c;\n}\n";
+
+    fn span_of(node: &ExportNode) -> (u32, u32) {
+        let span = node
+            .attrs
+            .iter()
+            .find(|(key, _)| key == "span")
+            .map(|(_, value)| value.as_str())
+            .expect("span");
+        let (lo, hi) = span.split_once(':').unwrap();
+        (lo.parse().unwrap(), hi.parse().unwrap())
+    }
+
+    #[test]
+    fn ast_ids_are_preorder_and_ascend_with_span() {
+        let view = export(SOURCE, Repr::Ast).into_parts().0.remove(0);
+        for (index, node) in view.nodes.iter().enumerate() {
+            assert_eq!(node.id, index as u32, "ids are dense and in list order");
+        }
+        for pair in view.nodes.windows(2) {
+            assert!(
+                span_of(&pair[0]).0 <= span_of(&pair[1]).0,
+                "{:?} precedes {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+        // Preorder: every edge points forward, and a parent's span covers
+        // its children's.
+        for edge in &view.edges {
+            assert!(edge.src < edge.dst, "{edge:?}");
+            let parent = span_of(&view.nodes[edge.src as usize]);
+            let child = span_of(&view.nodes[edge.dst as usize]);
+            assert!(parent.0 <= child.0 && child.1 <= parent.1, "{edge:?}");
+        }
+    }
+
+    #[test]
+    fn ast_edges_are_grouped_by_parent_and_children_are_in_source_order() {
+        let view = export(SOURCE, Repr::Ast).into_parts().0.remove(0);
+        // Grouped by ascending parent: the parent id never decreases, and
+        // once a parent's group ends it does not resume.
+        let mut last_parent: Option<u32> = None;
+        let mut closed: Vec<u32> = Vec::new();
+        for edge in &view.edges {
+            if last_parent != Some(edge.src) {
+                assert!(!closed.contains(&edge.src), "parent {} resumed", edge.src);
+                if let Some(previous) = last_parent {
+                    assert!(previous < edge.src, "parent order regressed at {edge:?}");
+                    closed.push(previous);
+                }
+                last_parent = Some(edge.src);
+            }
+        }
+        // Within a parent, children ascend by span and do not overlap.
+        for pair in view.edges.windows(2) {
+            if pair[0].src != pair[1].src {
+                continue;
+            }
+            let left = span_of(&view.nodes[pair[0].dst as usize]);
+            let right = span_of(&view.nodes[pair[1].dst as usize]);
+            assert!(
+                left.1 <= right.0,
+                "{:?} then {:?}: {left:?} vs {right:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+        // And that order is the operand order: the first binary chain reads
+        // `a`, `b`, `c` left to right.
+        let chain = view
+            .nodes
+            .iter()
+            .find(|node| node.attrs.iter().any(|(k, v)| k == "ops" && v == "+,-"))
+            .expect("the a + b - c chain");
+        let operands: Vec<&str> = view
+            .edges
+            .iter()
+            .filter(|edge| edge.src == chain.id)
+            .map(|edge| {
+                let (lo, hi) = span_of(&view.nodes[edge.dst as usize]);
+                &SOURCE[lo as usize..hi as usize]
+            })
+            .collect();
+        assert_eq!(operands, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn cfg_nodes_start_with_entry_and_exit_and_edges_are_grouped_by_source() {
+        let view = export(SOURCE, Repr::Cfg).into_parts().0.remove(0);
+        let kind = |node: &ExportNode| {
+            node.attrs
+                .iter()
+                .find(|(k, _)| k == "kind")
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
+        assert_eq!(kind(&view.nodes[0]), "entry");
+        assert_eq!(kind(&view.nodes[1]), "exit");
+        for pair in view.edges.windows(2) {
+            assert!(
+                pair[0].src <= pair[1].src,
+                "{:?} then {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    #[test]
+    fn the_same_input_serializes_to_the_same_bytes() {
+        use crate::syntax::graph_export::{write, Format};
+        for repr in Repr::ALL {
+            let first = export(SOURCE, repr).into_parts().0;
+            let second = export(SOURCE, repr).into_parts().0;
+            for (a, b) in first.iter().zip(&second) {
+                assert_eq!(write(a, Format::Json), write(b, Format::Json));
+            }
         }
     }
 }

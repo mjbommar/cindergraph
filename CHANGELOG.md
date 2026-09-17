@@ -4,6 +4,48 @@ All notable changes to Cindergraph will be documented here. The project uses
 [Semantic Versioning](https://semver.org/) for released versions; pre-1.0 minor
 versions may change APIs and serialized schemas.
 
+## Unreleased
+
+Additions to the graph export and the Python package, from the first day of
+consuming Cindergraph as a solver front end
+(`docs/improvement-list-2026-09-16.md`). Every change is additive: no existing
+attribute, name or order changes, and the parity projection is untouched.
+
+- AST nodes carry the operator as written (`op`; `ops` on a flat chain) on
+  `binary_expr`, `assign_expr`, `unary_expr`, `cond_expr` and
+  `inc_dec_suffix`, read from the token gap so a comment between operands
+  cannot corrupt it;
+- expression nodes carry `type`, the C type after lvalue conversion, integer
+  promotion and the usual arithmetic conversions (C17 §6.3.1.1, §6.3.1.8),
+  computed by a new `semantic::expr_types` module from the structural types
+  the semantic layer owns; `binary_expr` and `assign_expr` also carry
+  `operand_type` (`operand_types` on a chain), the common type the operands
+  convert to. Every rule either applies exactly or yields `unknown` --- an
+  undeclared name, a call with no visible declaration, a header typedef that
+  was never included, an enum under arithmetic --- and a pointer or array over
+  an unresolved base keeps its shape (`unknown *`). The one platform
+  assumption, LP64 widths for the signed-wider-than-unsigned rule, is stated
+  in the module and the reference;
+- `declarator` nodes carry `name`, `type`, and for arrays `element_type`,
+  `array_bound` and `count`; `param_decl` nodes carry `type` (after array and
+  function adjustment), `pointer_depth` and `name`;
+- every AST, CFG, DDG, CDG and PDG node carries 1-based `line` and `column`
+  (a byte column) computed from its byte span, and the reference now states
+  that spans are byte offsets, not character indices;
+- `FunctionCfg::expression_internal` lists the CFG nodes that exist only
+  because a `&&`, `||` or `?:` was expanded, recorded by the emitter that
+  expands them; CFG, CDG and PDG exports write `expr_internal` on every node
+  so a consumer can collapse to statement-level control flow;
+- `cindergraph.__version__`, read from the extension's crate version, the
+  same string the wheel's metadata carries;
+- `parse_source`, `fast_cfgs_from_source` and `parse_callgraph` raise a
+  `ValueError` naming the parameter when handed C source text instead of a
+  path, where pathlib used to raise `OSError: File name too long`;
+- the export's ordering is documented as a contract (AST ids in preorder and
+  ascending with span, edges grouped by parent with children in source order;
+  CFG nodes entry-first, edges grouped by source) and pinned by tests in Rust
+  and Python.
+
 ## 0.1.0 — 2026-09-15
 
 Initial standalone extraction from Glaurung:
