@@ -130,4 +130,67 @@ through Joern 4.0.150.4, which was not available on this host.
 
 ## 3. Measurement after the port
 
-Filled in below once the corrections are on the branch.
+Joern was not installed on this host, so the comparison the benchmark doc
+describes (`tools/compare_joern_decbench.py`, which invokes pyjoern) **did not
+run**. What ran instead is the half of it that needs no Joern: the crate's
+projection over the same 210 translation units / 930 functions, through the
+same provider path (`analyze_decompiled`, release extension), compared per
+function against Joern's *recorded* node, edge, entry-role and exit-role counts
+in `data/joern-complete-2026-09-15.json`. "Count-parity" below is equality of
+all four counts. On this population it is a faithful proxy: at the baseline it
+agrees with the recorded `vj_ged == 0` verdict on 930 of 930 functions.
+
+| state | commit | parity unit tests | count-parity | functions whose projection bytes changed |
+| --- | --- | ---: | ---: | ---: |
+| baseline, `de1865c` | — | 67 | 894 / 930 | — |
+| + dedup | `828a41a9` port | 68 | 894 / 930 | 0 |
+| + constant-true loop | `0266715f` port | 72 | 894 / 930 | 0 |
+| + literal `if` | `68b39f18` port | 74 | 894 / 930 | 0 |
+| + ternary loop test | `f9a5cbaa` port | 78 | 894 / 930 | 0 |
+
+The final dump is byte-identical to the baseline dump over all 930 functions
+(same SHA-256 of the serialized projections), so the DecBench projection's
+bytes on every existing benchmark fixture are unchanged — the corpus simply
+holds none of the four shapes, as section 1 predicted from the source. The
+corrections' evidence is therefore the carried unit tests (each pinned to a
+fresh Joern differential from Glaurung's campaign) plus the mutation controls,
+not a corpus movement. Per correction:
+
+| correction | carried tests (all in `parity/`) | mutation control (`tools/mutation_controls_parity.py`) |
+| --- | --- | --- |
+| dedup | `chains::parallel_empty_branch_edges_are_deduplicated_before_coalescing` | reverting `outgoing.dedup()` kills exactly that 1 test |
+| constant-true loop | `nodes::constant_true_loop_loses_only_its_impossible_false_exit`, `constant_false_and_unknown_loops_keep_their_false_exits`, `constant_true_empty_loop_keeps_its_cycle`; new here: `a_conditionless_for_is_not_a_constant_true_header` | disabling the literal proof kills exactly the 3 that assert the rule; the constant-false/unknown negative survives |
+| literal `if` | `nodes::nested_literal_if_tests_cost_no_nodes_but_keep_their_forks`, `a_variable_if_test_still_materializes` | disabling the literal test kills exactly 1; the variable-test negative survives |
+| ternary loop test | `nodes::value_only_ternary_in_a_loop_condition_has_one_final_branch`, `a_side_effecting_ternary_arm_keeps_the_expression_but_not_the_duplicate_header`, `ternary_loop_cast_compare_and_load_variants_keep_their_expression_nodes`, `a_ternary_at_the_start_of_a_loop_body_is_not_a_loop_test` | disabling the collapse kills exactly 3; the loop-body negative survives |
+
+The harness itself was checked to fail: with one expected test name
+substituted, it exits 1 naming the actual kill set. Its first run against a
+reused target directory reported the *baseline* failing the three ternary
+tests — the copy had preserved source mtimes older than the last mutant's
+artifact, and cargo reused that artifact. The copy now refreshes every mtime.
+
+What the corrections do to the shapes they target, through `parity_cfgs()`
+after the port (the same inputs as section 1):
+
+| input | before | after |
+| --- | --- | --- |
+| `if (x) {} return x;` | 2 nodes, 1 edge | 1 node, 0 edges, entry `[0]`, exit `[0]` |
+| `while (1) { if (x) break; x--; }` | 5 nodes, 6 edges | 4 nodes, 4 edges — the bytes of the same loop spelled `for (;;)` |
+| `while (1) { x++; }` | 3 nodes, 3 edges | 2 nodes, `[(0,1),(1,1)]` — the bytes of `for (;;) { x++; }` |
+| `while (1) {}` | 2 nodes, `[(0,1),(1,1)]` | unchanged |
+| `for (;;) {}` | 1 node, no edges | unchanged (the stated residual difference from `while (1) {}`) |
+| `do { if (x) break; x--; } while (1);` | 4 nodes, 5 edges | 4 nodes, 4 edges |
+| `if (1) { if (0) g(); } h();` | 4 nodes, 5 edges | 3 nodes, 3 edges |
+| `while (i < (x ? 14 : 8)) i++;` | 5 nodes, 6 edges | 4 nodes, 4 edges |
+
+To re-run the Joern half once pyjoern is available: the commands in
+[`joern-decbench-2026-09-15.md`](joern-decbench-2026-09-15.md) § Reproduction,
+unchanged; the population hash must still be
+`789a5d066e89b90034b184f66d61995d30bc48e104b50d5de28725009a06c8cc`, and the
+expected outcome from the table above is 894 zero graphs and the same 36
+nonzero. The fixtures that would extend the corpus to cover the four shapes —
+and settle the section 2 question — are one translation unit with `while (1)`
+/ `do … while (1)` / `for (;;)` in each of the empty, no-exit and
+reachable-`break` forms, a literal `if`, and a ternary in a loop test; none has
+been added here because no Joern output for them could be recorded on this
+host, and a fixture without its oracle would pin the crate's own answer.

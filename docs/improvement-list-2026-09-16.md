@@ -108,3 +108,4 @@ consumer's results table is byte-identical before and after. Commits are on
 | 14 | ordering as a contract | done | `670530e` ("Ordering") |
 | 15 | a defect conformance corpus | done | `cg-finish-2026-09-17`: `tests/fixtures/defects/` (twelve vendored samples + one loop sample) and `test_defect_conformance.py` |
 | 16 | finish Milestone H | **open** | this is Milestone H of `docs/ROADMAP.md` (section 12, "Glaurung migration"), tracked there, not here |
+| | | landed in Glaurung 2026-09-17 | Glaurung `master` `2f1e5493` depends on the crate from GitHub by revision (`ed5e55e`) and its embedded copy is deleted (Glaurung `source-001`). Its follow-up is this port: the four parity corrections Glaurung made on 2026-09-13 that the crate lacked are on branch `cg-parity-2026-09-17` (CG-PARITY), `docs/benchmarks/glaurung-parity-corrections-2026-09-17.md`; Glaurung re-pins once they are on `main` and pushed |

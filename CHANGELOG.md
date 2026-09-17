@@ -6,10 +6,40 @@ versions may change APIs and serialized schemas.
 
 ## Unreleased
 
+The DecBench parity projection receives the four corrections Glaurung made to
+its embedded copy on 2026-09-13 and that the crate never had (found by
+Glaurung's migration to the crate, its `source-001`, 2026-09-17; the port
+record is `docs/benchmarks/glaurung-parity-corrections-2026-09-17.md`):
+
+- `parity_chains` reads degree from deduplicated successor sets, so an empty
+  `if` arm's parallel true and false edges no longer keep the condition block
+  from contracting (Glaurung `828a41a9`);
+- a syntactically constant-true loop (`while (1)`, `do … while (1)`,
+  `for (…; 1; …)`; a nonzero integer literal through transparent parentheses)
+  loses its infeasible false exit and keeps its header and cycle
+  (`0266715f`). A clause-less `for (;;)` stays with `elide_empty_for_headers`;
+  the two rules never both fire, and a loop with a reachable `break` projects
+  to the same bytes under either spelling;
+- a bare literal `if` test (`if (0)`, `if (1)`) costs no node; its fork moves
+  to the predecessor and no arm is chosen (`68b39f18`);
+- the duplicate loop header around a ternary in a loop test
+  (`while (i < (x ? 14 : 8))`) is collapsed; materializing arms keep their
+  expression nodes (`f9a5cbaa`).
+
+`GranularityStats` gains `constant_loop_exits_elided`,
+`literal_if_tests_elided` and `ternary_loop_branches_collapsed`;
+`parity::nodes::expression_granular` takes the source text as its second
+argument. The projection's bytes over the 930 functions of the recorded Joern
+comparison are unchanged (no fixture has any of the four shapes); the
+corrections are pinned by the ten tests carried from Glaurung plus one, and by
+`tools/mutation_controls_parity.py`, under which reverting each correction
+kills exactly its tests.
+
 Additions to the graph export and the Python package, from the first day of
 consuming Cindergraph as a solver front end
 (`docs/improvement-list-2026-09-16.md`). Every change is additive: no existing
-attribute, name or order changes, and the parity projection is untouched.
+attribute, name or order changes, and the parity projection is untouched
+except as described above.
 
 - AST nodes carry the operator as written (`op`; `ops` on a flat chain) on
   `binary_expr`, `assign_expr`, `unary_expr`, `cond_expr` and

@@ -177,6 +177,29 @@ It does not cover:
 - cross-translation-unit indirect-call resolution; or
 - DecBench publication, scoring orchestration, or upstream interaction.
 
+## Corrections ported from Glaurung, 2026-09-13
+
+Glaurung's embedded copy of this projection received four DecBench parity
+corrections on 2026-09-13, each measured there over DecBench's 85,645-cell
+oracle, that the crate did not have when Glaurung switched to depending on it
+(Glaurung `source-001`, 2026-09-17). They are now in `parity/`, one commit
+each with its tests and a mutation control: parallel edges from an empty `if`
+arm are one edge when `parity_chains` reads degree, as pyjoern's `DiGraph`
+makes them; a syntactically constant-true loop test (`while (1)`,
+`do … while (1)`, `for (…; 1; …)`, the literal read through parentheses in
+any C radix) loses only its infeasible false exit, so a loop with a reachable
+`break` projects to the same bytes as the `for (;;)` spelling; a bare literal
+`if` test costs no node while its fork moves to the predecessor; and the
+duplicate loop header around a ternary in a loop test is collapsed. The
+clause-less `for (;;)` keeps the existing `elide_empty_for_headers` rule,
+which this repository measured against Joern; the one shape where that rule
+and Glaurung's disagree, an infinite loop with an empty body (`for (;;) {}` is
+erased, `while (1) {}` keeps its cycle), is recorded with the fixture that
+decides it in
+[the port record](../benchmarks/glaurung-parity-corrections-2026-09-17.md).
+None of the four shapes occurs in the benchmark corpus, so the projection's
+bytes over all 930 measured functions are unchanged.
+
 For measured scope and results, see
 [Cindergraph versus Joern for DecBench-adjacent CFG work](../benchmarks/joern-decbench-2026-09-15.md).
 For the complete Python API contract, see
