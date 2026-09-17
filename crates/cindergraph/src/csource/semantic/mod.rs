@@ -9,9 +9,12 @@ use std::sync::OnceLock;
 use crate::csource::cfg::{function_cfgs, FunctionCfg};
 use crate::csource::dataflow::{summarize_with_policy, DataFlow, ExternalCallPolicy, Summaries};
 use crate::csource::eval::EvaluationPlan;
+use crate::csource::facts::{
+    resolve_facts, ExternalFacts, FactSource, FunctionFacts, FunctionShape, ParameterShape,
+};
 use crate::csource::normalize::Dialect;
 use crate::csource::parse::{parse, Tree};
-use crate::syntax::diag::Diagnostics;
+use crate::syntax::diag::{Diagnostic, Diagnostics};
 use crate::syntax::ids::Span;
 
 pub(crate) mod declarations;
@@ -134,6 +137,8 @@ pub struct AnalysisUnit {
     functions: Vec<FunctionCfg>,
     resolutions: Vec<FunctionResolution>,
     types: Vec<FunctionTypes>,
+    facts: Vec<FunctionFacts>,
+    refused_api_facts: Vec<Diagnostic>,
     evaluations: OnceLock<Vec<EvaluationPlan>>,
     diagnostics: Diagnostics,
     dataflows: OnceLock<Vec<DataFlow>>,
@@ -148,6 +153,23 @@ impl AnalysisUnit {
 
     /// Prepare and analyze `source` using explicit snapshot policies.
     pub fn with_options(source: impl Into<String>, options: AnalysisOptions) -> Self {
+        Self::with_facts(source, options, &ExternalFacts::default())
+    }
+
+    /// [`AnalysisUnit::with_options`] plus the external facts a caller
+    /// attaches through the API.
+    ///
+    /// Facts written as comments in `source` are read on every construction;
+    /// `facts` is the second front door for a caller that has them from
+    /// elsewhere. Both are resolved against each function's parameter list
+    /// here, and every fact that cannot be attached is a diagnostic on the
+    /// unit (see [`crate::csource::facts`]). The API wins over a comment for
+    /// the same key.
+    pub fn with_facts(
+        source: impl Into<String>,
+        options: AnalysisOptions,
+        facts: &ExternalFacts,
+    ) -> Self {
         let source = options.dialect.prepare(&source.into());
         let source_id = SourceUnitId::of(&source);
         let (tree, mut diagnostics) = parse(&source).into_parts();
@@ -186,6 +208,55 @@ impl AnalysisUnit {
         for diagnostic in cfg_diagnostics.iter() {
             diagnostics.push(diagnostic.clone());
         }
+        let shapes: Vec<FunctionShape> = functions
+            .iter()
+            .zip(&resolutions)
+            .zip(&types)
+            .map(|((function, resolution), function_types)| {
+                let typer = expr_types::ExpressionTyper {
+                    tree: &tree,
+                    text: &source,
+                    token_spans: &token_spans,
+                    resolution,
+                    types: function_types,
+                    symbols: &symbols,
+                };
+                let parameters = typer
+                    .parameters(function.node, function.span.lo)
+                    .into_iter()
+                    .filter_map(|(node, parameter)| {
+                        Some(ParameterShape {
+                            name: parameter.name?,
+                            declaration: parameter.declaration?,
+                            node,
+                            pointer: (!parameter.adjusted.is_unknown())
+                                .then(|| parameter.adjusted.pointer_depth() > 0),
+                        })
+                    })
+                    .collect();
+                FunctionShape {
+                    name: function.name.clone(),
+                    node: function.node,
+                    name_span: function.name_span,
+                    parameters,
+                }
+            })
+            .collect();
+        let resolution = resolve_facts(
+            &source,
+            &tree,
+            &token_spans,
+            &shapes,
+            facts,
+            &mut diagnostics,
+        );
+        let refused_api_facts = resolution
+            .refused
+            .iter()
+            .filter(|(source, _)| *source == FactSource::Api)
+            .map(|(_, diagnostic)| diagnostic.clone())
+            .collect();
+        let facts = resolution.functions;
         Self {
             options,
             source_id,
@@ -196,6 +267,8 @@ impl AnalysisUnit {
             functions,
             resolutions,
             types,
+            facts,
+            refused_api_facts,
             evaluations: OnceLock::new(),
             diagnostics,
             dataflows: OnceLock::new(),
@@ -246,6 +319,23 @@ impl AnalysisUnit {
     /// Structural declared types aligned with [`AnalysisUnit::functions`].
     pub(crate) fn types(&self) -> &[FunctionTypes] {
         &self.types
+    }
+
+    /// External facts aligned with [`AnalysisUnit::functions`]: what the
+    /// comments above each function and the caller's [`ExternalFacts`] said
+    /// about it and could be attached. Every fact that could not is in
+    /// [`AnalysisUnit::diagnostics`].
+    pub fn facts(&self) -> &[FunctionFacts] {
+        &self.facts
+    }
+
+    /// The diagnostics for API-supplied facts that could not be attached ---
+    /// a subset of [`AnalysisUnit::diagnostics`], kept apart because a caller
+    /// with no diagnostics channel (a one-shot export) turns them into an
+    /// argument error rather than returning an export that quietly lacks
+    /// what it was asked to carry.
+    pub fn refused_api_facts(&self) -> &[Diagnostic] {
+        &self.refused_api_facts
     }
 
     /// An expression typer over the function at `index` in

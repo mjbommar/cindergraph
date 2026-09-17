@@ -19,6 +19,11 @@ CI job is not evidence that a release artifact has passed on that platform.
 - [Dependency policy](architecture/dependency-policy.md) records the minimal
   runtime boundary, current resolved graph, and why development solvers stay
   outside published artifacts.
+- [External facts](design/external-facts-2026-09-17.md) decides how a
+  consumer attaches what the source does not say (pointer capacities, string
+  lengths, an unroll bound): one grammar, a comment form and an API form,
+  one landing place in the export, and a diagnostic for every fact that
+  cannot be attached.
 - [Native graph API](architecture/native-graph-api.md) records the NetworkX
   boundary, required graph contract, optional expansion, and measured baseline.
 - [Python source analysis](reference/source-python.md) documents parsing,

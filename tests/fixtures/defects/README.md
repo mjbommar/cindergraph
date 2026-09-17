@@ -18,6 +18,17 @@ functions on the first eight and 18 / 3 / 13 on all twelve. A regression in
 what the export publishes is a regression in that result, which the metrics
 tests cannot see.
 
+The `// axeyum:` annotations are also read by Cindergraph itself since item
+7 landed: `axeyum:` is an alias of the `@cindergraph` comment marker
+(`docs/design/external-facts-2026-09-17.md`), and every such line in these
+samples appears as `facts`/`facts_source` on the `param_decl` or `func_def`
+node of the function definition that follows it, with no diagnostic
+(`python/tests/test_external_facts.py`). One reading differs: the consumer
+treats `// axeyum: unroll = N` as file-wide, while Cindergraph attaches it to
+the next function only, since a file has no node to carry a fact --- `09`'s
+`unroll = 17` lands on `zero_bug` and not on `zero_fixed`. The consumer still
+parses its own comments, so the samples and its results are unchanged.
+
 `13_loop_bounds.c` was written here, not copied: `09` and `10` have one loop
 shape each (`i <= n` against a parameter, `i < 8` against a literal), and the
 `while`, `runtime`, and `none` classifications need a loop to be non-vacuous.

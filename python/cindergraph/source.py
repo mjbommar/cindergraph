@@ -48,6 +48,8 @@ __all__ = [
     "EXPORT_FORMATS",
     "EXPORT_REPRS",
     "Diagnostic",
+    "FactValue",
+    "Facts",
     "FunctionMetrics",
     "AnalysisSession",
     "NativeGraph",
@@ -180,6 +182,18 @@ def _reachability_result(raw: Mapping[str, Any]) -> ReachabilityResult:
     )
 
 
+FactValue = str | int
+"""A fact's value: the name of a scalar parameter, or an integer."""
+
+Facts = Mapping[str, Mapping[str, Mapping[str, FactValue] | FactValue]]
+"""External facts by function name.
+
+``{"f": {"capacity": {"dst": "dst_len"}, "strlen": {"s": 16}, "unroll": 8}}``:
+``capacity`` and ``strlen`` map a pointer parameter to its value, ``unroll``
+is a value. See the export schema in ``docs/reference/source-python.md``.
+"""
+
+
 class AnalysisSession:
     """One persistent parsed source snapshot for related graph queries.
 
@@ -190,6 +204,16 @@ class AnalysisSession:
 
     Args:
         code: C source text to analyze.
+        dialect: Input preparation policy; ``"ordinary"`` when omitted.
+        external_calls: Model for named callees whose body is absent.
+        facts: External facts to attach to functions, keyed by function name:
+            ``{"f": {"capacity": {"dst": "dst_len"}, "strlen": {"s": 16},
+            "unroll": 8}}``. A value is a parameter name or an integer. The
+            same facts can be written as ``// @cindergraph capacity(dst) =
+            dst_len`` comments above the function (``// axeyum:`` is an
+            alias); the API wins when both give the same key. A fact that
+            cannot be attached is a :class:`Diagnostic` in
+            :attr:`diagnostics`, never a silent drop.
     """
 
     __slots__ = ("_native_session",)
@@ -202,10 +226,11 @@ class AnalysisSession:
         external_calls: Literal[
             "unknown", "taint_return", "assume_pure_no_flow"
         ] = "unknown",
+        facts: Facts | None = None,
     ) -> None:
         """Create a persistent native analysis unit for ``code``."""
         self._native_session = _native.source.AnalysisSession(
-            code, dialect=dialect, external_calls=external_calls
+            code, dialect=dialect, external_calls=external_calls, facts=facts
         )
 
     @property
@@ -1167,7 +1192,11 @@ def query_reaches_by_id(
 
 
 def export_graphs(
-    code: str, *, repr: str = "cfg", format: str = "dot"
+    code: str,
+    *,
+    repr: str = "cfg",
+    format: str = "dot",
+    facts: Facts | None = None,
 ) -> list[tuple[str, str]]:
     """Serialize every function's graph in one wire format.
 
@@ -1191,6 +1220,9 @@ def export_graphs(
         format: One of :data:`EXPORT_FORMATS`. ``"json"`` is node-link JSON
             with the edge array under ``"edges"``, which NetworkX 3.6 reads by
             default; ``"mermaid"`` renders in Markdown without Graphviz.
+        facts: External facts by function name, as for
+            :class:`AnalysisSession`. Facts written as comments in `code` are
+            read either way.
 
     Returns:
         One ``(function name, serialized graph)`` pair per function, in source
@@ -1198,14 +1230,22 @@ def export_graphs(
         can carry the same name after recovery.
 
     Raises:
-        ValueError: If `repr` or `format` is not a known name.
+        ValueError: If `repr` or `format` is not a known name, or if a fact in
+            `facts` cannot be attached (a function or parameter the source
+            does not have). This function has no diagnostics channel, so a bad
+            argument is an error here where a session records a diagnostic;
+            comment facts that cannot be attached are dropped with the other
+            diagnostics, as documented.
     """
     return [
-        (name, body) for name, body in _native.source.export_graphs(code, repr, format)
+        (name, body)
+        for name, body in _native.source.export_graphs(code, repr, format, facts=facts)
     ]
 
 
-def native_graphs(code: str, *, repr: str = "cfg") -> list[NativeGraph]:
+def native_graphs(
+    code: str, *, repr: str = "cfg", facts: Facts | None = None
+) -> list[NativeGraph]:
     """Build read-only Rust-backed graphs without serializing topology.
 
     Use this for traversal or large graph products. Node and edge attributes
@@ -1215,15 +1255,18 @@ def native_graphs(code: str, *, repr: str = "cfg") -> list[NativeGraph]:
     Args:
         code: C source text to analyze.
         repr: ``"ast"``, ``"cfg"``, ``"ddg"``, ``"cdg"`` or ``"pdg"``.
+        facts: External facts by function name, as for :func:`export_graphs`.
 
     Returns:
         One native graph per recovered function, in source order.
 
     Raises:
-        ValueError: If `repr` is not recognized.
+        ValueError: If `repr` is not recognized, or a fact in `facts` cannot
+            be attached.
     """
     return [
-        NativeGraph(graph) for graph in _native.source.native_graphs(code, repr=repr)
+        NativeGraph(graph)
+        for graph in _native.source.native_graphs(code, repr=repr, facts=facts)
     ]
 
 
@@ -1233,6 +1276,7 @@ def export_path(
     repr: str = "cfg",
     format: str = "dot",
     dialect: str | None = None,
+    facts: Facts | None = None,
 ) -> list[tuple[str, str]]:
     """:func:`export_graphs` over a file, read lossily.
 
@@ -1245,18 +1289,20 @@ def export_path(
         dialect: Passed to :func:`normalize` first when given. Note that
             ``"preprocessed"`` empties an ordinary ``.c`` file; it is only for a
             real ``gcc -E`` unit.
+        facts: External facts by function name, as for :func:`export_graphs`.
 
     Returns:
         One ``(function name, serialized graph)`` pair per function.
 
     Raises:
         OSError: If the file cannot be read.
-        ValueError: If `repr`, `format` or `dialect` is not a known name.
+        ValueError: If `repr`, `format` or `dialect` is not a known name, or a
+            fact in `facts` cannot be attached.
     """
     code = Path(path).read_bytes().decode("utf-8", errors="replace")
     if dialect is not None:
         code = normalize(code, dialect)
-    return export_graphs(code, repr=repr, format=format)
+    return export_graphs(code, repr=repr, format=format, facts=facts)
 
 
 def analyze(

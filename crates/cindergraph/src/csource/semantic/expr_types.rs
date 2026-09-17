@@ -1276,6 +1276,7 @@ impl ExpressionTyper<'_> {
             let facts = match named {
                 Some(parameter) => ParameterFacts {
                     name: Some(parameter.name.clone()),
+                    declaration: Some(parameter.span),
                     adjusted: self
                         .types
                         .adjusted_type_of_declaration(parameter.span)
@@ -1293,6 +1294,7 @@ impl ExpressionTyper<'_> {
                         .map_or(0, |span| span.lo);
                     ParameterFacts {
                         name: None,
+                        declaration: None,
                         adjusted: self.type_from_words(&words, offset),
                     }
                 }
@@ -1307,6 +1309,8 @@ impl ExpressionTyper<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParameterFacts {
     pub(crate) name: Option<String>,
+    /// The span of the declared name, when the parameter has one.
+    pub(crate) declaration: Option<Span>,
     /// The type after array and function adjustment (C17 §6.7.6.3p7--8).
     pub(crate) adjusted: CType,
 }

@@ -90,7 +90,25 @@ attribute, name or order changes, and the parity projection is untouched.
   operator node, a resolved `type` on every reference to a parameter or
   local, every `if` condition as a statement-level CFG `cond`, every loop
   header classified, every `ops` operation typed. `FunctionResolution` can
-  now say whether a declaration is a parameter.
+  now say whether a declaration is a parameter;
+- a consumer contract for external facts (item 7), decided in
+  [`docs/design/external-facts-2026-09-17.md`](docs/design/external-facts-2026-09-17.md):
+  one grammar, two front doors. `// @cindergraph capacity(dst) = dst_len`,
+  `strlen(s) = n` and `unroll = 8` line comments above a function (the
+  consumer's `// axeyum:` marker is an alias, so the vendored samples work
+  unchanged), or `AnalysisSession(code, facts={"f": {"capacity": {"dst":
+  "dst_len"}, "unroll": 8}})` (also `export_graphs`, `export_path`,
+  `native_graphs`). Both land as `facts` and `facts_source` (`comment` or
+  `api`, one entry per fact) on `param_decl` and `func_def` in the `ast`
+  export and on the parameter's `load`/`store` nodes in `ops`; the API wins
+  over a comment for the same key. Every fact that cannot be attached --- a
+  parameter the function lacks, a value that is neither a parameter nor a
+  decimal literal, a non-pointer capacity target, a comment no function
+  follows, a function name defined zero or two times --- is a `Diagnostic`
+  on the session (the one-shot functions raise `ValueError` for an API fact,
+  having no diagnostics channel), never a silent drop. The resolver is
+  `csource::facts`; `AnalysisUnit::with_facts` and `AnalysisUnit::facts`
+  are the Rust surface.
 
 ## 0.1.0 — 2026-09-15
 
