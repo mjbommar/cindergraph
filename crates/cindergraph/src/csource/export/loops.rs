@@ -644,7 +644,7 @@ impl Reader<'_> {
 /// `text` as an integer literal with its suffix removed (`16u` is `16`,
 /// `0x10UL` is `0x10`), or `None` for anything that is not one.
 fn integer_text(text: &str) -> Option<String> {
-    let body = text.trim_end_matches(|c: char| matches!(c, 'u' | 'U' | 'l' | 'L'));
+    let body = text.trim_end_matches(['u', 'U', 'l', 'L']);
     if body.is_empty() {
         return None;
     }

@@ -376,9 +376,10 @@ pub fn cfg_view(name: &str, cfg: &Cfg, text: &str) -> GraphView {
 ///   `ops` is present only on chains with more than one operator.
 /// * `loop_kind`, `bound_kind`, `bound_expr`, `induction`, `step`,
 ///   `init_value`, `bound_value` --- on `for_stmt`, `while_stmt` and
-///   `do_while_stmt`, what a bounded unroller needs ([`loops`]). Here, with
-///   no declaration resolution, a bound that is a name is `runtime`; the
-///   unit-owned paths classify a function parameter as `parameter`.
+///   `do_while_stmt`, what a bounded unroller needs (the `loops` submodule).
+///   Here, with no declaration resolution, a bound that is a name is
+///   `runtime`; the unit-owned paths classify a function parameter as
+///   `parameter`.
 ///
 /// The one-shot [`export`] and [`export_unit`] paths add the semantic
 /// attributes (`type`, `operand_type`, declarator and parameter fields) that
