@@ -87,10 +87,31 @@ results must share an exact source snapshot; the existing module functions are
 still the simpler interface for a single query. Each call returns fresh Python
 containers, so modifying a result does not alter the native cache or a later
 result. The session covers diagnostics, CFG, dataflow, summaries, backward
-slicing and all five graph export representations. Metrics still use their
+slicing and all six graph export representations. Metrics still use their
 existing API. A slice rejects duplicate function names, invalid node IDs, and
 an optional `function_id` that does not match the named function in this
 snapshot.
+
+**The session is the way to consume several products of one file.** Every
+module-level function parses its argument again: measured 2026-09-17 on a
+190-line file, `analyze` followed by `export_graphs` for `ast`, `cfg` and
+`ops` entered the parser four times (3.7 ms), while a session doing the same
+work --- and `ddg`, `cdg` and `pdg` besides --- entered it once (2.6 ms). The
+bytes are the same either way: `session.export_graphs(repr, format)` is
+byte-identical to `export_graphs(code, repr=..., format=...)` for every
+representation and format, `session.diagnostics` matches
+`analyze(code).diagnostics`, and running dataflow, summaries or a slice on the
+session first does not change a later export. Pinned by
+`python/tests/test_session_single_parse.py`.
+
+```python
+session = cg.AnalysisSession(code)
+assert not session.diagnostics
+ast = dict(session.export_graphs(repr="ast", format="json"))
+cfg = dict(session.export_graphs(repr="cfg", format="json"))
+ops = dict(session.export_graphs(repr="ops", format="json"))
+assert ast.keys() == cfg.keys() == ops.keys()
+```
 
 For decompiler or compiler-preprocessed input, select preparation when creating
 the snapshot:
@@ -515,6 +536,29 @@ Common to every node of every representation: `span`, `line`, `column`.
 - `param_decl`: `type` (the adjusted parameter type: an array or function
   parameter is a pointer, C17 §6.7.6.3), `pointer_depth`, and `name` when the
   parameter has one.
+- `for_stmt`, `while_stmt`, `do_while_stmt`: the loop metadata a bounded
+  unroller needs, decided from the loop's own text and never guessed.
+  `loop_kind` (`for`, `while`, `do_while`) and `bound_kind` are always
+  present; the rest appear when decided. `bound_expr` is the condition's
+  source text. `induction` and `step` (`+1`, `-1`, `+N`, `-N`) name the
+  variable the step clause advances --- `i++`, `--i`, `i += 2`, `i = i - 1`
+  --- or, for a `while`/`do`, the one top-level body statement of that shape
+  whose variable the condition reads. `init_value` is the integer literal a
+  `for` initializer assigns the induction variable (`i = 0`, `int i = 0`).
+  `bound_kind` is `constant` when the trip count is fixed by the header
+  alone: a `for` whose initializer is a literal, whose condition is one
+  relational comparison (`<`, `<=`, `>`, `>=`, `!=`) of the induction
+  variable against an integer literal (`bound_value`, suffix stripped), whose
+  step is one of the shapes above, and whose body neither assigns the
+  induction variable nor has its address taken anywhere in the function;
+  `parameter` when the same shape compares against a function parameter that
+  the loop never assigns; `none` when there is no condition (`for (;;)`);
+  and otherwise `runtime` --- which includes every `while` and `do` (no
+  initializer fixes the start value: `while (u > 0) { u--; }` is `runtime`
+  with `induction` `u` and `step` `-1`), a condition joined by `&&`, a
+  compound step, a body that writes the bound, and a bound that is a local.
+  A consumer that unrolls must refuse `runtime`; the answer is honest, not
+  complete.
 
 `cfg` nodes: `kind` (`entry`, `exit`, `stmt`, `cond`, `loop_header`, ...),
 `expr_internal` (`true` on a node that exists only because a `&&`, `||` or
@@ -522,9 +566,22 @@ Common to every node of every representation: `span`, `line`, `column`.
 a nested operator's own join inside a larger expression; `false` on the node
 the statement, condition or `return` ends at, so collapsing every `true` node
 into the node it flows to gives statement-level control flow), and the
-`dispatch_*` attributes on an indirect dispatch. `cfg` edges: `kind`, `back`.
-`cdg` and `pdg` nodes are the CFG's node set with the same ids and carry
-`expr_internal` too, plus `depth`, `ipdom` and `reaches_exit`.
+`dispatch_*` attributes on an indirect dispatch. A `loop_header` node carries
+the same loop metadata as the AST loop statement it comes from (`loop_kind`,
+`bound_kind`, `bound_expr`, `induction`, `step`, `init_value`,
+`bound_value`, above); its `span` is the loop's condition, or the whole
+statement when there is none, which is how the two exports join. `cfg`
+edges: `kind`, `back`. `cdg` and `pdg` nodes are the CFG's node set with the
+same ids and carry `expr_internal` and the loop metadata too, plus `depth`,
+`ipdom` and `reaches_exit`.
+
+```python
+source = "int f(int n) { int s = 0; for (int i = 0; i < 16; i++) s += i; return s; }"
+(name, body), = cg.export_graphs(source, repr="cfg", format="json")
+header, = [n for n in json.loads(body)["nodes"] if n["kind"] == "loop_header"]
+assert (header["bound_kind"], header["induction"], header["step"]) == ("constant", "i", "+1")
+assert (header["init_value"], header["bound_value"], header["bound_expr"]) == ("0", "16", "i < 16")
+```
 
 `ops` nodes are the function's evaluation lowered to typed operations, in
 evaluation order, with C's implicit conversions written out. It is the input a
