@@ -557,8 +557,10 @@ Common to every node of every representation: `span`, `line`, `column`.
   initializer fixes the start value: `while (u > 0) { u--; }` is `runtime`
   with `induction` `u` and `step` `-1`), a condition joined by `&&`, a
   compound step, a body that writes the bound, and a bound that is a local.
-  A consumer that unrolls must refuse `runtime`; the answer is honest, not
-  complete.
+  `constant` and `parameter` bound the trip count from above: a `break`,
+  `return` or `goto` in the body may end the loop sooner, and the CFG says
+  where. A consumer that unrolls must refuse `runtime`; the answer is
+  honest, not complete.
 
 `cfg` nodes: `kind` (`entry`, `exit`, `stmt`, `cond`, `loop_header`, ...),
 `expr_internal` (`true` on a node that exists only because a `&&`, `||` or

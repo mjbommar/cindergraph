@@ -106,5 +106,5 @@ consumer's results table is byte-identical before and after. Commits are on
 | 12 | loop metadata beyond the back edge | done | branch `cg-finish-2026-09-17` (CG-FINISH): `loop_kind`, `bound_kind`, `bound_expr`, `induction`, `step`, `init_value`, `bound_value` on loop statements and `loop_header` nodes; `export::loops` |
 | 13 | one parse per source | done | `cg-finish-2026-09-17`: measured (four parser entries through the free functions, one through `AnalysisSession`), documented under "Reuse one analysis snapshot", byte-identity pinned by `test_session_single_parse.py` |
 | 14 | ordering as a contract | done | `670530e` ("Ordering") |
-| 15 | a defect conformance corpus | done | `cg-finish-2026-09-17`: `tests/fixtures/defects/` (eight vendored samples + one loop sample) and `test_defect_conformance.py` |
+| 15 | a defect conformance corpus | done | `cg-finish-2026-09-17`: `tests/fixtures/defects/` (twelve vendored samples + one loop sample) and `test_defect_conformance.py` |
 | 16 | finish Milestone H | **open** | this is Milestone H of `docs/ROADMAP.md` (section 12, "Glaurung migration"), tracked there, not here |

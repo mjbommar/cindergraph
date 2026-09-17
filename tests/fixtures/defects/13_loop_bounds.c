@@ -1,9 +1,9 @@
 /* Loops a bounded unroller can and cannot unroll from the header alone.
  *
- * Written for this corpus (not copied from Axeyum): the eight Axeyum samples
- * are loop-free because the consumer refuses loops, and the loop-header
- * assertions need a loop to be non-vacuous. Each header's `bound_kind` is
- * stated beside it and pinned by the conformance test.
+ * Written for this corpus (not copied from Axeyum): the Axeyum samples carry
+ * one `parameter` and one `constant` loop, and the `while`, `runtime` and
+ * `none` classifications need a loop to be non-vacuous. Each header's
+ * `bound_kind` is stated beside it and pinned by the conformance test.
  */
 #include <stddef.h>
 #include <stdint.h>

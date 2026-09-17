@@ -84,7 +84,7 @@ attribute, name or order changes, and the parity projection is untouched.
   the free functions, one through a session). Pinned by
   `python/tests/test_session_single_parse.py`;
 - a defect conformance corpus (item 15): `tests/fixtures/defects/` vendors
-  the eight annotated defect/fix samples Axeyum's solver front end consumes,
+  the twelve annotated defect/fix samples Axeyum's solver front end consumes,
   plus one loop sample, and `python/tests/test_defect_conformance.py` asserts
   for every function what a semantic consumer must see --- `op` on every
   operator node, a resolved `type` on every reference to a parameter or

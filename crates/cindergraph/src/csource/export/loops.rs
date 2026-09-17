@@ -33,6 +33,9 @@
 //!   `while`/`do` from the one top-level statement of the body that steps a
 //!   variable the condition reads (`while (u > 0) { u--; steps++; }` names
 //!   `u`). Two such statements name nothing.
+//! * `constant` and `parameter` bound the trip count from above: a `break`,
+//!   `return` or `goto` in the body may end the loop sooner, and the CFG says
+//!   where; the header alone cannot.
 //! * `bound_kind = none` is a loop with no condition (`for (;;)`).
 //! * `bound_kind = runtime` is everything else, including a `for` whose
 //!   initializer is not a literal, a condition with `&&`, a compound step, a

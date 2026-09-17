@@ -1,7 +1,7 @@
 """The defect conformance corpus: what a semantic consumer must be able to see.
 
 Item 15 of docs/improvement-list-2026-09-16.md. ``tests/fixtures/defects/``
-holds the eight annotated defect/fix samples Axeyum's solver front end
+holds the twelve annotated defect/fix samples Axeyum's solver front end
 consumes (copied verbatim) plus one loop sample written for this corpus; the
 README there says where they came from and why the loop sample exists. For
 every function in every sample this asserts, over one ``AnalysisSession``'s
@@ -29,13 +29,23 @@ PREFIX = "typedef unsigned long size_t;\ntypedef unsigned int uint32_t;\n"
 EXPECT = re.compile(r"^// expect: (\w+) (finding|clean)$", re.MULTILINE)
 LOOP_KIND = re.compile(r"/\* bound_kind: (\w+)")
 
-# What the loop sample's comments promise, keyed by the header text.
-LOOP_SAMPLE_HEADERS = {
-    "i < 16": ("constant", "i", "+1", "16"),
-    "u > 0": ("runtime", "u", "-1", None),
-    "i <= n": ("parameter", "i", "+2", None),
-    "i < limit": ("runtime", "i", "+1", None),
+# What each loop-bearing sample's headers must say, keyed by file prefix and
+# header text: (bound_kind, induction, step, bound_value). 09 and 10 are the
+# consumer's own loops; 13's are the comments beside them.
+LOOP_HEADERS = {
+    "09": {
+        "i <= n": ("parameter", "i", "+1", None),
+        "i < n": ("parameter", "i", "+1", None),
+    },
+    "10": {"i < 8": ("constant", "i", "+1", "8")},
+    "13": {
+        "i < 16": ("constant", "i", "+1", "16"),
+        "u > 0": ("runtime", "u", "-1", None),
+        "i <= n": ("parameter", "i", "+2", None),
+        "i < limit": ("runtime", "i", "+1", None),
+    },
 }
+LOOPS_PER_FILE = {"09": 2, "10": 2, "13": 5}
 
 
 def _span(node: dict) -> tuple[int, int]:
@@ -75,7 +85,7 @@ def _header_spans(ast: _Ast, loop: dict) -> set[tuple[int, int]]:
 
 
 def test_corpus_is_present_and_annotated() -> None:
-    assert [path.name[:2] for path in FILES] == [f"{i:02d}" for i in range(1, 10)]
+    assert [path.name[:2] for path in FILES] == [f"{i:02d}" for i in range(1, 14)]
     for path in FILES:
         assert EXPECT.search(path.read_text()), path.name
 
@@ -168,15 +178,15 @@ def test_every_function_exports_what_a_semantic_consumer_needs(path: Path) -> No
                 k: twins[0].get(k) for k in keys
             }
             seen["loop"] += 1
-            if path.name.startswith("09_"):
-                if header["bound_kind"] == "none":
-                    assert "bound_expr" not in header and "induction" not in header
-                    continue
-                kind, induction, step, value = LOOP_SAMPLE_HEADERS[header["bound_expr"]]
-                assert header["bound_kind"] == kind, header
-                assert header["induction"] == induction, header
-                assert header["step"] == step, header
-                assert header.get("bound_value") == value, header
+            if header["bound_kind"] == "none":
+                assert "bound_expr" not in header and "induction" not in header
+                continue
+            promised = LOOP_HEADERS[path.name[:2]][header["bound_expr"]]
+            kind, induction, step, value = promised
+            assert header["bound_kind"] == kind, header
+            assert header["induction"] == induction, header
+            assert header["step"] == step, header
+            assert header.get("bound_value") == value, header
 
         # Every operation is typed, and an `unknown` names a documented reason.
         for op in ops:
@@ -192,16 +202,14 @@ def test_every_function_exports_what_a_semantic_consumer_needs(path: Path) -> No
 
     # The assertions above are only evidence if they ran over something.
     assert seen["op"] and seen["typed_ref"] and seen["param"] and seen["ops"], seen
-    if path.name.startswith("09_"):
-        assert seen["loop"] == 5 and seen["if"] == 1, seen
-    else:
-        assert seen["if"] and seen["loop"] == 0, seen
+    assert seen["if"], seen
+    assert seen["loop"] == LOOPS_PER_FILE.get(path.name[:2], 0), seen
 
 
 def test_the_loop_sample_comments_and_the_export_agree() -> None:
-    # The `/* bound_kind: ... */` comments in 09 are documentation; this
+    # The `/* bound_kind: ... */` comments in 13 are documentation; this
     # keeps them honest against the export, in source order.
-    path = ROOT / "09_loop_bounds.c"
+    path = ROOT / "13_loop_bounds.c"
     text = PREFIX + path.read_text()
     promised = LOOP_KIND.findall(text)
     session = cg.AnalysisSession(text)
